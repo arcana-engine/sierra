@@ -1,0 +1,27 @@
+name: Generated readme check
+
+on:
+  pull_request:
+    types: [ labeled ]
+    branches: [ master ]
+    paths: 
+      - 'README.md'
+      - 'README.tpl'
+      - 'src/lib.rs'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  readme:
+    if: ${{ github.event.label.name == 'ready-to-merge' }}
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install cargo-readme
+      uses: actions-rs/install@v0.1
+      with:
+        crate: cargo-readme
+        use-tool-cache: true
+    - name: Check that readme is up-to-date
+      run: '[[ ! $(cargo readme --template README.tpl | diff - README.md) ]]'
