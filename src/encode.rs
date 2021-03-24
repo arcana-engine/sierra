@@ -6,13 +6,11 @@ use crate::{
     buffer::Buffer,
     descriptor::DescriptorSet,
     framebuffer::Framebuffer,
-    image::{
-        Image, ImageBlit, ImageMemoryBarrier, ImageSubresourceLayers, Layout,
-    },
+    image::{Image, ImageBlit, ImageMemoryBarrier, ImageSubresourceLayers, Layout},
     memory::MemoryBarrier,
     pipeline::{
-        ComputePipeline, GraphicsPipeline, PipelineLayout, RayTracingPipeline,
-        ShaderBindingTable, Viewport,
+        ComputePipeline, GraphicsPipeline, PipelineLayout, RayTracingPipeline, ShaderBindingTable,
+        Viewport,
     },
     queue::QueueCapabilityFlags,
     render_pass::{ClearValue, RenderPass},
@@ -226,33 +224,21 @@ impl<'a> EncoderCommon<'a> {
             .push(Command::BindComputePipeline { pipeline })
     }
 
-    pub fn bind_ray_tracing_pipeline(
-        &mut self,
-        pipeline: &'a RayTracingPipeline,
-    ) {
+    pub fn bind_ray_tracing_pipeline(&mut self, pipeline: &'a RayTracingPipeline) {
         assert!(self.capabilities.supports_compute());
 
         self.commands
             .push(Command::BindRayTracingPipeline { pipeline })
     }
 
-    pub fn bind_vertex_buffers(
-        &mut self,
-        first: u32,
-        buffers: &'a [(Buffer, u64)],
-    ) {
+    pub fn bind_vertex_buffers(&mut self, first: u32, buffers: &'a [(Buffer, u64)]) {
         assert!(self.capabilities.supports_graphics());
 
         self.commands
             .push(Command::BindVertexBuffers { first, buffers })
     }
 
-    pub fn bind_index_buffer(
-        &mut self,
-        buffer: &'a Buffer,
-        offset: u64,
-        index_type: IndexType,
-    ) {
+    pub fn bind_index_buffer(&mut self, buffer: &'a Buffer, offset: u64, index_type: IndexType) {
         assert!(self.capabilities.supports_graphics());
 
         self.commands.push(Command::BindIndexBuffer {
@@ -388,10 +374,7 @@ impl<'a> std::ops::DerefMut for Encoder<'a> {
 }
 
 impl<'a> Encoder<'a> {
-    pub(crate) fn new(
-        command_buffer: CommandBuffer,
-        capabilities: QueueCapabilityFlags,
-    ) -> Self {
+    pub(crate) fn new(command_buffer: CommandBuffer, capabilities: QueueCapabilityFlags) -> Self {
         Encoder {
             inner: EncoderCommon {
                 capabilities,
@@ -434,19 +417,12 @@ impl<'a> Encoder<'a> {
 
     /// Updates a buffer's contents from host memory
 
-    pub fn update_buffer<T>(
-        &mut self,
-        buffer: &'a Buffer,
-        offset: u64,
-        data: &'a [T],
-    ) where
+    pub fn update_buffer<T>(&mut self, buffer: &'a Buffer, offset: u64, data: &'a [T])
+    where
         T: Pod,
     {
         let data = unsafe {
-            std::slice::from_raw_parts(
-                data.as_ptr() as *const u8,
-                std::mem::size_of_val(data),
-            )
+            std::slice::from_raw_parts(data.as_ptr() as *const u8, std::mem::size_of_val(data))
         };
 
         self.inner.commands.push(Command::UpdateBuffer {
@@ -497,11 +473,7 @@ impl<'a> Encoder<'a> {
             .push(Command::BuildAccelerationStructure { infos })
     }
 
-    pub fn trace_rays(
-        &mut self,
-        shader_binding_table: &'a ShaderBindingTable,
-        extent: Extent3d,
-    ) {
+    pub fn trace_rays(&mut self, shader_binding_table: &'a ShaderBindingTable, extent: Extent3d) {
         assert!(self.inner.capabilities.supports_compute());
 
         self.commands.push(Command::TraceRays {
@@ -608,12 +580,7 @@ impl<'a, 'b> RenderPassEncoder<'a, 'b> {
         });
     }
 
-    pub fn draw_indexed(
-        &mut self,
-        indices: Range<u32>,
-        vertex_offset: i32,
-        instances: Range<u32>,
-    ) {
+    pub fn draw_indexed(&mut self, indices: Range<u32>, vertex_offset: i32, instances: Range<u32>) {
         self.inner.commands.push(Command::DrawIndexed {
             indices,
             vertex_offset,

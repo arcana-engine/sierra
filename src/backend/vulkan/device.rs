@@ -2,9 +2,8 @@ use {
     super::{
         access::supported_access,
         convert::{
-            buffer_memory_usage_to_gpu_alloc, from_erupt,
-            image_memory_usage_to_gpu_alloc, oom_error_from_erupt,
-            ToErupt as _,
+            buffer_memory_usage_to_gpu_alloc, from_erupt, image_memory_usage_to_gpu_alloc,
+            oom_error_from_erupt, ToErupt as _,
         },
         descriptor::DescriptorSizes,
         device_lost,
@@ -15,19 +14,16 @@ use {
     crate::{
         accel::{
             AccelerationStructure, AccelerationStructureBuildFlags,
-            AccelerationStructureBuildSizesInfo,
-            AccelerationStructureGeometryInfo, AccelerationStructureInfo,
-            AccelerationStructureLevel,
+            AccelerationStructureBuildSizesInfo, AccelerationStructureGeometryInfo,
+            AccelerationStructureInfo, AccelerationStructureLevel,
         },
         align_up, arith_eq, arith_ne, assert_object,
         buffer::{
-            Buffer, BufferInfo, BufferRegion, BufferUsage, MappableBuffer,
-            StridedBufferRegion,
+            Buffer, BufferInfo, BufferRegion, BufferUsage, MappableBuffer, StridedBufferRegion,
         },
         descriptor::{
-            CopyDescriptorSet, DescriptorSet, DescriptorSetInfo,
-            DescriptorSetLayout, DescriptorSetLayoutFlags,
-            DescriptorSetLayoutInfo, Descriptors, WriteDescriptorSet,
+            CopyDescriptorSet, DescriptorSet, DescriptorSetInfo, DescriptorSetLayout,
+            DescriptorSetLayoutFlags, DescriptorSetLayoutInfo, Descriptors, WriteDescriptorSet,
         },
         fence::Fence,
         framebuffer::{Framebuffer, FramebufferInfo},
@@ -37,17 +33,16 @@ use {
         out_of_host_memory,
         pipeline::{
             ColorBlend, ComputePipeline, ComputePipelineInfo, GraphicsPipeline,
-            GraphicsPipelineInfo, PipelineLayout, PipelineLayoutInfo,
-            RayTracingPipeline, RayTracingPipelineInfo,
-            RayTracingShaderGroupInfo, ShaderBindingTable,
+            GraphicsPipelineInfo, PipelineLayout, PipelineLayoutInfo, RayTracingPipeline,
+            RayTracingPipelineInfo, RayTracingShaderGroupInfo, ShaderBindingTable,
             ShaderBindingTableInfo, State,
         },
         render_pass::{RenderPass, RenderPassInfo},
         sampler::{Sampler, SamplerInfo},
         semaphore::Semaphore,
         shader::{
-            CreateShaderModuleError, InvalidShader, ShaderLanguage,
-            ShaderModule, ShaderModuleInfo, ShaderStage,
+            CreateShaderModuleError, InvalidShader, ShaderLanguage, ShaderModule, ShaderModuleInfo,
+            ShaderStage,
         },
         surface::{Surface, SurfaceError},
         swapchain::Swapchain,
@@ -58,8 +53,8 @@ use {
     bytemuck::Pod,
     erupt::{
         extensions::{
-            khr_acceleration_structure as vkacc,
-            khr_ray_tracing_pipeline as vkrt, khr_swapchain as vksw,
+            khr_acceleration_structure as vkacc, khr_ray_tracing_pipeline as vkrt,
+            khr_swapchain as vksw,
         },
         vk1_0, vk1_2, DeviceLoader, ExtendableFrom as _,
     },
@@ -355,10 +350,7 @@ impl Device {
 
     /// Creates buffer with uninitialized content.
     #[tracing::instrument]
-    pub fn create_buffer(
-        &self,
-        info: BufferInfo,
-    ) -> Result<Buffer, OutOfMemory> {
+    pub fn create_buffer(&self, info: BufferInfo) -> Result<Buffer, OutOfMemory> {
         self.create_buffer_impl(info, None).map(Into::into)
     }
 
@@ -409,10 +401,7 @@ impl Device {
                     size: reqs.size,
                     align_mask: (reqs.alignment - 1) | info.align,
                     memory_types: reqs.memory_type_bits,
-                    usage: buffer_memory_usage_to_gpu_alloc(
-                        info.usage,
-                        memory_usage,
-                    ),
+                    usage: buffer_memory_usage_to_gpu_alloc(info.usage, memory_usage),
                 },
             )
         }
@@ -424,11 +413,9 @@ impl Device {
         })?;
 
         let result = unsafe {
-            self.inner.logical.bind_buffer_memory(
-                handle,
-                *block.memory(),
-                block.offset(),
-            )
+            self.inner
+                .logical
+                .bind_buffer_memory(handle, *block.memory(), block.offset())
         }
         .result();
 
@@ -436,10 +423,10 @@ impl Device {
             unsafe {
                 self.inner.logical.destroy_buffer(Some(handle), None);
 
-                self.inner.allocator.lock().dealloc(
-                    EruptMemoryDevice::wrap(&self.inner.logical),
-                    block,
-                );
+                self.inner
+                    .allocator
+                    .lock()
+                    .dealloc(EruptMemoryDevice::wrap(&self.inner.logical), block);
             }
 
             return Err(oom_error_from_erupt(err));
@@ -448,8 +435,7 @@ impl Device {
         let address = if info.usage.contains(BufferUsage::DEVICE_ADDRESS) {
             Some(Option::unwrap(from_erupt(unsafe {
                 self.inner.logical.get_buffer_device_address(
-                    &vk1_2::BufferDeviceAddressInfoBuilder::new()
-                        .buffer(handle),
+                    &vk1_2::BufferDeviceAddressInfoBuilder::new().buffer(handle),
                 )
             })))
         } else {
@@ -497,8 +483,7 @@ impl Device {
 
         debug_assert!(arith_eq(info.size, size_of_val(data)));
 
-        let mut buffer =
-            self.create_mappable_buffer(info, MemoryUsage::UPLOAD)?;
+        let mut buffer = self.create_mappable_buffer(info, MemoryUsage::UPLOAD)?;
 
         unsafe {
             match buffer.memory_block().map(
@@ -520,9 +505,7 @@ impl Device {
                     Ok(buffer.into())
                 }
                 Err(gpu_alloc::MapError::OutOfDeviceMemory) => Err(OutOfMemory),
-                Err(gpu_alloc::MapError::OutOfHostMemory) => {
-                    out_of_host_memory()
-                }
+                Err(gpu_alloc::MapError::OutOfHostMemory) => out_of_host_memory(),
                 Err(gpu_alloc::MapError::NonHostVisible)
                 | Err(gpu_alloc::MapError::AlreadyMapped) => unreachable!(),
                 Err(gpu_alloc::MapError::MapFailed) => panic!("Map failed"),
@@ -535,11 +518,9 @@ impl Device {
     #[tracing::instrument]
     pub fn create_fence(&self) -> Result<Fence, OutOfMemory> {
         let fence = unsafe {
-            self.inner.logical.create_fence(
-                &vk1_0::FenceCreateInfoBuilder::new(),
-                None,
-                None,
-            )
+            self.inner
+                .logical
+                .create_fence(&vk1_0::FenceCreateInfoBuilder::new(), None, None)
         }
         .result()
         .map_err(oom_error_from_erupt)?;
@@ -552,10 +533,7 @@ impl Device {
 
     /// Creates framebuffer for specified render pass from views.
     #[tracing::instrument]
-    pub fn create_framebuffer(
-        &self,
-        info: FramebufferInfo,
-    ) -> Result<Framebuffer, OutOfMemory> {
+    pub fn create_framebuffer(&self, info: FramebufferInfo) -> Result<Framebuffer, OutOfMemory> {
         for view in &info.views {
             assert_owner!(view, self);
         }
@@ -563,13 +541,15 @@ impl Device {
         assert_owner!(info.render_pass, self);
 
         assert!(
-            info.views.iter()
+            info.views
+                .iter()
                 .all(|view| view.info().view_kind == ImageViewKind::D2),
             "All image views for Framebuffer must have `view_kind == ImageViewKind::D2`",
         );
 
         assert!(
-            info.views.iter()
+            info.views
+                .iter()
                 .all(|view| view.info().image.info().extent.into_2d() >= info.extent),
             "All image views for Framebuffer must be at least as large as framebuffer extent",
         );
@@ -650,10 +630,9 @@ impl Device {
             })
             .collect::<SmallVec<[_; 16]>>();
 
-        let vertex_input_state =
-            vk1_0::PipelineVertexInputStateCreateInfoBuilder::new()
-                .vertex_binding_descriptions(&vertex_binding_descriptions)
-                .vertex_attribute_descriptions(&vertex_attribute_descriptions);
+        let vertex_input_state = vk1_0::PipelineVertexInputStateCreateInfoBuilder::new()
+            .vertex_binding_descriptions(&vertex_binding_descriptions)
+            .vertex_attribute_descriptions(&vertex_attribute_descriptions);
 
         vertex_shader_entry = entry_name_to_cstr(info.vertex_shader.entry());
 
@@ -664,10 +643,9 @@ impl Device {
                 .name(&*vertex_shader_entry),
         );
 
-        let input_assembly_state =
-            vk1_0::PipelineInputAssemblyStateCreateInfoBuilder::new()
-                .topology(info.primitive_topology.to_erupt())
-                .primitive_restart_enable(info.primitive_restart_enable);
+        let input_assembly_state = vk1_0::PipelineInputAssemblyStateCreateInfoBuilder::new()
+            .topology(info.primitive_topology.to_erupt())
+            .primitive_restart_enable(info.primitive_restart_enable);
 
         let rasterization_state;
 
@@ -684,15 +662,13 @@ impl Device {
         let mut color_blend_state = None;
 
         let with_rasterizer = if let Some(rasterizer) = &info.rasterizer {
-            let mut builder =
-                vk1_0::PipelineViewportStateCreateInfoBuilder::new();
+            let mut builder = vk1_0::PipelineViewportStateCreateInfoBuilder::new();
 
             match &rasterizer.viewport {
                 State::Static { value } => {
                     viewport = value.to_erupt().into_builder();
 
-                    builder =
-                        builder.viewports(std::slice::from_ref(&viewport));
+                    builder = builder.viewports(std::slice::from_ref(&viewport));
                 }
                 State::Dynamic => {
                     dynamic_states.push(vk1_0::DynamicState::VIEWPORT);
@@ -714,22 +690,20 @@ impl Device {
 
             viewport_state = Some(builder);
 
-            rasterization_state =
-                vk1_0::PipelineRasterizationStateCreateInfoBuilder::new()
-                    .rasterizer_discard_enable(false)
-                    .depth_clamp_enable(rasterizer.depth_clamp)
-                    .polygon_mode(rasterizer.polygon_mode.to_erupt())
-                    .cull_mode(rasterizer.culling.to_erupt())
-                    .front_face(rasterizer.front_face.to_erupt())
-                    .line_width(1.0);
+            rasterization_state = vk1_0::PipelineRasterizationStateCreateInfoBuilder::new()
+                .rasterizer_discard_enable(false)
+                .depth_clamp_enable(rasterizer.depth_clamp)
+                .polygon_mode(rasterizer.polygon_mode.to_erupt())
+                .cull_mode(rasterizer.culling.to_erupt())
+                .front_face(rasterizer.front_face.to_erupt())
+                .line_width(1.0);
 
             multisample_state = Some(
                 vk1_0::PipelineMultisampleStateCreateInfoBuilder::new()
                     .rasterization_samples(vk1_0::SampleCountFlagBits::_1),
             );
 
-            let mut builder =
-                vk1_0::PipelineDepthStencilStateCreateInfoBuilder::new();
+            let mut builder = vk1_0::PipelineDepthStencilStateCreateInfoBuilder::new();
 
             if let Some(depth_test) = rasterizer.depth_test {
                 builder = builder
@@ -745,14 +719,9 @@ impl Device {
                     State::Static { value } => {
                         builder = builder
                             .min_depth_bounds(value.offset.into())
-                            .max_depth_bounds(
-                                value.offset.into_inner()
-                                    + value.size.into_inner(),
-                            )
+                            .max_depth_bounds(value.offset.into_inner() + value.size.into_inner())
                     }
-                    State::Dynamic => {
-                        dynamic_states.push(vk1_0::DynamicState::DEPTH_BOUNDS)
-                    }
+                    State::Dynamic => dynamic_states.push(vk1_0::DynamicState::DEPTH_BOUNDS),
                 }
             }
 
@@ -763,34 +732,28 @@ impl Device {
                         let mut builder = vk1_0::StencilOpStateBuilder::new()
                             .fail_op(stencil_tests.front.fail.to_erupt())
                             .pass_op(stencil_tests.front.pass.to_erupt())
-                            .depth_fail_op(
-                                stencil_tests.front.depth_fail.to_erupt(),
-                            )
+                            .depth_fail_op(stencil_tests.front.depth_fail.to_erupt())
                             .compare_op(stencil_tests.front.compare.to_erupt());
 
                         match stencil_tests.front.compare_mask {
-                            State::Static { value } => {
-                                builder = builder.compare_mask(value)
+                            State::Static { value } => builder = builder.compare_mask(value),
+                            State::Dynamic => {
+                                dynamic_states.push(vk1_0::DynamicState::STENCIL_COMPARE_MASK)
                             }
-                            State::Dynamic => dynamic_states.push(
-                                vk1_0::DynamicState::STENCIL_COMPARE_MASK,
-                            ),
                         }
 
                         match stencil_tests.front.write_mask {
-                            State::Static { value } => {
-                                builder = builder.write_mask(value)
+                            State::Static { value } => builder = builder.write_mask(value),
+                            State::Dynamic => {
+                                dynamic_states.push(vk1_0::DynamicState::STENCIL_WRITE_MASK)
                             }
-                            State::Dynamic => dynamic_states
-                                .push(vk1_0::DynamicState::STENCIL_WRITE_MASK),
                         }
 
                         match stencil_tests.front.reference {
-                            State::Static { value } => {
-                                builder = builder.reference(value)
+                            State::Static { value } => builder = builder.reference(value),
+                            State::Dynamic => {
+                                dynamic_states.push(vk1_0::DynamicState::STENCIL_REFERENCE)
                             }
-                            State::Dynamic => dynamic_states
-                                .push(vk1_0::DynamicState::STENCIL_REFERENCE),
                         }
 
                         *builder
@@ -799,34 +762,28 @@ impl Device {
                         let mut builder = vk1_0::StencilOpStateBuilder::new()
                             .fail_op(stencil_tests.back.fail.to_erupt())
                             .pass_op(stencil_tests.back.pass.to_erupt())
-                            .depth_fail_op(
-                                stencil_tests.back.depth_fail.to_erupt(),
-                            )
+                            .depth_fail_op(stencil_tests.back.depth_fail.to_erupt())
                             .compare_op(stencil_tests.back.compare.to_erupt());
 
                         match stencil_tests.back.compare_mask {
-                            State::Static { value } => {
-                                builder = builder.compare_mask(value)
+                            State::Static { value } => builder = builder.compare_mask(value),
+                            State::Dynamic => {
+                                dynamic_states.push(vk1_0::DynamicState::STENCIL_COMPARE_MASK)
                             }
-                            State::Dynamic => dynamic_states.push(
-                                vk1_0::DynamicState::STENCIL_COMPARE_MASK,
-                            ),
                         }
 
                         match stencil_tests.back.write_mask {
-                            State::Static { value } => {
-                                builder = builder.write_mask(value)
+                            State::Static { value } => builder = builder.write_mask(value),
+                            State::Dynamic => {
+                                dynamic_states.push(vk1_0::DynamicState::STENCIL_WRITE_MASK)
                             }
-                            State::Dynamic => dynamic_states
-                                .push(vk1_0::DynamicState::STENCIL_WRITE_MASK),
                         }
 
                         match stencil_tests.back.reference {
-                            State::Static { value } => {
-                                builder = builder.reference(value)
+                            State::Static { value } => builder = builder.reference(value),
+                            State::Dynamic => {
+                                dynamic_states.push(vk1_0::DynamicState::STENCIL_REFERENCE)
                             }
-                            State::Dynamic => dynamic_states
-                                .push(vk1_0::DynamicState::STENCIL_REFERENCE),
                         }
 
                         *builder
@@ -845,13 +802,10 @@ impl Device {
                 );
             }
 
-            let mut builder =
-                vk1_0::PipelineColorBlendStateCreateInfoBuilder::new();
+            let mut builder = vk1_0::PipelineColorBlendStateCreateInfoBuilder::new();
 
             builder = match rasterizer.color_blend {
-                ColorBlend::Logic { op } => {
-                    builder.logic_op_enable(true).logic_op(op.to_erupt())
-                }
+                ColorBlend::Logic { op } => builder.logic_op_enable(true).logic_op(op.to_erupt()),
                 ColorBlend::Blending {
                     blending,
                     write_mask,
@@ -890,15 +844,10 @@ impl Device {
                         State::Static {
                             value: [x, y, z, w],
                         } => {
-                            builder = builder.blend_constants([
-                                x.into(),
-                                y.into(),
-                                z.into(),
-                                w.into(),
-                            ])
+                            builder =
+                                builder.blend_constants([x.into(), y.into(), z.into(), w.into()])
                         }
-                        State::Dynamic => dynamic_states
-                            .push(vk1_0::DynamicState::BLEND_CONSTANTS),
+                        State::Dynamic => dynamic_states.push(vk1_0::DynamicState::BLEND_CONSTANTS),
                     }
 
                     builder
@@ -913,9 +862,8 @@ impl Device {
 
             true
         } else {
-            rasterization_state =
-                vk1_0::PipelineRasterizationStateCreateInfoBuilder::new()
-                    .rasterizer_discard_enable(true);
+            rasterization_state = vk1_0::PipelineRasterizationStateCreateInfoBuilder::new()
+                .rasterizer_discard_enable(true);
 
             false
         };
@@ -933,8 +881,7 @@ impl Device {
 
         if !dynamic_states.is_empty() {
             pipeline_dynamic_state =
-                vk1_0::PipelineDynamicStateCreateInfoBuilder::new()
-                    .dynamic_states(&dynamic_states);
+                vk1_0::PipelineDynamicStateCreateInfoBuilder::new().dynamic_states(&dynamic_states);
 
             builder = builder.dynamic_state(&pipeline_dynamic_state);
         }
@@ -1016,10 +963,7 @@ impl Device {
 
     /// Creates image with uninitialized content.
     #[tracing::instrument]
-    pub fn create_image(
-        &self,
-        info: ImageInfo,
-    ) -> Result<Image, CreateImageError> {
+    pub fn create_image(&self, info: ImageInfo) -> Result<Image, CreateImageError> {
         let image = unsafe {
             self.inner.logical.create_image(
                 &vk1_0::ImageCreateInfoBuilder::new()
@@ -1070,11 +1014,9 @@ impl Device {
         }?;
 
         let result = unsafe {
-            self.inner.logical.bind_image_memory(
-                image,
-                *block.memory(),
-                block.offset(),
-            )
+            self.inner
+                .logical
+                .bind_image_memory(image, *block.memory(), block.offset())
         }
         .result();
 
@@ -1088,10 +1030,10 @@ impl Device {
             Err(err) => {
                 unsafe {
                     self.inner.logical.destroy_image(Some(image), None);
-                    self.inner.allocator.lock().dealloc(
-                        EruptMemoryDevice::wrap(&self.inner.logical),
-                        block,
-                    );
+                    self.inner
+                        .allocator
+                        .lock()
+                        .dealloc(EruptMemoryDevice::wrap(&self.inner.logical), block);
                 }
 
                 Err(oom_error_from_erupt(err).into())
@@ -1228,10 +1170,7 @@ impl Device {
 
     /// Creates view to an image.
     #[tracing::instrument]
-    pub fn create_image_view(
-        &self,
-        info: ImageViewInfo,
-    ) -> Result<ImageView, OutOfMemory> {
+    pub fn create_image_view(&self, info: ImageViewInfo) -> Result<ImageView, OutOfMemory> {
         assert_owner!(info.image, self);
 
         let image = &info.image;
@@ -1384,14 +1323,10 @@ impl Device {
             .zip(subpasses)
             .map(|(s, (color_offset, depth_offset))| {
                 let builder = vk1_0::SubpassDescriptionBuilder::new()
-                    .color_attachments(
-                        &subpass_attachments[color_offset..depth_offset],
-                    );
+                    .color_attachments(&subpass_attachments[color_offset..depth_offset]);
 
                 if s.depth.is_some() {
-                    builder.depth_stencil_attachment(
-                        &subpass_attachments[depth_offset],
-                    )
+                    builder.depth_stencil_attachment(&subpass_attachments[depth_offset])
                 } else {
                     builder
                 }
@@ -1419,18 +1354,12 @@ impl Device {
                 vk1_0::SubpassDependencyBuilder::new()
                     .src_subpass(
                         d.src
-                            .map(|s| {
-                                s.try_into()
-                                    .expect("Subpass index out of bound")
-                            })
+                            .map(|s| s.try_into().expect("Subpass index out of bound"))
                             .unwrap_or(vk1_0::SUBPASS_EXTERNAL),
                     )
                     .dst_subpass(
                         d.dst
-                            .map(|s| {
-                                s.try_into()
-                                    .expect("Subpass index out of bound")
-                            })
+                            .map(|s| s.try_into().expect("Subpass index out of bound"))
                             .unwrap_or(vk1_0::SUBPASS_EXTERNAL),
                     )
                     .src_stage_mask(d.src_stages.to_erupt())
@@ -1440,18 +1369,15 @@ impl Device {
             })
             .collect::<SmallVec<[_; 16]>>();
 
-        let render_passs_create_info =
-            vk1_0::RenderPassCreateInfoBuilder::new()
-                .attachments(&attachments)
-                .subpasses(&subpasses)
-                .dependencies(&dependencies);
+        let render_passs_create_info = vk1_0::RenderPassCreateInfoBuilder::new()
+            .attachments(&attachments)
+            .subpasses(&subpasses)
+            .dependencies(&dependencies);
 
         let render_pass = unsafe {
-            self.inner.logical.create_render_pass(
-                &render_passs_create_info,
-                None,
-                None,
-            )
+            self.inner
+                .logical
+                .create_render_pass(&render_passs_create_info, None, None)
         }
         .result()
         .map_err(create_render_pass_error_from_erupt)?;
@@ -1462,9 +1388,7 @@ impl Device {
         Ok(RenderPass::new(info, self.downgrade(), render_pass, index))
     }
 
-    pub(crate) fn create_semaphore_raw(
-        &self,
-    ) -> Result<(vk1_0::Semaphore, usize), vk1_0::Result> {
+    pub(crate) fn create_semaphore_raw(&self) -> Result<(vk1_0::Semaphore, usize), vk1_0::Result> {
         let semaphore = unsafe {
             self.inner.logical.create_semaphore(
                 &vk1_0::SemaphoreCreateInfoBuilder::new(),
@@ -1482,8 +1406,7 @@ impl Device {
     /// Creates semaphore. Semaphores are created in unsignaled state.
     #[tracing::instrument]
     pub fn create_semaphore(&self) -> Result<Semaphore, OutOfMemory> {
-        let (handle, index) =
-            self.create_semaphore_raw().map_err(oom_error_from_erupt)?;
+        let (handle, index) = self.create_semaphore_raw().map_err(oom_error_from_erupt)?;
 
         tracing::debug!("Semaphore created: {:p}", handle);
         Ok(Semaphore::new(self.downgrade(), handle, index))
@@ -1497,11 +1420,9 @@ impl Device {
         let code = match info.language {
             ShaderLanguage::SPIRV => &*info.code,
             _ => {
-                return Err(
-                    CreateShaderModuleError::UnsupportedShaderLanguage {
-                        language: info.language,
-                    },
-                )
+                return Err(CreateShaderModuleError::UnsupportedShaderLanguage {
+                    language: info.language,
+                })
             }
         };
 
@@ -1556,10 +1477,7 @@ impl Device {
                 // `[u8; N]` must be compatible with `[u32; N / 4]
                 // Resulting lifetime is bound to the function while
                 // source lifetime is not less than the function.
-                std::slice::from_raw_parts(
-                    code.as_ptr() as *const u32,
-                    code.len() / 4,
-                )
+                std::slice::from_raw_parts(code.as_ptr() as *const u32, code.len() / 4)
             }
         };
 
@@ -1586,10 +1504,7 @@ impl Device {
     /// Creates swapchain for specified surface.
     /// Only one swapchain may be associated with one surface.
     #[tracing::instrument]
-    pub fn create_swapchain(
-        &self,
-        surface: &mut Surface,
-    ) -> Result<Swapchain, SurfaceError> {
+    pub fn create_swapchain(&self, surface: &mut Surface) -> Result<Swapchain, SurfaceError> {
         Ok(Swapchain::new(surface, self)?)
     }
 
@@ -1644,9 +1559,7 @@ impl Device {
             .map(|fence| fence.handle())
             .collect::<SmallVec<[_; 16]>>();
 
-        match unsafe { self.inner.logical.wait_for_fences(&fences, all, !0) }
-            .result()
-        {
+        match unsafe { self.inner.logical.wait_for_fences(&fences, all, !0) }.result() {
             Ok(()) => {}
             Err(vk1_0::Result::ERROR_DEVICE_LOST) => device_lost(),
             Err(result) => unexpected_result(result),
@@ -1680,46 +1593,69 @@ impl Device {
 
         assert!(u32::try_from(geometry.len()).is_ok(), "Too many geometry");
 
-        let geometries = geometry.iter().map(|info|
-            match *info {
-                AccelerationStructureGeometryInfo::Triangles { index_type, max_vertex_count, vertex_format, allows_transforms, .. } => {
-                    assert_eq!(level, AccelerationStructureLevel::Bottom, "Triangles must be built into bottom level acceleration structure");
+        let geometries = geometry
+            .iter()
+            .map(|info| match *info {
+                AccelerationStructureGeometryInfo::Triangles {
+                    index_type,
+                    max_vertex_count,
+                    vertex_format,
+                    allows_transforms,
+                    ..
+                } => {
+                    assert_eq!(
+                        level,
+                        AccelerationStructureLevel::Bottom,
+                        "Triangles must be built into bottom level acceleration structure"
+                    );
 
                     vkacc::AccelerationStructureGeometryKHRBuilder::new()
                         .geometry_type(vkacc::GeometryTypeKHR::TRIANGLES_KHR)
                         .geometry(vkacc::AccelerationStructureGeometryDataKHR {
-                            triangles: vkacc::AccelerationStructureGeometryTrianglesDataKHRBuilder::new()
-                                .vertex_format(vertex_format.to_erupt())
-                                .max_vertex(max_vertex_count)
-                                .index_type(match index_type {
-                                    Some(IndexType::U16) => vk1_0::IndexType::UINT16,
-                                    Some(IndexType::U32) => vk1_0::IndexType::UINT32,
-                                    None => vk1_0::IndexType::NONE_KHR,
-                                })
-                                .transform_data(vkacc::DeviceOrHostAddressConstKHR { device_address: allows_transforms as u64 })
-                                .build()
+                            triangles:
+                                vkacc::AccelerationStructureGeometryTrianglesDataKHRBuilder::new()
+                                    .vertex_format(vertex_format.to_erupt())
+                                    .max_vertex(max_vertex_count)
+                                    .index_type(match index_type {
+                                        Some(IndexType::U16) => vk1_0::IndexType::UINT16,
+                                        Some(IndexType::U32) => vk1_0::IndexType::UINT32,
+                                        None => vk1_0::IndexType::NONE_KHR,
+                                    })
+                                    .transform_data(vkacc::DeviceOrHostAddressConstKHR {
+                                        device_address: allows_transforms as u64,
+                                    })
+                                    .build(),
                         })
                 }
-                AccelerationStructureGeometryInfo::AABBs {..} => {
-                    assert_eq!(level, AccelerationStructureLevel::Bottom, "AABBs must be built into bottom level acceleration structure");
+                AccelerationStructureGeometryInfo::AABBs { .. } => {
+                    assert_eq!(
+                        level,
+                        AccelerationStructureLevel::Bottom,
+                        "AABBs must be built into bottom level acceleration structure"
+                    );
 
                     vkacc::AccelerationStructureGeometryKHRBuilder::new()
-                    .geometry_type(vkacc::GeometryTypeKHR::AABBS_KHR)
-                    .geometry(vkacc::AccelerationStructureGeometryDataKHR {
-                        aabbs: vkacc::AccelerationStructureGeometryAabbsDataKHR::default()
-                    })
-                },
-                AccelerationStructureGeometryInfo::Instances {..} => {
-                    assert_eq!(level, AccelerationStructureLevel::Top, "Instances must be built into bottom level acceleration structure");
+                        .geometry_type(vkacc::GeometryTypeKHR::AABBS_KHR)
+                        .geometry(vkacc::AccelerationStructureGeometryDataKHR {
+                            aabbs: vkacc::AccelerationStructureGeometryAabbsDataKHR::default(),
+                        })
+                }
+                AccelerationStructureGeometryInfo::Instances { .. } => {
+                    assert_eq!(
+                        level,
+                        AccelerationStructureLevel::Top,
+                        "Instances must be built into bottom level acceleration structure"
+                    );
 
                     vkacc::AccelerationStructureGeometryKHRBuilder::new()
-                    .geometry_type(vkacc::GeometryTypeKHR::INSTANCES_KHR)
-                    .geometry(vkacc::AccelerationStructureGeometryDataKHR {
-                        instances: vkacc::AccelerationStructureGeometryInstancesDataKHR::default()
-                    })
-                },
-            }
-        ).collect::<SmallVec<[_; 4]>>();
+                        .geometry_type(vkacc::GeometryTypeKHR::INSTANCES_KHR)
+                        .geometry(vkacc::AccelerationStructureGeometryDataKHR {
+                            instances:
+                                vkacc::AccelerationStructureGeometryInstancesDataKHR::default(),
+                        })
+                }
+            })
+            .collect::<SmallVec<[_; 4]>>();
 
         let max_primitive_counts = geometry
             .iter()
@@ -1737,12 +1673,11 @@ impl Device {
             })
             .collect::<SmallVec<[_; 4]>>();
 
-        let build_info =
-            vkacc::AccelerationStructureBuildGeometryInfoKHRBuilder::new()
-                ._type(level.to_erupt())
-                .flags(flags.to_erupt())
-                .mode(vkacc::BuildAccelerationStructureModeKHR::BUILD_KHR)
-                .geometries(&geometries);
+        let build_info = vkacc::AccelerationStructureBuildGeometryInfoKHRBuilder::new()
+            ._type(level.to_erupt())
+            .flags(flags.to_erupt())
+            .mode(vkacc::BuildAccelerationStructureModeKHR::BUILD_KHR)
+            .geometries(&geometries);
 
         let build_sizes = unsafe {
             self.inner
@@ -1756,8 +1691,7 @@ impl Device {
         };
 
         AccelerationStructureBuildSizesInfo {
-            acceleration_structure_size: build_sizes
-                .acceleration_structure_size,
+            acceleration_structure_size: build_sizes.acceleration_structure_size,
             update_scratch_size: build_sizes.update_scratch_size,
             build_scratch_size: build_sizes.build_scratch_size,
         }
@@ -1794,9 +1728,9 @@ impl Device {
         .result()
         .map_err(|result| match result {
             vk1_0::Result::ERROR_OUT_OF_HOST_MEMORY => out_of_host_memory(),
-            vk1_0::Result::ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS_KHR => panic!(
-                "INVALID_OPAQUE_CAPTURE_ADDRESS_KHR error was unexpected"
-            ),
+            vk1_0::Result::ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS_KHR => {
+                panic!("INVALID_OPAQUE_CAPTURE_ADDRESS_KHR error was unexpected")
+            }
             _ => unexpected_result(result),
         })?;
 
@@ -1806,10 +1740,9 @@ impl Device {
             self.inner
                 .logical
                 .get_acceleration_structure_device_address_khr(
-                    &vkacc::AccelerationStructureDeviceAddressInfoKHR::default(
-                    )
-                    .into_builder()
-                    .acceleration_structure(handle),
+                    &vkacc::AccelerationStructureDeviceAddressInfoKHR::default()
+                        .into_builder()
+                        .acceleration_structure(handle),
                 )
         }));
 
@@ -1825,10 +1758,7 @@ impl Device {
 
     /// Returns buffers device address.
     #[tracing::instrument]
-    pub fn get_buffer_device_address(
-        &self,
-        buffer: &Buffer,
-    ) -> Option<DeviceAddress> {
+    pub fn get_buffer_device_address(&self, buffer: &Buffer) -> Option<DeviceAddress> {
         assert_owner!(buffer, self);
 
         if buffer.info().usage.contains(BufferUsage::DEVICE_ADDRESS) {
@@ -1894,7 +1824,14 @@ impl Device {
                 match *group {
                     RayTracingShaderGroupInfo::Raygen { raygen } => {
                         assert_ne!(raygen, vkrt::SHADER_UNUSED_KHR);
-                        assert_eq!(usize::try_from(raygen).ok().and_then(|raygen| info.shaders.get(raygen)).expect("raygen shader index out of bounds").stage(), ShaderStage::Raygen);
+                        assert_eq!(
+                            usize::try_from(raygen)
+                                .ok()
+                                .and_then(|raygen| info.shaders.get(raygen))
+                                .expect("raygen shader index out of bounds")
+                                .stage(),
+                            ShaderStage::Raygen
+                        );
 
                         builder
                             ._type(vkrt::RayTracingShaderGroupTypeKHR::GENERAL_KHR)
@@ -1905,7 +1842,14 @@ impl Device {
                     }
                     RayTracingShaderGroupInfo::Miss { miss } => {
                         assert_ne!(miss, vkrt::SHADER_UNUSED_KHR);
-                        assert_eq!(usize::try_from(miss).ok().and_then(|miss| info.shaders.get(miss)).expect("miss shader index out of bounds").stage(), ShaderStage::Miss);
+                        assert_eq!(
+                            usize::try_from(miss)
+                                .ok()
+                                .and_then(|miss| info.shaders.get(miss))
+                                .expect("miss shader index out of bounds")
+                                .stage(),
+                            ShaderStage::Miss
+                        );
 
                         builder
                             ._type(vkrt::RayTracingShaderGroupTypeKHR::GENERAL_KHR)
@@ -1920,11 +1864,25 @@ impl Device {
                     } => {
                         if let Some(any_hit) = any_hit {
                             assert_ne!(any_hit, vkrt::SHADER_UNUSED_KHR);
-                            assert_eq!(usize::try_from(any_hit).ok().and_then(|any_hit| info.shaders.get(any_hit)).expect("any_hit shader index out of bounds").stage(), ShaderStage::AnyHit);
+                            assert_eq!(
+                                usize::try_from(any_hit)
+                                    .ok()
+                                    .and_then(|any_hit| info.shaders.get(any_hit))
+                                    .expect("any_hit shader index out of bounds")
+                                    .stage(),
+                                ShaderStage::AnyHit
+                            );
                         }
                         if let Some(closest_hit) = closest_hit {
                             assert_ne!(closest_hit, vkrt::SHADER_UNUSED_KHR);
-                            assert_eq!(usize::try_from(closest_hit).ok().and_then(|closest_hit| info.shaders.get(closest_hit)).expect("closest_hit shader index out of bounds").stage(), ShaderStage::ClosestHit);
+                            assert_eq!(
+                                usize::try_from(closest_hit)
+                                    .ok()
+                                    .and_then(|closest_hit| info.shaders.get(closest_hit))
+                                    .expect("closest_hit shader index out of bounds")
+                                    .stage(),
+                                ShaderStage::ClosestHit
+                            );
                         }
 
                         builder
@@ -1959,15 +1917,13 @@ impl Device {
 
         let group_size = self.inner.properties.rt.shader_group_handle_size;
 
-        let group_size_usize =
-            usize::try_from(group_size).map_err(|_| out_of_host_memory())?;
+        let group_size_usize = usize::try_from(group_size).map_err(|_| out_of_host_memory())?;
 
         let total_size_usize = group_size_usize
             .checked_mul(info.groups.len())
             .ok_or_else(host_memory_space_overlow)?;
 
-        let group_count =
-            u32::try_from(info.groups.len()).map_err(|_| OutOfMemory)?;
+        let group_count = u32::try_from(info.groups.len()).map_err(|_| OutOfMemory)?;
 
         let mut bytes = vec![0u8; total_size_usize];
 
@@ -2054,22 +2010,18 @@ impl Device {
                             .stage_flags(binding.stages.to_erupt())
                     })
                     .collect::<SmallVec<[_; 16]>>();
-                let mut create_info =
-                    vk1_0::DescriptorSetLayoutCreateInfoBuilder::new()
-                        .bindings(&bindings)
-                        .flags(info.flags.to_erupt());
+                let mut create_info = vk1_0::DescriptorSetLayoutCreateInfoBuilder::new()
+                    .bindings(&bindings)
+                    .flags(info.flags.to_erupt());
 
-                let mut flags =
-                    vk1_2::DescriptorSetLayoutBindingFlagsCreateInfoBuilder::new()
-                        .binding_flags(&flags);
+                let mut flags = vk1_2::DescriptorSetLayoutBindingFlagsCreateInfoBuilder::new()
+                    .binding_flags(&flags);
 
                 create_info = create_info.extend_from(&mut flags);
 
-                self.inner.logical.create_descriptor_set_layout(
-                    &create_info,
-                    None,
-                    None,
-                )
+                self.inner
+                    .logical
+                    .create_descriptor_set_layout(&create_info, None, None)
             }
         }
         .result()
@@ -2186,11 +2138,15 @@ impl Device {
                         );
                         debug_assert!(
                             region.offset <= region.buffer.info().size,
-                            "Buffer ({:#?}) descriptor offset ({}) is out of bounds", region.buffer, region.offset,
+                            "Buffer ({:#?}) descriptor offset ({}) is out of bounds",
+                            region.buffer,
+                            region.offset,
                         );
                         debug_assert!(
                             region.size <= region.buffer.info().size - region.offset,
-                            "Buffer ({:#?}) descriptor size ({}) is out of bounds", region.buffer, region.size
+                            "Buffer ({:#?}) descriptor size ({}) is out of bounds",
+                            region.buffer,
+                            region.size
                         );
                     }
                 }
@@ -2219,8 +2175,7 @@ impl Device {
         // let mut buffer_views = SmallVec::<[_; 16]
         let mut acceleration_structures = SmallVec::<[_; 64]>::new();
 
-        let mut write_descriptor_acceleration_structures =
-            SmallVec::<[_; 16]>::new();
+        let mut write_descriptor_acceleration_structures = SmallVec::<[_; 16]>::new();
 
         for write in writes {
             match write.descriptors {
@@ -2228,8 +2183,7 @@ impl Device {
                     let start = images.len();
 
                     images.extend(slice.iter().map(|sampler| {
-                        vk1_0::DescriptorImageInfoBuilder::new()
-                            .sampler(sampler.handle())
+                        vk1_0::DescriptorImageInfoBuilder::new().sampler(sampler.handle())
                     }));
 
                     ranges.push(start..images.len());
@@ -2330,14 +2284,12 @@ impl Device {
                 Descriptors::AccelerationStructure(slice) => {
                     let start = acceleration_structures.len();
 
-                    acceleration_structures
-                        .extend(slice.iter().map(|accs| accs.handle()));
+                    acceleration_structures.extend(slice.iter().map(|accs| accs.handle()));
 
                     ranges.push(start..acceleration_structures.len());
 
-                    write_descriptor_acceleration_structures.push(
-                        vkacc::WriteDescriptorSetAccelerationStructureKHRBuilder::new(),
-                    );
+                    write_descriptor_acceleration_structures
+                        .push(vkacc::WriteDescriptorSetAccelerationStructureKHRBuilder::new());
                 }
             }
         }
@@ -2407,10 +2359,7 @@ impl Device {
     }
 
     #[tracing::instrument]
-    pub fn create_sampler(
-        &self,
-        info: SamplerInfo,
-    ) -> Result<Sampler, OutOfMemory> {
+    pub fn create_sampler(&self, info: SamplerInfo) -> Result<Sampler, OutOfMemory> {
         let handle = unsafe {
             self.inner.logical.create_sampler(
                 &vk1_0::SamplerCreateInfoBuilder::new()
@@ -2422,9 +2371,7 @@ impl Device {
                     .address_mode_w(info.address_mode_w.to_erupt())
                     .mip_lod_bias(info.mip_lod_bias.into_inner())
                     .anisotropy_enable(info.max_anisotropy.is_some())
-                    .max_anisotropy(
-                        info.max_anisotropy.unwrap_or(0.0.into()).into_inner(),
-                    )
+                    .max_anisotropy(info.max_anisotropy.unwrap_or(0.0.into()).into_inner())
                     .compare_enable(info.compare_op.is_some())
                     .compare_op(match info.compare_op {
                         Some(compare_op) => compare_op.to_erupt(),
@@ -2455,30 +2402,21 @@ impl Device {
     ) -> Result<ShaderBindingTable, OutOfMemory> {
         assert_owner!(pipeline, self);
 
-        let group_size =
-            u64::from(self.inner.properties.rt.shader_group_handle_size);
-        let group_align =
-            u64::from(self.inner.properties.rt.shader_group_base_alignment - 1);
+        let group_size = u64::from(self.inner.properties.rt.shader_group_handle_size);
+        let group_align = u64::from(self.inner.properties.rt.shader_group_base_alignment - 1);
 
-        let group_count_usize = info.raygen.is_some() as usize
-            + info.miss.len()
-            + info.hit.len()
-            + info.callable.len();
+        let group_count_usize =
+            info.raygen.is_some() as usize + info.miss.len() + info.hit.len() + info.callable.len();
 
-        let group_count =
-            u32::try_from(group_count_usize).map_err(|_| OutOfMemory)?;
+        let group_count = u32::try_from(group_count_usize).map_err(|_| OutOfMemory)?;
 
-        let group_stride =
-            align_up(group_align, group_size).ok_or(OutOfMemory)?;
+        let group_stride = align_up(group_align, group_size).ok_or(OutOfMemory)?;
 
-        let group_stride_usize =
-            usize::try_from(group_stride).map_err(|_| OutOfMemory)?;
+        let group_stride_usize = usize::try_from(group_stride).map_err(|_| OutOfMemory)?;
 
-        let total_size = (group_stride.checked_mul(u64::from(group_count)))
-            .ok_or(OutOfMemory)?;
+        let total_size = (group_stride.checked_mul(u64::from(group_count))).ok_or(OutOfMemory)?;
 
-        let total_size_usize = usize::try_from(total_size)
-            .unwrap_or_else(|_| out_of_host_memory());
+        let total_size_usize = usize::try_from(total_size).unwrap_or_else(|_| out_of_host_memory());
 
         let mut bytes = vec![0; total_size_usize];
 
@@ -2526,8 +2464,7 @@ impl Device {
             BufferInfo {
                 align: group_align,
                 size: total_size,
-                usage: BufferUsage::SHADER_BINDING_TABLE
-                    | BufferUsage::DEVICE_ADDRESS,
+                usage: BufferUsage::SHADER_BINDING_TABLE | BufferUsage::DEVICE_ADDRESS,
             },
             &bytes,
         )?;
@@ -2656,8 +2593,7 @@ fn check() {
 }
 
 fn entry_name_to_cstr(name: &str) -> CString {
-    CString::new(name.as_bytes())
-        .expect("Shader names should not contain zero bytes")
+    CString::new(name.as_bytes()).expect("Shader names should not contain zero bytes")
 }
 
 fn copy_group_handlers(
@@ -2672,8 +2608,7 @@ fn copy_group_handlers(
     let group_size_usize = usize::try_from(group_size).ok()?;
 
     for group_index in group_indices {
-        let group_offset =
-            (group_size_usize.checked_mul(usize::try_from(group_index).ok()?))?;
+        let group_offset = (group_size_usize.checked_mul(usize::try_from(group_index).ok()?))?;
 
         let group_end = group_offset.checked_add(group_size_usize)?;
         let write_end = write_offset.checked_add(group_size_usize)?;
@@ -2692,16 +2627,12 @@ fn copy_group_handlers(
     Some(result_start..result_end)
 }
 
-pub(crate) fn create_render_pass_error_from_erupt(
-    err: vk1_0::Result,
-) -> CreateRenderPassError {
+pub(crate) fn create_render_pass_error_from_erupt(err: vk1_0::Result) -> CreateRenderPassError {
     match err {
         vk1_0::Result::ERROR_OUT_OF_HOST_MEMORY => out_of_host_memory(),
-        vk1_0::Result::ERROR_OUT_OF_DEVICE_MEMORY => {
-            CreateRenderPassError::OutOfMemory {
-                source: OutOfMemory,
-            }
-        }
+        vk1_0::Result::ERROR_OUT_OF_DEVICE_MEMORY => CreateRenderPassError::OutOfMemory {
+            source: OutOfMemory,
+        },
         _ => unexpected_result(err),
     }
 }
@@ -2723,9 +2654,7 @@ fn memory_device_properties(
             [..memory_properties.memory_type_count as usize]
             .iter()
             .map(|memory_type| gpu_alloc::MemoryType {
-                props: gpu_alloc_erupt::memory_properties_from_erupt(
-                    memory_type.property_flags,
-                ),
+                props: gpu_alloc_erupt::memory_properties_from_erupt(memory_type.property_flags),
                 heap: memory_type.heap_index,
             })
             .collect(),

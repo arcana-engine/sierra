@@ -40,11 +40,7 @@ impl std::hash::Hash for Surface {
 }
 
 impl Surface {
-    pub(crate) fn make(
-        handle: SurfaceKHR,
-        used: AtomicBool,
-        info: SurfaceInfo,
-    ) -> Self {
+    pub(crate) fn make(handle: SurfaceKHR, used: AtomicBool, info: SurfaceInfo) -> Self {
         Surface {
             inner: std::sync::Arc::new(Inner { handle, used, info }),
         }
@@ -70,11 +66,9 @@ impl Surface {
 pub(crate) fn surface_error_from_erupt(err: vk1_0::Result) -> SurfaceError {
     match err {
         vk1_0::Result::ERROR_OUT_OF_HOST_MEMORY => out_of_host_memory(),
-        vk1_0::Result::ERROR_OUT_OF_DEVICE_MEMORY => {
-            SurfaceError::OutOfMemory {
-                source: OutOfMemory,
-            }
-        }
+        vk1_0::Result::ERROR_OUT_OF_DEVICE_MEMORY => SurfaceError::OutOfMemory {
+            source: OutOfMemory,
+        },
         vk1_0::Result::ERROR_SURFACE_LOST_KHR => SurfaceError::SurfaceLost,
         _ => unexpected_result(err),
     }

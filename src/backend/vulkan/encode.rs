@@ -1,29 +1,20 @@
-
 use {
     super::{
         access::supported_access,
         convert::{oom_error_from_erupt, ToErupt},
-        device::{WeakDevice},
+        device::WeakDevice,
     },
     crate::{
-        accel::{
-            AccelerationStructureGeometry, AccelerationStructureLevel,
-            IndexData,
-        },
+        accel::{AccelerationStructureGeometry, AccelerationStructureLevel, IndexData},
         buffer::{BufferUsage, StridedBufferRegion},
         encode::*,
         format::{FormatDescription, FormatType, Repr},
         queue::QueueId,
-        render_pass::{
-            AttachmentLoadOp, ClearValue, RENDERPASS_SMALLVEC_ATTACHMENTS,
-        },
+        render_pass::{AttachmentLoadOp, ClearValue, RENDERPASS_SMALLVEC_ATTACHMENTS},
         IndexType, OutOfMemory,
     },
     erupt::{
-        extensions::{
-            khr_acceleration_structure as vkacc,
-            khr_ray_tracing_pipeline as vkrt,
-        },
+        extensions::{khr_acceleration_structure as vkacc, khr_ray_tracing_pipeline as vkrt},
         vk1_0,
     },
     smallvec::SmallVec,
@@ -55,11 +46,7 @@ impl Debug for CommandBuffer {
 }
 
 impl CommandBuffer {
-    pub(super) fn new(
-        handle: vk1_0::CommandBuffer,
-        queue: QueueId,
-        owner: WeakDevice,
-    ) -> Self {
+    pub(super) fn new(handle: vk1_0::CommandBuffer, queue: QueueId, owner: WeakDevice) -> Self {
         CommandBuffer {
             handle,
             queue,
@@ -72,10 +59,7 @@ impl CommandBuffer {
         self.handle
     }
 
-    pub(super) fn is_owned_by(
-        &self,
-        owner: &impl PartialEq<WeakDevice>,
-    ) -> bool {
+    pub(super) fn is_owned_by(&self, owner: &impl PartialEq<WeakDevice>) -> bool {
         *owner == self.owner
     }
 
@@ -83,10 +67,7 @@ impl CommandBuffer {
         self.queue
     }
 
-    pub fn write(
-        &mut self,
-        commands: &[Command<'_>],
-    ) -> Result<(), OutOfMemory> {
+    pub fn write(&mut self, commands: &[Command<'_>]) -> Result<(), OutOfMemory> {
         let device = match self.owner.upgrade() {
             Some(device) => device,
             None => return Ok(()),
@@ -127,7 +108,7 @@ impl CommandBuffer {
                             .map(|attachment| {
                                 use FormatDescription::*;
 
-                                if attachment.load_op == AttachmentLoadOp::Clear {       
+                                if attachment.load_op == AttachmentLoadOp::Clear {
                                     let clear = clears.next().expect("Not enough clear values");
                                     match clear {
                                         &ClearValue::Color(r, g, b, a) => vk1_0::ClearValue {
@@ -169,19 +150,14 @@ impl CommandBuffer {
                                 // pass.
                                 .render_area(vk1_0::Rect2D {
                                     offset: vk1_0::Offset2D { x: 0, y: 0 },
-                                    extent: framebuffer
-                                        .info()
-                                        .extent
-                                        .to_erupt(),
+                                    extent: framebuffer.info().extent.to_erupt(),
                                 })
                                 .clear_values(&clear_values),
                             vk1_0::SubpassContents::INLINE,
                         )
                     }
                 }
-                Command::EndRenderPass => unsafe {
-                    logical.cmd_end_render_pass(self.handle)
-                },
+                Command::EndRenderPass => unsafe { logical.cmd_end_render_pass(self.handle) },
                 Command::BindGraphicsPipeline { pipeline } => unsafe {
                     assert_owner!(pipeline, device);
 
@@ -229,20 +205,12 @@ impl CommandBuffer {
                 Command::SetViewport { viewport } => unsafe {
                     // FIXME: Check that bound pipeline has dynamic viewport
                     // state.
-                    logical.cmd_set_viewport(
-                        self.handle,
-                        0,
-                        &[viewport.to_erupt().into_builder()],
-                    );
+                    logical.cmd_set_viewport(self.handle, 0, &[viewport.to_erupt().into_builder()]);
                 },
                 Command::SetScissor { scissor } => unsafe {
                     // FIXME: Check that bound pipeline has dynamic scissor
                     // state.
-                    logical.cmd_set_scissor(
-                        self.handle,
-                        0,
-                        &[scissor.to_erupt().into_builder()],
-                    );
+                    logical.cmd_set_scissor(self.handle, 0, &[scissor.to_erupt().into_builder()]);
                 },
                 Command::UpdateBuffer {
                     buffer,
@@ -269,17 +237,10 @@ impl CommandBuffer {
                     let offsets: SmallVec<[_; 8]> =
                         buffers.iter().map(|&(_, offset)| offset).collect();
 
-                    let buffers: SmallVec<[_; 8]> = buffers
-                        .iter()
-                        .map(|(buffer, _)| buffer.handle())
-                        .collect();
+                    let buffers: SmallVec<[_; 8]> =
+                        buffers.iter().map(|(buffer, _)| buffer.handle()).collect();
 
-                    logical.cmd_bind_vertex_buffers(
-                        self.handle,
-                        first,
-                        &buffers,
-                        &offsets,
-                    );
+                    logical.cmd_bind_vertex_buffers(self.handle, first, &buffers, &offsets);
                 },
                 Command::BuildAccelerationStructure { infos } => {
                     assert!(
@@ -288,10 +249,7 @@ impl CommandBuffer {
                     );
 
                     // Vulkan specific checks.
-                    assert!(
-                        u32::try_from(infos.len()).is_ok(),
-                        "Too many infos"
-                    );
+                    assert!(u32::try_from(infos.len()).is_ok(), "Too many infos");
 
                     for (i, info) in infos.iter().enumerate() {
                         if let Some(src) = &info.src {
@@ -420,13 +378,11 @@ impl CommandBuffer {
                             vkacc::AccelerationStructureBuildGeometryInfoKHRBuilder::new()
                                 ._type(info.dst.info().level.to_erupt())
                                 .flags(info.flags.to_erupt())
-                                .mode(
-                                    if info.src.is_some() {
-                                        vkacc::BuildAccelerationStructureModeKHR::UPDATE_KHR
-                                    } else {
-                                        vkacc::BuildAccelerationStructureModeKHR::BUILD_KHR
-                                    }
-                                )
+                                .mode(if info.src.is_some() {
+                                    vkacc::BuildAccelerationStructureModeKHR::UPDATE_KHR
+                                } else {
+                                    vkacc::BuildAccelerationStructureModeKHR::BUILD_KHR
+                                })
                                 .src_acceleration_structure(src)
                                 .dst_acceleration_structure(info.dst.handle())
                                 .scratch_data(info.scratch.to_erupt()) // TODO: Validate this one.
@@ -554,9 +510,7 @@ impl CommandBuffer {
                     shader_binding_table,
                     extent,
                 } => {
-                    assert!(
-                        device.logical().enabled().khr_ray_tracing_pipeline
-                    );
+                    assert!(device.logical().enabled().khr_ray_tracing_pipeline);
                     if let Some(raygen) = &shader_binding_table.raygen {
                         assert_owner!(raygen.region.buffer, device);
                     }
@@ -593,22 +547,10 @@ impl CommandBuffer {
                     unsafe {
                         device.logical().cmd_trace_rays_khr(
                             self.handle,
-                            &shader_binding_table
-                                .raygen
-                                .as_ref()
-                                .map_or(sbr, to_erupt),
-                            &shader_binding_table
-                                .miss
-                                .as_ref()
-                                .map_or(sbr, to_erupt),
-                            &shader_binding_table
-                                .hit
-                                .as_ref()
-                                .map_or(sbr, to_erupt),
-                            &shader_binding_table
-                                .callable
-                                .as_ref()
-                                .map_or(sbr, to_erupt),
+                            &shader_binding_table.raygen.as_ref().map_or(sbr, to_erupt),
+                            &shader_binding_table.miss.as_ref().map_or(sbr, to_erupt),
+                            &shader_binding_table.hit.as_ref().map_or(sbr, to_erupt),
+                            &shader_binding_table.callable.as_ref().map_or(sbr, to_erupt),
                             extent.width,
                             extent.height,
                             extent.depth,
@@ -702,7 +644,12 @@ impl CommandBuffer {
                     );
                 },
 
-                Command::PipelineBarrier { src, dst, images, memory } => unsafe {
+                Command::PipelineBarrier {
+                    src,
+                    dst,
+                    images,
+                    memory,
+                } => unsafe {
                     for barrier in images {
                         assert_owner!(barrier.image, device);
                     }
@@ -713,15 +660,28 @@ impl CommandBuffer {
                         dst.to_erupt(),
                         None,
                         &[vk1_0::MemoryBarrierBuilder::new()
-                            .src_access_mask(memory.as_ref().map_or(supported_access(src.to_erupt()), |m| m.src.to_erupt()))
-                            .dst_access_mask(memory.as_ref().map_or(supported_access(dst.to_erupt()), |m| m.dst.to_erupt()))],
+                            .src_access_mask(
+                                memory
+                                    .as_ref()
+                                    .map_or(supported_access(src.to_erupt()), |m| m.src.to_erupt()),
+                            )
+                            .dst_access_mask(
+                                memory
+                                    .as_ref()
+                                    .map_or(supported_access(dst.to_erupt()), |m| m.dst.to_erupt()),
+                            )],
                         &[],
                         &images
                             .iter()
                             .map(|image| {
                                 vk1_0::ImageMemoryBarrierBuilder::new()
                                     .image(image.image.handle())
-                                    .src_access_mask(image.old.map(|(a, __)| a.to_erupt()).unwrap_or(vk1_0::AccessFlags::empty()))
+                                    .src_access_mask(
+                                        image
+                                            .old
+                                            .map(|(a, __)| a.to_erupt())
+                                            .unwrap_or(vk1_0::AccessFlags::empty()),
+                                    )
                                     .dst_access_mask(image.new.0.to_erupt())
                                     .old_layout(image.old.map(|(_, l)| l).to_erupt())
                                     .new_layout(image.new.1.to_erupt())
@@ -730,22 +690,16 @@ impl CommandBuffer {
                                             .family_transfer
                                             .as_ref()
                                             .map(|r| r.start)
-                                            .unwrap_or(
-                                                vk1_0::QUEUE_FAMILY_IGNORED,
-                                            ),
+                                            .unwrap_or(vk1_0::QUEUE_FAMILY_IGNORED),
                                     )
                                     .dst_queue_family_index(
                                         image
                                             .family_transfer
                                             .as_ref()
                                             .map(|r| r.end)
-                                            .unwrap_or(
-                                                vk1_0::QUEUE_FAMILY_IGNORED,
-                                            ),
+                                            .unwrap_or(vk1_0::QUEUE_FAMILY_IGNORED),
                                     )
-                                    .subresource_range(
-                                        image.subresource.to_erupt(),
-                                    )
+                                    .subresource_range(image.subresource.to_erupt())
                             })
                             .collect::<SmallVec<[_; 8]>>(),
                     )
@@ -821,13 +775,7 @@ fn color_f32_to_sint8(color: f32) -> i8 {
         .max(i8::max_value() as f32) as i8
 }
 
-fn colors_f32_to_value(
-    r: f32,
-    g: f32,
-    b: f32,
-    a: f32,
-    repr: Repr,
-) -> vk1_0::ClearColorValue {
+fn colors_f32_to_value(r: f32, g: f32, b: f32, a: f32, repr: Repr) -> vk1_0::ClearColorValue {
     match repr {
         Repr {
             bits: 8,

@@ -80,15 +80,9 @@ pub trait QueuesQuery {
     type Query: AsRef<[(usize, usize)]>;
     type Collector;
 
-    fn query(
-        self,
-        families: &[FamilyInfo],
-    ) -> Result<(Self::Query, Self::Collector), Self::Error>;
+    fn query(self, families: &[FamilyInfo]) -> Result<(Self::Query, Self::Collector), Self::Error>;
 
-    fn collect(
-        collector: Self::Collector,
-        families: Vec<Family>,
-    ) -> Self::Queues;
+    fn collect(collector: Self::Collector, families: Vec<Family>) -> Self::Queues;
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -105,10 +99,7 @@ where
     type Query = Vec<(usize, usize)>;
     type Queues = Vec<Family>;
 
-    fn query(
-        self,
-        families: &[FamilyInfo],
-    ) -> Result<(Self::Query, Self::Collector), E> {
+    fn query(self, families: &[FamilyInfo]) -> Result<(Self::Query, Self::Collector), E> {
         Ok(((self.0)(families)?.into_iter().collect(), ()))
     }
 
@@ -124,8 +115,7 @@ pub struct SingleQueueQuery(QueueCapabilityFlags);
 
 impl SingleQueueQuery {
     pub const COMPUTE: Self = SingleQueueQuery(QueueCapabilityFlags::COMPUTE);
-    pub const GENERAL: Self =
-        SingleQueueQuery(QueueCapabilityFlags::from_bits_truncate(0b11));
+    pub const GENERAL: Self = SingleQueueQuery(QueueCapabilityFlags::from_bits_truncate(0b11));
     pub const GRAPHICS: Self = SingleQueueQuery(QueueCapabilityFlags::GRAPHICS);
     pub const TRANSFER: Self = SingleQueueQuery(QueueCapabilityFlags::TRANSFER);
 }
@@ -153,10 +143,7 @@ impl QueuesQuery for SingleQueueQuery {
     type Query = [(usize, usize); 1];
     type Queues = Queue;
 
-    fn query(
-        self,
-        families: &[FamilyInfo],
-    ) -> Result<([(usize, usize); 1], ()), QueueNotFound> {
+    fn query(self, families: &[FamilyInfo]) -> Result<([(usize, usize); 1], ()), QueueNotFound> {
         for (index, family) in families.iter().enumerate() {
             if family.count > 0 && family.capabilities.contains(self.0) {
                 return Ok(([(index, 1)], ()));

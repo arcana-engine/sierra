@@ -11,9 +11,7 @@ use erupt::vk1_0;
 //     result
 // }
 
-fn supported_stages_inner(
-    access: vk1_0::AccessFlags,
-) -> vk1_0::PipelineStageFlags {
+fn supported_stages_inner(access: vk1_0::AccessFlags) -> vk1_0::PipelineStageFlags {
     type AF = vk1_0::AccessFlags;
     type PS = vk1_0::PipelineStageFlags;
 
@@ -45,18 +43,14 @@ fn supported_stages_inner(
                 | PS::COMPUTE_SHADER
         }
         AF::INPUT_ATTACHMENT_READ => PS::FRAGMENT_SHADER,
-        AF::COLOR_ATTACHMENT_READ | AF::COLOR_ATTACHMENT_WRITE => {
-            PS::COLOR_ATTACHMENT_OUTPUT
-        }
-        AF::DEPTH_STENCIL_ATTACHMENT_READ
-        | AF::DEPTH_STENCIL_ATTACHMENT_WRITE => {
+        AF::COLOR_ATTACHMENT_READ | AF::COLOR_ATTACHMENT_WRITE => PS::COLOR_ATTACHMENT_OUTPUT,
+        AF::DEPTH_STENCIL_ATTACHMENT_READ | AF::DEPTH_STENCIL_ATTACHMENT_WRITE => {
             PS::EARLY_FRAGMENT_TESTS | PS::LATE_FRAGMENT_TESTS
         }
         AF::TRANSFER_READ | AF::TRANSFER_WRITE => PS::TRANSFER,
         AF::HOST_READ | AF::HOST_WRITE => PS::HOST,
         AF::MEMORY_READ | AF::MEMORY_WRITE => PS::from_bits_truncate(!0),
-        AF::ACCELERATION_STRUCTURE_READ_KHR
-        | AF::ACCELERATION_STRUCTURE_WRITE_KHR => {
+        AF::ACCELERATION_STRUCTURE_READ_KHR | AF::ACCELERATION_STRUCTURE_WRITE_KHR => {
             PS::ACCELERATION_STRUCTURE_BUILD_KHR
         }
         _ if access.bits().count_ones() != 1 => {
@@ -66,9 +60,7 @@ fn supported_stages_inner(
     }
 }
 
-pub(crate) fn supported_access(
-    stages: vk1_0::PipelineStageFlags,
-) -> vk1_0::AccessFlags {
+pub(crate) fn supported_access(stages: vk1_0::PipelineStageFlags) -> vk1_0::AccessFlags {
     let mut result = vk1_0::AccessFlags::empty();
 
     let mut bits: vk1_0::Flags = !0;

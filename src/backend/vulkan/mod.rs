@@ -17,8 +17,8 @@ mod surface;
 mod swapchain;
 
 pub use self::{
-    descriptor::*, device::*, encode::*, graphics::*, physical::*, queue::*,
-    resources::*, surface::*, swapchain::*,
+    descriptor::*, device::*, encode::*, graphics::*, physical::*, queue::*, resources::*,
+    surface::*, swapchain::*,
 };
 
 #[track_caller]

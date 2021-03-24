@@ -1,6 +1,15 @@
 //!
-//! sierra crate.
+//! Sierra is Vulkan-lite API.
 //!
+//! While resembles Vulkan in most ways,\
+//! sierra does both memory and descriptor allocation.
+//! And tracks resources usage to reclaim them automatically once
+//! no references left.
+//!
+
+#![warn(missing_docs)]
+#![warn(missing_debug_implementations)]
+#![warn(missing_copy_implementations)]
 
 use std::{
     cmp::{Ord, Ordering, PartialOrd},

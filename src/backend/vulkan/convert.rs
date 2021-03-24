@@ -1,22 +1,17 @@
 use crate::{
-    out_of_host_memory, AccelerationStructureBuildFlags,
-    AccelerationStructureLevel, AccessFlags, AspectFlags, AttachmentLoadOp,
-    AttachmentStoreOp, BlendFactor, BlendOp, BorderColor, BufferCopy,
-    BufferImageCopy, BufferUsage, CompareOp, ComponentMask, Culling,
-    DescriptorBindingFlags, DescriptorSetLayoutFlags, DescriptorType,
-    DeviceAddress, Extent2d, Extent3d, Filter, Format, FrontFace,
-    GeometryFlags, ImageBlit, ImageCopy, ImageExtent, ImageSubresource,
-    ImageSubresourceLayers, ImageSubresourceRange, ImageUsage, ImageViewKind,
-    IndexType, Layout, LogicOp, MemoryUsage, MipmapMode, Offset2d, Offset3d,
-    OutOfMemory, PipelineStageFlags, PolygonMode, PresentMode,
-    PrimitiveTopology, QueueCapabilityFlags, Rect2d, SamplerAddressMode,
-    Samples, ShaderStage, ShaderStageFlags, StencilOp, VertexInputRate,
+    out_of_host_memory, AccelerationStructureBuildFlags, AccelerationStructureLevel, AccessFlags,
+    AspectFlags, AttachmentLoadOp, AttachmentStoreOp, BlendFactor, BlendOp, BorderColor,
+    BufferCopy, BufferImageCopy, BufferUsage, CompareOp, ComponentMask, Culling,
+    DescriptorBindingFlags, DescriptorSetLayoutFlags, DescriptorType, DeviceAddress, Extent2d,
+    Extent3d, Filter, Format, FrontFace, GeometryFlags, ImageBlit, ImageCopy, ImageExtent,
+    ImageSubresource, ImageSubresourceLayers, ImageSubresourceRange, ImageUsage, ImageViewKind,
+    IndexType, Layout, LogicOp, MemoryUsage, MipmapMode, Offset2d, Offset3d, OutOfMemory,
+    PipelineStageFlags, PolygonMode, PresentMode, PrimitiveTopology, QueueCapabilityFlags, Rect2d,
+    SamplerAddressMode, Samples, ShaderStage, ShaderStageFlags, StencilOp, VertexInputRate,
     Viewport,
 };
 use erupt::{
-    extensions::{
-        khr_acceleration_structure as vkacc, khr_surface::PresentModeKHR,
-    },
+    extensions::{khr_acceleration_structure as vkacc, khr_surface::PresentModeKHR},
     vk1_0, vk1_2,
 };
 use std::num::NonZeroU64;
@@ -473,13 +468,12 @@ impl FromErupt<vk1_0::BufferUsageFlags> for BufferUsage {
             result |= BufferUsage::CONDITIONAL_RENDERING;
         }
 
-        if usage.contains(vk1_0::BufferUsageFlags::ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_KHR) {
+        if usage.contains(vk1_0::BufferUsageFlags::ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_KHR)
+        {
             result |= BufferUsage::ACCELERATION_STRUCTURE_BUILD_INPUT;
         }
 
-        if usage.contains(
-            vk1_0::BufferUsageFlags::ACCELERATION_STRUCTURE_STORAGE_KHR,
-        ) {
+        if usage.contains(vk1_0::BufferUsageFlags::ACCELERATION_STRUCTURE_STORAGE_KHR) {
             result |= BufferUsage::ACCELERATION_STRUCTURE_STORAGE;
         }
 
@@ -487,15 +481,11 @@ impl FromErupt<vk1_0::BufferUsageFlags> for BufferUsage {
             result |= BufferUsage::SHADER_BINDING_TABLE;
         }
 
-        if usage
-            .contains(vk1_0::BufferUsageFlags::TRANSFORM_FEEDBACK_BUFFER_EXT)
-        {
+        if usage.contains(vk1_0::BufferUsageFlags::TRANSFORM_FEEDBACK_BUFFER_EXT) {
             result |= BufferUsage::TRANSFORM_FEEDBACK;
         }
 
-        if usage.contains(
-            vk1_0::BufferUsageFlags::TRANSFORM_FEEDBACK_COUNTER_BUFFER_EXT,
-        ) {
+        if usage.contains(vk1_0::BufferUsageFlags::TRANSFORM_FEEDBACK_COUNTER_BUFFER_EXT) {
             result |= BufferUsage::TRANSFORM_FEEDBACK_COUNTER;
         }
 
@@ -556,8 +546,7 @@ impl ToErupt<vk1_0::BufferUsageFlags> for BufferUsage {
         }
 
         if self.contains(BufferUsage::ACCELERATION_STRUCTURE_STORAGE) {
-            result |=
-                vk1_0::BufferUsageFlags::ACCELERATION_STRUCTURE_STORAGE_KHR;
+            result |= vk1_0::BufferUsageFlags::ACCELERATION_STRUCTURE_STORAGE_KHR;
         }
 
         if self.contains(BufferUsage::SHADER_BINDING_TABLE) {
@@ -569,8 +558,7 @@ impl ToErupt<vk1_0::BufferUsageFlags> for BufferUsage {
         }
 
         if self.contains(BufferUsage::TRANSFORM_FEEDBACK_COUNTER) {
-            result |=
-                vk1_0::BufferUsageFlags::TRANSFORM_FEEDBACK_COUNTER_BUFFER_EXT;
+            result |= vk1_0::BufferUsageFlags::TRANSFORM_FEEDBACK_COUNTER_BUFFER_EXT;
         }
 
         if self.contains(BufferUsage::DEVICE_ADDRESS) {
@@ -736,8 +724,7 @@ impl ToErupt<vk1_0::PipelineStageFlags> for PipelineStageFlags {
         }
 
         if self.contains(PipelineStageFlags::ACCELERATION_STRUCTURE_BUILD) {
-            result |=
-                vk1_0::PipelineStageFlags::ACCELERATION_STRUCTURE_BUILD_KHR
+            result |= vk1_0::PipelineStageFlags::ACCELERATION_STRUCTURE_BUILD_KHR
         }
 
         result
@@ -808,9 +795,7 @@ impl ToErupt<vk1_0::ShaderStageFlagBits> for ShaderStage {
     fn to_erupt(self) -> vk1_0::ShaderStageFlagBits {
         match self {
             ShaderStage::Vertex => vk1_0::ShaderStageFlagBits::VERTEX,
-            ShaderStage::TessellationControl => {
-                vk1_0::ShaderStageFlagBits::TESSELLATION_CONTROL
-            }
+            ShaderStage::TessellationControl => vk1_0::ShaderStageFlagBits::TESSELLATION_CONTROL,
             ShaderStage::TessellationEvaluation => {
                 vk1_0::ShaderStageFlagBits::TESSELLATION_EVALUATION
             }
@@ -819,13 +804,9 @@ impl ToErupt<vk1_0::ShaderStageFlagBits> for ShaderStage {
             ShaderStage::Compute => vk1_0::ShaderStageFlagBits::COMPUTE,
             ShaderStage::Raygen => vk1_0::ShaderStageFlagBits::RAYGEN_KHR,
             ShaderStage::AnyHit => vk1_0::ShaderStageFlagBits::ANY_HIT_KHR,
-            ShaderStage::ClosestHit => {
-                vk1_0::ShaderStageFlagBits::CLOSEST_HIT_KHR
-            }
+            ShaderStage::ClosestHit => vk1_0::ShaderStageFlagBits::CLOSEST_HIT_KHR,
             ShaderStage::Miss => vk1_0::ShaderStageFlagBits::MISS_KHR,
-            ShaderStage::Intersection => {
-                vk1_0::ShaderStageFlagBits::INTERSECTION_KHR
-            }
+            ShaderStage::Intersection => vk1_0::ShaderStageFlagBits::INTERSECTION_KHR,
         }
     }
 }
@@ -842,22 +823,12 @@ impl ToErupt<vk1_0::VertexInputRate> for VertexInputRate {
 impl ToErupt<vk1_0::PrimitiveTopology> for PrimitiveTopology {
     fn to_erupt(self) -> vk1_0::PrimitiveTopology {
         match self {
-            PrimitiveTopology::PointList => {
-                vk1_0::PrimitiveTopology::POINT_LIST
-            }
+            PrimitiveTopology::PointList => vk1_0::PrimitiveTopology::POINT_LIST,
             PrimitiveTopology::LineList => vk1_0::PrimitiveTopology::LINE_LIST,
-            PrimitiveTopology::LineStrip => {
-                vk1_0::PrimitiveTopology::LINE_STRIP
-            }
-            PrimitiveTopology::TriangleList => {
-                vk1_0::PrimitiveTopology::TRIANGLE_LIST
-            }
-            PrimitiveTopology::TriangleStrip => {
-                vk1_0::PrimitiveTopology::TRIANGLE_STRIP
-            }
-            PrimitiveTopology::TriangleFan => {
-                vk1_0::PrimitiveTopology::TRIANGLE_FAN
-            }
+            PrimitiveTopology::LineStrip => vk1_0::PrimitiveTopology::LINE_STRIP,
+            PrimitiveTopology::TriangleList => vk1_0::PrimitiveTopology::TRIANGLE_LIST,
+            PrimitiveTopology::TriangleStrip => vk1_0::PrimitiveTopology::TRIANGLE_STRIP,
+            PrimitiveTopology::TriangleFan => vk1_0::PrimitiveTopology::TRIANGLE_FAN,
         }
     }
 }
@@ -926,12 +897,8 @@ impl ToErupt<vk1_0::StencilOp> for StencilOp {
             StencilOp::Keep => vk1_0::StencilOp::KEEP,
             StencilOp::Zero => vk1_0::StencilOp::ZERO,
             StencilOp::Replace => vk1_0::StencilOp::REPLACE,
-            StencilOp::IncrementAndClamp => {
-                vk1_0::StencilOp::INCREMENT_AND_CLAMP
-            }
-            StencilOp::DecrementAndClamp => {
-                vk1_0::StencilOp::DECREMENT_AND_CLAMP
-            }
+            StencilOp::IncrementAndClamp => vk1_0::StencilOp::INCREMENT_AND_CLAMP,
+            StencilOp::DecrementAndClamp => vk1_0::StencilOp::DECREMENT_AND_CLAMP,
             StencilOp::Invert => vk1_0::StencilOp::INVERT,
             StencilOp::IncrementAndWrap => vk1_0::StencilOp::INCREMENT_AND_WRAP,
             StencilOp::DecrementAndWrap => vk1_0::StencilOp::DECREMENT_AND_WRAP,
@@ -968,32 +935,18 @@ impl ToErupt<vk1_0::BlendFactor> for BlendFactor {
             BlendFactor::Zero => vk1_0::BlendFactor::ZERO,
             BlendFactor::One => vk1_0::BlendFactor::ONE,
             BlendFactor::SrcColor => vk1_0::BlendFactor::SRC_COLOR,
-            BlendFactor::OneMinusSrcColor => {
-                vk1_0::BlendFactor::ONE_MINUS_SRC_COLOR
-            }
+            BlendFactor::OneMinusSrcColor => vk1_0::BlendFactor::ONE_MINUS_SRC_COLOR,
             BlendFactor::DstColor => vk1_0::BlendFactor::DST_COLOR,
-            BlendFactor::OneMinusDstColor => {
-                vk1_0::BlendFactor::ONE_MINUS_DST_COLOR
-            }
+            BlendFactor::OneMinusDstColor => vk1_0::BlendFactor::ONE_MINUS_DST_COLOR,
             BlendFactor::SrcAlpha => vk1_0::BlendFactor::SRC_ALPHA,
-            BlendFactor::OneMinusSrcAlpha => {
-                vk1_0::BlendFactor::ONE_MINUS_SRC_ALPHA
-            }
+            BlendFactor::OneMinusSrcAlpha => vk1_0::BlendFactor::ONE_MINUS_SRC_ALPHA,
             BlendFactor::DstAlpha => vk1_0::BlendFactor::DST_ALPHA,
-            BlendFactor::OneMinusDstAlpha => {
-                vk1_0::BlendFactor::ONE_MINUS_DST_ALPHA
-            }
+            BlendFactor::OneMinusDstAlpha => vk1_0::BlendFactor::ONE_MINUS_DST_ALPHA,
             BlendFactor::ConstantColor => vk1_0::BlendFactor::CONSTANT_COLOR,
-            BlendFactor::OneMinusConstantColor => {
-                vk1_0::BlendFactor::ONE_MINUS_CONSTANT_COLOR
-            }
+            BlendFactor::OneMinusConstantColor => vk1_0::BlendFactor::ONE_MINUS_CONSTANT_COLOR,
             BlendFactor::ConstantAlpha => vk1_0::BlendFactor::CONSTANT_ALPHA,
-            BlendFactor::OneMinusConstantAlpha => {
-                vk1_0::BlendFactor::ONE_MINUS_CONSTANT_ALPHA
-            }
-            BlendFactor::SrcAlphaSaturate => {
-                vk1_0::BlendFactor::SRC_ALPHA_SATURATE
-            }
+            BlendFactor::OneMinusConstantAlpha => vk1_0::BlendFactor::ONE_MINUS_CONSTANT_ALPHA,
+            BlendFactor::SrcAlphaSaturate => vk1_0::BlendFactor::SRC_ALPHA_SATURATE,
         }
     }
 }
@@ -1038,24 +991,16 @@ impl ToErupt<vk1_0::ImageLayout> for Layout {
     fn to_erupt(self) -> vk1_0::ImageLayout {
         match self {
             Layout::General => vk1_0::ImageLayout::GENERAL,
-            Layout::ColorAttachmentOptimal => {
-                vk1_0::ImageLayout::COLOR_ATTACHMENT_OPTIMAL
-            }
+            Layout::ColorAttachmentOptimal => vk1_0::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
             Layout::DepthStencilAttachmentOptimal => {
                 vk1_0::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL
             }
             Layout::DepthStencilReadOnlyOptimal => {
                 vk1_0::ImageLayout::DEPTH_STENCIL_READ_ONLY_OPTIMAL
             }
-            Layout::ShaderReadOnlyOptimal => {
-                vk1_0::ImageLayout::SHADER_READ_ONLY_OPTIMAL
-            }
-            Layout::TransferSrcOptimal => {
-                vk1_0::ImageLayout::TRANSFER_SRC_OPTIMAL
-            }
-            Layout::TransferDstOptimal => {
-                vk1_0::ImageLayout::TRANSFER_DST_OPTIMAL
-            }
+            Layout::ShaderReadOnlyOptimal => vk1_0::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+            Layout::TransferSrcOptimal => vk1_0::ImageLayout::TRANSFER_SRC_OPTIMAL,
+            Layout::TransferDstOptimal => vk1_0::ImageLayout::TRANSFER_DST_OPTIMAL,
             Layout::Present => vk1_0::ImageLayout::PRESENT_SRC_KHR,
         }
     }
@@ -1140,9 +1085,7 @@ pub(crate) fn buffer_memory_usage_to_gpu_alloc(
     result
 }
 
-pub(crate) fn image_memory_usage_to_gpu_alloc(
-    image_usage: ImageUsage,
-) -> gpu_alloc::UsageFlags {
+pub(crate) fn image_memory_usage_to_gpu_alloc(image_usage: ImageUsage) -> gpu_alloc::UsageFlags {
     use gpu_alloc::UsageFlags;
 
     let mut result = gpu_alloc::UsageFlags::empty();
@@ -1153,27 +1096,20 @@ pub(crate) fn image_memory_usage_to_gpu_alloc(
     result
 }
 
-impl ToErupt<vkacc::AccelerationStructureTypeKHR>
-    for AccelerationStructureLevel
-{
+impl ToErupt<vkacc::AccelerationStructureTypeKHR> for AccelerationStructureLevel {
     fn to_erupt(self) -> vkacc::AccelerationStructureTypeKHR {
         match self {
             AccelerationStructureLevel::Bottom => {
                 vkacc::AccelerationStructureTypeKHR::BOTTOM_LEVEL_KHR
             }
-            AccelerationStructureLevel::Top => {
-                vkacc::AccelerationStructureTypeKHR::TOP_LEVEL_KHR
-            }
+            AccelerationStructureLevel::Top => vkacc::AccelerationStructureTypeKHR::TOP_LEVEL_KHR,
         }
     }
 }
 
-impl ToErupt<vkacc::BuildAccelerationStructureFlagsKHR>
-    for AccelerationStructureBuildFlags
-{
+impl ToErupt<vkacc::BuildAccelerationStructureFlagsKHR> for AccelerationStructureBuildFlags {
     fn to_erupt(self) -> vkacc::BuildAccelerationStructureFlagsKHR {
-        vkacc::BuildAccelerationStructureFlagsKHR::from_bits(self.bits())
-            .unwrap()
+        vkacc::BuildAccelerationStructureFlagsKHR::from_bits(self.bits()).unwrap()
     }
 }
 
@@ -1211,8 +1147,7 @@ impl ToErupt<vkacc::GeometryFlagsKHR> for GeometryFlags {
         }
 
         if self.contains(GeometryFlags::NO_DUPLICATE_ANY_HIT_INVOCATION) {
-            result |=
-                vkacc::GeometryFlagsKHR::NO_DUPLICATE_ANY_HIT_INVOCATION_KHR
+            result |= vkacc::GeometryFlagsKHR::NO_DUPLICATE_ANY_HIT_INVOCATION_KHR
         }
 
         result
@@ -1229,29 +1164,17 @@ impl ToErupt<vk1_0::DescriptorType> for DescriptorType {
     fn to_erupt(self) -> vk1_0::DescriptorType {
         match self {
             Self::Sampler => vk1_0::DescriptorType::SAMPLER,
-            Self::CombinedImageSampler => {
-                vk1_0::DescriptorType::COMBINED_IMAGE_SAMPLER
-            }
+            Self::CombinedImageSampler => vk1_0::DescriptorType::COMBINED_IMAGE_SAMPLER,
             Self::SampledImage => vk1_0::DescriptorType::SAMPLED_IMAGE,
             Self::StorageImage => vk1_0::DescriptorType::STORAGE_IMAGE,
-            Self::UniformTexelBuffer => {
-                vk1_0::DescriptorType::UNIFORM_TEXEL_BUFFER
-            }
-            Self::StorageTexelBuffer => {
-                vk1_0::DescriptorType::STORAGE_TEXEL_BUFFER
-            }
+            // Self::UniformTexelBuffer => vk1_0::DescriptorType::UNIFORM_TEXEL_BUFFER,
+            // Self::StorageTexelBuffer => vk1_0::DescriptorType::STORAGE_TEXEL_BUFFER,
             Self::UniformBuffer => vk1_0::DescriptorType::UNIFORM_BUFFER,
             Self::StorageBuffer => vk1_0::DescriptorType::STORAGE_BUFFER,
-            Self::UniformBufferDynamic => {
-                vk1_0::DescriptorType::UNIFORM_BUFFER_DYNAMIC
-            }
-            Self::StorageBufferDynamic => {
-                vk1_0::DescriptorType::STORAGE_BUFFER_DYNAMIC
-            }
+            Self::UniformBufferDynamic => vk1_0::DescriptorType::UNIFORM_BUFFER_DYNAMIC,
+            Self::StorageBufferDynamic => vk1_0::DescriptorType::STORAGE_BUFFER_DYNAMIC,
             Self::InputAttachment => vk1_0::DescriptorType::INPUT_ATTACHMENT,
-            Self::AccelerationStructure => {
-                vk1_0::DescriptorType::ACCELERATION_STRUCTURE_KHR
-            }
+            Self::AccelerationStructure => vk1_0::DescriptorType::ACCELERATION_STRUCTURE_KHR,
         }
     }
 }
@@ -1259,12 +1182,8 @@ impl ToErupt<vk1_0::DescriptorType> for DescriptorType {
 impl ToErupt<vk1_0::BorderColor> for BorderColor {
     fn to_erupt(self) -> vk1_0::BorderColor {
         match self {
-            Self::FloatTransparentBlack => {
-                vk1_0::BorderColor::FLOAT_TRANSPARENT_BLACK
-            }
-            Self::IntTransparentBlack => {
-                vk1_0::BorderColor::INT_TRANSPARENT_BLACK
-            }
+            Self::FloatTransparentBlack => vk1_0::BorderColor::FLOAT_TRANSPARENT_BLACK,
+            Self::IntTransparentBlack => vk1_0::BorderColor::INT_TRANSPARENT_BLACK,
             Self::FloatOpaqueBlack => vk1_0::BorderColor::FLOAT_OPAQUE_BLACK,
             Self::IntOpaqueBlack => vk1_0::BorderColor::INT_OPAQUE_BLACK,
             Self::FloatOpaqueWhite => vk1_0::BorderColor::FLOAT_OPAQUE_WHITE,
@@ -1299,9 +1218,7 @@ impl ToErupt<vk1_0::SamplerAddressMode> for SamplerAddressMode {
             Self::MirroredRepeat => vk1_0::SamplerAddressMode::MIRRORED_REPEAT,
             Self::ClampToEdge => vk1_0::SamplerAddressMode::CLAMP_TO_EDGE,
             Self::ClampToBorder => vk1_0::SamplerAddressMode::CLAMP_TO_BORDER,
-            Self::MirrorClampToEdge => {
-                vk1_0::SamplerAddressMode::MIRROR_CLAMP_TO_EDGE
-            }
+            Self::MirrorClampToEdge => vk1_0::SamplerAddressMode::MIRROR_CLAMP_TO_EDGE,
         }
     }
 }
@@ -1415,15 +1332,12 @@ impl ToErupt<vk1_2::DescriptorBindingFlags> for DescriptorBindingFlags {
     }
 }
 
-impl ToErupt<vk1_0::DescriptorSetLayoutCreateFlags>
-    for DescriptorSetLayoutFlags
-{
+impl ToErupt<vk1_0::DescriptorSetLayoutCreateFlags> for DescriptorSetLayoutFlags {
     fn to_erupt(self) -> vk1_0::DescriptorSetLayoutCreateFlags {
         let mut result = vk1_0::DescriptorSetLayoutCreateFlags::empty();
 
         if self.contains(DescriptorSetLayoutFlags::UPDATE_AFTER_BIND_POOL) {
-            result |=
-                vk1_0::DescriptorSetLayoutCreateFlags::UPDATE_AFTER_BIND_POOL
+            result |= vk1_0::DescriptorSetLayoutCreateFlags::UPDATE_AFTER_BIND_POOL
         }
 
         if self.contains(DescriptorSetLayoutFlags::PUSH_DESCRIPTOR) {
@@ -1514,8 +1428,7 @@ impl ToErupt<vk1_0::AccessFlags> for AccessFlags {
             result |= vk1_0::AccessFlags::FRAGMENT_DENSITY_MAP_READ_EXT;
         }
         if self.contains(Self::FRAGMENT_SHADING_RATE_ATTACHMENT_READ) {
-            result |=
-                vk1_0::AccessFlags::FRAGMENT_SHADING_RATE_ATTACHMENT_READ_KHR;
+            result |= vk1_0::AccessFlags::FRAGMENT_SHADING_RATE_ATTACHMENT_READ_KHR;
         }
 
         result

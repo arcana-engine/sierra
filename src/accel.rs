@@ -14,10 +14,10 @@ bitflags::bitflags! {
         /// Compaction allows to reduce memory consumption.
         const ALLOW_COMPACTION  = 0x00000002;
 
-        /// Hint implementation to make `AcceleractionStructure` faster to trace.
+        /// Hint implementation to make `AccelerationStructure` faster to trace.
         const PREFER_FAST_TRACE = 0x00000004;
 
-        /// Hint implementation to make `AcceleractionStructure` faster to build.
+        /// Hint implementation to make `AccelerationStructure` faster to build.
         const PREFER_FAST_BUILD = 0x00000008;
 
         /// Hint implementation to use minimal amount of memory.
@@ -29,7 +29,7 @@ bitflags::bitflags! {
 #[derive(Clone, Debug)]
 pub struct AccelerationStructureInfo {
     /// Acceleration structure level.
-    /// Either top level that refere to bottom level structures.
+    /// Either top level that reference to bottom level structures.
     /// Or bottom level that refer to geometry.
     pub level: AccelerationStructureLevel,
 
@@ -40,18 +40,29 @@ pub struct AccelerationStructureInfo {
     pub region: BufferRegion,
 }
 
+/// Contains information about various size requirements for acceleration structure.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct AccelerationStructureBuildSizesInfo {
+    /// Size of buffer range required to bake acceleration structure.
     pub acceleration_structure_size: u64,
+
+    /// Scratch size required for acceleration structure update operation.
     pub update_scratch_size: u64,
+
+    /// Scratch size required for acceleration structure build operation.
     pub build_scratch_size: u64,
 }
 
+/// Acceleration structure level.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub enum AccelerationStructureLevel {
+    /// Bottom level acceleration structure (or BLAS) reference to
+    /// triangle meshes and AABBs with custom intersection shaders.
     Bottom,
+
+    /// Top level acceleration structure (or TLAS) reference to BLASes.
     Top,
 }
 
@@ -60,20 +71,31 @@ pub enum AccelerationStructureLevel {
 #[derive(Clone, Copy, Debug)]
 #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub enum AccelerationStructureGeometryInfo {
+    /// Defines that geometry type is triangle mesh and its data shape.
     Triangles {
         /// Maximum number of primitives that can be built into an acceleration
         /// structure geometry.
         max_primitive_count: u32,
+
+        /// Type of indices if any.
         index_type: Option<IndexType>,
+
+        /// Maximum number of vertex count.
         max_vertex_count: u32,
+
+        /// Format of each vertex.
         vertex_format: Format,
+
+        /// Whether mesh allows to be transformed.
         allows_transforms: bool,
     },
+    /// Defines that geometry type is array of AABBs.
     AABBs {
         /// Maximum number of primitives that can be built into an acceleration
         /// structure geometry.
         max_primitive_count: u32,
     },
+    /// Defines that geometry type is array of instances of BLASes.
     Instances {
         /// Maximum number of primitives that can be built into an acceleration
         /// structure geometry.
@@ -81,34 +103,39 @@ pub enum AccelerationStructureGeometryInfo {
     },
 }
 
-impl AccelerationStructureGeometryInfo {
-    pub fn is_triangles(&self) -> bool {
-        match self {
-            Self::Triangles { .. } => true,
-            _ => false,
-        }
-    }
+// impl AccelerationStructureGeometryInfo {
+//     pub fn is_triangles(&self) -> bool {
+//         match self {
+//             Self::Triangles { .. } => true,
+//             _ => false,
+//         }
+//     }
 
-    pub fn is_aabbs(&self) -> bool {
-        match self {
-            Self::AABBs { .. } => true,
-            _ => false,
-        }
-    }
+//     pub fn is_aabbs(&self) -> bool {
+//         match self {
+//             Self::AABBs { .. } => true,
+//             _ => false,
+//         }
+//     }
 
-    pub fn is_instances(&self) -> bool {
-        match self {
-            Self::Instances { .. } => true,
-            _ => false,
-        }
-    }
-}
+//     pub fn is_instances(&self) -> bool {
+//         match self {
+//             Self::Instances { .. } => true,
+//             _ => false,
+//         }
+//     }
+// }
 
 bitflags::bitflags! {
     /// Bits specifying additional parameters for geometries in acceleration structure builds
     #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
     pub struct GeometryFlags: u32 {
+        /// Consider all geometry in the acceleration structure to be opaque.
+        /// Ray traverse operation won't invoke any-hit shader for opaque geometry
+        /// to determine if hit occurs.
         const OPAQUE                            = 0x00000001;
+
+        /// Enforce any-hit to not be invoked more than once for one ray for this geometry.
         const NO_DUPLICATE_ANY_HIT_INVOCATION   = 0x00000002;
     }
 }
@@ -117,24 +144,44 @@ bitflags::bitflags! {
     /// Possible values of flags in the instance modifying the behavior of that instance.
     #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
     pub struct GeometryInstanceFlags: u8 {
+        /// Disables triangle face culling.
         const TRIANGLE_FACING_CULL_DISABLE    = 0x00000001;
+
+        /// Indicates that triangle front is determined by counterclockwise direction.
         const TRIANGLE_FRONT_COUNTERCLOCKWISE = 0x00000002;
+
+        /// Forces all geometry in instance to be considered opaque.
         const FORCE_OPAQUE                    = 0x00000004;
+
+        /// Forces all geometry in instance to be considered non-opaque.
         const FORCE_NO_OPAQUE                 = 0x00000008;
     }
 }
 
+/// Data provided to acceleration structure build operation.
 #[derive(Clone, Debug)]
 pub struct AccelerationStructureBuildGeometryInfo<'a> {
+    /// Source acceleration structure to copy from.
     pub src: Option<AccelerationStructure>,
+
+    /// Destination acceleration structure to build into.
     pub dst: AccelerationStructure,
+
+    /// Flags to specify options for the acceleration structure building.
     pub flags: AccelerationStructureBuildFlags,
+
+    /// Array of geometries to build into acceleration structure.
     pub geometries: &'a [AccelerationStructureGeometry],
+
+    /// Scratch memory that will be using during acceleration structure building process.
+    /// See [`AccelerationStructureBuildSizesInfo`] to see how much memory is required.
     pub scratch: DeviceAddress,
 }
 
+/// Geometry data to build into acceleration structure.
 #[derive(Clone, Copy, Debug)]
 pub enum AccelerationStructureGeometry {
+    /// Triangles data to build into acceleration structure.
     Triangles {
         flags: GeometryFlags,
         vertex_format: Format,
@@ -240,10 +287,7 @@ impl Default for InstanceCustomIndexAndMask {
 pub struct InstanceShaderBindingOffsetAndFlags(pub u32);
 
 impl InstanceShaderBindingOffsetAndFlags {
-    pub fn new(
-        instance_shader_binding_offset: u32,
-        flags: GeometryInstanceFlags,
-    ) -> Self {
+    pub fn new(instance_shader_binding_offset: u32, flags: GeometryInstanceFlags) -> Self {
         assert!(instance_shader_binding_offset < 1u32 << 24);
 
         InstanceShaderBindingOffsetAndFlags(
@@ -254,16 +298,11 @@ impl InstanceShaderBindingOffsetAndFlags {
 
 impl From<u32> for InstanceShaderBindingOffsetAndFlags {
     fn from(offset: u32) -> InstanceShaderBindingOffsetAndFlags {
-        InstanceShaderBindingOffsetAndFlags::new(
-            offset,
-            GeometryInstanceFlags::empty(),
-        )
+        InstanceShaderBindingOffsetAndFlags::new(offset, GeometryInstanceFlags::empty())
     }
 }
 
-impl From<(u32, GeometryInstanceFlags)>
-    for InstanceShaderBindingOffsetAndFlags
-{
+impl From<(u32, GeometryInstanceFlags)> for InstanceShaderBindingOffsetAndFlags {
     fn from((offset, flags): (u32, GeometryInstanceFlags)) -> Self {
         InstanceShaderBindingOffsetAndFlags::new(offset, flags)
     }
@@ -271,10 +310,7 @@ impl From<(u32, GeometryInstanceFlags)>
 
 impl Default for InstanceShaderBindingOffsetAndFlags {
     fn default() -> Self {
-        InstanceShaderBindingOffsetAndFlags::new(
-            0,
-            GeometryInstanceFlags::empty(),
-        )
+        InstanceShaderBindingOffsetAndFlags::new(0, GeometryInstanceFlags::empty())
     }
 }
 

@@ -284,9 +284,7 @@ impl Display for ShaderStage {
         match self {
             Self::Vertex => fmt.write_str("Vertex"),
             Self::TessellationControl => fmt.write_str("TessellationControl"),
-            Self::TessellationEvaluation => {
-                fmt.write_str("TessellationEvaluation")
-            }
+            Self::TessellationEvaluation => fmt.write_str("TessellationEvaluation"),
             Self::Geometry => fmt.write_str("Geometry"),
             Self::Fragment => fmt.write_str("Fragment"),
             Self::Compute => fmt.write_str("Compute"),
@@ -303,12 +301,8 @@ impl From<ShaderStage> for ShaderStageFlags {
     fn from(stage: ShaderStage) -> Self {
         match stage {
             ShaderStage::Vertex => ShaderStageFlags::VERTEX,
-            ShaderStage::TessellationControl => {
-                ShaderStageFlags::TESSELLATION_CONTROL
-            }
-            ShaderStage::TessellationEvaluation => {
-                ShaderStageFlags::TESSELLATION_EVALUATION
-            }
+            ShaderStage::TessellationControl => ShaderStageFlags::TESSELLATION_CONTROL,
+            ShaderStage::TessellationEvaluation => ShaderStageFlags::TESSELLATION_EVALUATION,
             ShaderStage::Geometry => ShaderStageFlags::GEOMETRY,
             ShaderStage::Fragment => ShaderStageFlags::FRAGMENT,
             ShaderStage::Compute => ShaderStageFlags::COMPUTE,
@@ -1009,9 +1003,8 @@ pub mod shader_compiler {
         });
 
         options.set_include_callback(|path, ty, _, _| {
-            let content = include(path, ty).ok_or_else(|| {
-                format!("Failed to load shader file {}", path)
-            })?;
+            let content =
+                include(path, ty).ok_or_else(|| format!("Failed to load shader file {}", path))?;
 
             Ok(shaderc::ResolvedInclude {
                 resolved_name: path.to_owned(),

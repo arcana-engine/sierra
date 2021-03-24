@@ -207,10 +207,9 @@ impl Format {
 
     pub fn is_stencil(&self) -> bool {
         match self {
-            Self::S8Uint
-            | Self::D16UnormS8Uint
-            | Self::D24UnormS8Uint
-            | Self::D32SfloatS8Uint => true,
+            Self::S8Uint | Self::D16UnormS8Uint | Self::D24UnormS8Uint | Self::D32SfloatS8Uint => {
+                true
+            }
             _ => false,
         }
     }

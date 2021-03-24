@@ -23,8 +23,7 @@ pub struct RenderPassInfo {
         feature = "serde-1",
         serde(skip_serializing_if = "SmallVec::is_empty", default)
     )]
-    pub attachments:
-        SmallVec<[AttachmentInfo; RENDERPASS_SMALLVEC_ATTACHMENTS]>,
+    pub attachments: SmallVec<[AttachmentInfo; RENDERPASS_SMALLVEC_ATTACHMENTS]>,
     #[cfg_attr(
         feature = "serde-1",
         serde(skip_serializing_if = "SmallVec::is_empty", default)

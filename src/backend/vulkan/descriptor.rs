@@ -19,10 +19,7 @@ fn descriptor_type_from_index(index: usize) -> vk1_0::DescriptorType {
             vk1_0::DescriptorType::SAMPLER
         }
         1 => {
-            debug_assert_eq!(
-                DescriptorType::CombinedImageSampler as usize,
-                index
-            );
+            debug_assert_eq!(DescriptorType::CombinedImageSampler as usize, index);
 
             vk1_0::DescriptorType::COMBINED_IMAGE_SAMPLER
         }
@@ -36,22 +33,16 @@ fn descriptor_type_from_index(index: usize) -> vk1_0::DescriptorType {
 
             vk1_0::DescriptorType::STORAGE_IMAGE
         }
-        4 => {
-            debug_assert_eq!(
-                DescriptorType::UniformTexelBuffer as usize,
-                index
-            );
+        // 4 => {
+        //     debug_assert_eq!(DescriptorType::UniformTexelBuffer as usize, index);
 
-            vk1_0::DescriptorType::UNIFORM_TEXEL_BUFFER
-        }
-        5 => {
-            debug_assert_eq!(
-                DescriptorType::StorageTexelBuffer as usize,
-                index
-            );
+        //     vk1_0::DescriptorType::UNIFORM_TEXEL_BUFFER
+        // }
+        // 5 => {
+        //     debug_assert_eq!(DescriptorType::StorageTexelBuffer as usize, index);
 
-            vk1_0::DescriptorType::STORAGE_TEXEL_BUFFER
-        }
+        //     vk1_0::DescriptorType::STORAGE_TEXEL_BUFFER
+        // }
         6 => {
             debug_assert_eq!(DescriptorType::UniformBuffer as usize, index);
 
@@ -63,18 +54,12 @@ fn descriptor_type_from_index(index: usize) -> vk1_0::DescriptorType {
             vk1_0::DescriptorType::STORAGE_BUFFER
         }
         8 => {
-            debug_assert_eq!(
-                DescriptorType::UniformBufferDynamic as usize,
-                index
-            );
+            debug_assert_eq!(DescriptorType::UniformBufferDynamic as usize, index);
 
             vk1_0::DescriptorType::UNIFORM_BUFFER_DYNAMIC
         }
         9 => {
-            debug_assert_eq!(
-                DescriptorType::StorageBufferDynamic as usize,
-                index
-            );
+            debug_assert_eq!(DescriptorType::StorageBufferDynamic as usize, index);
 
             vk1_0::DescriptorType::STORAGE_BUFFER_DYNAMIC
         }
@@ -84,10 +69,7 @@ fn descriptor_type_from_index(index: usize) -> vk1_0::DescriptorType {
             vk1_0::DescriptorType::INPUT_ATTACHMENT
         }
         11 => {
-            debug_assert_eq!(
-                DescriptorType::AccelerationStructure as usize,
-                index
-            );
+            debug_assert_eq!(DescriptorType::AccelerationStructure as usize, index);
 
             vk1_0::DescriptorType::ACCELERATION_STRUCTURE_KHR
         }
@@ -128,8 +110,7 @@ impl DescriptorSizesBuilder {
     pub fn build(self) -> DescriptorSizes {
         let mut sizes = [vk1_0::DescriptorPoolSizeBuilder::new()
             ._type(vk1_0::DescriptorType::SAMPLER)
-            .descriptor_count(0);
-            DESCRIPTOR_TYPES_COUNT];
+            .descriptor_count(0); DESCRIPTOR_TYPES_COUNT];
 
         let mut count = 0u8;
 
@@ -186,9 +167,10 @@ impl Hash for DescriptorSizes {
 
 impl PartialEq for DescriptorSizes {
     fn eq(&self, rhs: &Self) -> bool {
-        self.as_slice().iter().zip(rhs.as_slice()).all(|(l, r)| {
-            l._type == r._type && l.descriptor_count == r.descriptor_count
-        })
+        self.as_slice()
+            .iter()
+            .zip(rhs.as_slice())
+            .all(|(l, r)| l._type == r._type && l.descriptor_count == r.descriptor_count)
     }
 }
 
