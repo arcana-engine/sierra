@@ -56,7 +56,7 @@ pub struct FamilyInfo {
     pub count: usize,
 }
 
-/// Family of queues created togther with device.
+/// Family of queues created together with device.
 #[derive(Debug)]
 pub struct Family {
     pub capabilities: QueueCapabilityFlags,

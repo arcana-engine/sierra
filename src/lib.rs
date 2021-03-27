@@ -7,7 +7,7 @@
 //! no references left.
 //!
 
-#![warn(missing_docs)]
+// #![warn(missing_docs)]
 #![warn(missing_debug_implementations)]
 #![warn(missing_copy_implementations)]
 
@@ -29,12 +29,14 @@ mod encode;
 mod fence;
 mod format;
 mod framebuffer;
+mod glsl;
 mod image;
 mod memory;
 mod physical;
 mod pipeline;
 mod queue;
 mod render_pass;
+mod repr;
 mod sampler;
 mod semaphore;
 mod shader;
@@ -59,6 +61,7 @@ pub use self::{
     pipeline::*,
     queue::*,
     render_pass::*,
+    repr::*,
     sampler::*,
     semaphore::*,
     shader::*,
@@ -67,6 +70,8 @@ pub use self::{
     swapchain::*,
     view::*,
 };
+
+pub use sierra_proc::{descriptors, shader_repr};
 
 /// Image size is defined to `u32` which is standard for graphics API of today.
 pub type ImageSize = u32;

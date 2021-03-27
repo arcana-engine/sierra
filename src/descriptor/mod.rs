@@ -3,8 +3,17 @@ mod layout;
 pub use {self::layout::*, crate::backend::DescriptorSet};
 
 use crate::{
-    accel::AccelerationStructure, buffer::BufferRegion, image::Layout, sampler::Sampler,
+    accel::AccelerationStructure,
+    backend::{Device, PipelineLayout},
+    buffer::BufferRegion,
+    encode::EncoderCommon,
+    image::Image,
+    image::Layout,
+    image::{ImageExtent, ImageSubresourceRange},
+    sampler::Sampler,
     view::ImageView,
+    view::ImageViewKind,
+    OutOfMemory,
 };
 
 /// Contains information required to create `DescriptorSet` instance.
@@ -119,4 +128,111 @@ pub struct CopyDescriptorSet<'a> {
 
     /// Number of descriptors to copy.
     pub count: u32,
+}
+
+#[doc(hidden)]
+#[derive(Debug)]
+pub struct CombinedImageSamplerEq<'a, I> {
+    pub image: &'a I,
+    pub layout: Layout,
+    pub sampler: &'a Sampler,
+}
+
+impl<I> Copy for CombinedImageSamplerEq<'_, I> {}
+impl<I> Clone for CombinedImageSamplerEq<'_, I> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl PartialEq<CombinedImageSampler> for CombinedImageSamplerEq<'_, ImageView> {
+    fn eq(&self, rhs: &CombinedImageSampler) -> bool {
+        *self.image == rhs.view && self.layout == rhs.layout && *self.sampler == rhs.sampler
+    }
+}
+
+impl PartialEq<CombinedImageSampler> for CombinedImageSamplerEq<'_, Image> {
+    fn eq(&self, rhs: &CombinedImageSampler) -> bool {
+        image_eq_view(self.image, &rhs.view)
+            && self.layout == rhs.layout
+            && *self.sampler == rhs.sampler
+    }
+}
+
+pub fn image_eq_view(image: &Image, view: &ImageView) -> bool {
+    let view_info = view.info();
+    let image_info = image.info();
+
+    if view_info.view_kind
+        != match image_info.extent {
+            ImageExtent::D1 { .. } => ImageViewKind::D1,
+            ImageExtent::D2 { .. } => ImageViewKind::D2,
+            ImageExtent::D3 { .. } => ImageViewKind::D3,
+        }
+    {
+        return false;
+    }
+
+    if view_info.subresource
+        != ImageSubresourceRange::new(
+            image_info.format.aspect_flags(),
+            0..image_info.levels,
+            0..image_info.layers,
+        )
+    {
+        return false;
+    }
+
+    *image == view_info.image
+}
+
+pub trait DescriptorsLayout {
+    type Instance;
+
+    fn new(device: &Device) -> Result<Self, OutOfMemory>
+    where
+        Self: Sized;
+
+    fn instantiate(&self) -> Self::Instance;
+}
+
+pub trait DescriptorsInstance {
+    type Input;
+
+    fn update<'a>(
+        &'a mut self,
+        input: &Self::Input,
+        fence: usize,
+        device: &Device,
+        writes: &mut impl Extend<WriteDescriptorSet<'a>>,
+    ) -> Result<(), OutOfMemory>;
+
+    fn bind_graphics<'a>(
+        &'a self,
+        fence: usize,
+        layout: &'a PipelineLayout,
+        index: u32,
+        encoder: &mut EncoderCommon<'a>,
+    );
+
+    fn bind_compute<'a>(
+        &'a self,
+        fence: usize,
+        layout: &'a PipelineLayout,
+        index: u32,
+        encoder: &mut EncoderCommon<'a>,
+    );
+
+    fn bind_ray_tracing<'a>(
+        &'a self,
+        fence: usize,
+        layout: &'a PipelineLayout,
+        index: u32,
+        encoder: &mut EncoderCommon<'a>,
+    );
+}
+
+pub trait DescriptorsInput {
+    type Layout: DescriptorsLayout<Instance = Self::Instance>;
+    type Instance: DescriptorsInstance<Input = Self>;
 }

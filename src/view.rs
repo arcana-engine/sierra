@@ -1,5 +1,9 @@
 pub use crate::backend::ImageView;
-use crate::image::{Image, ImageExtent, ImageSubresourceRange};
+use crate::{
+    backend::Device,
+    image::{Image, ImageExtent, ImageSubresourceRange},
+    OutOfMemory,
+};
 
 /// Kind of image view.
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
@@ -52,5 +56,23 @@ impl ImageViewInfo {
             ),
             image,
         }
+    }
+}
+
+#[doc(hidden)]
+pub trait MakeImageView {
+    fn make_view<'a>(&'a self, device: &Device) -> Result<ImageView, OutOfMemory>;
+}
+
+impl MakeImageView for ImageView {
+    fn make_view<'a>(&'a self, _device: &Device) -> Result<ImageView, OutOfMemory> {
+        Ok(self.clone())
+    }
+}
+
+impl MakeImageView for Image {
+    fn make_view<'a>(&'a self, device: &Device) -> Result<ImageView, OutOfMemory> {
+        let view = device.create_image_view(ImageViewInfo::new(self.clone()))?;
+        Ok(view)
     }
 }

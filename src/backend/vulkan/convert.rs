@@ -1403,15 +1403,15 @@ impl ToErupt<vk1_0::AccessFlags> for AccessFlags {
         if self.contains(Self::MEMORY_WRITE) {
             result |= vk1_0::AccessFlags::MEMORY_WRITE;
         }
-        if self.contains(Self::TRANSFORM_FEEDBACK_WRITE) {
-            result |= vk1_0::AccessFlags::TRANSFORM_FEEDBACK_WRITE_EXT;
-        }
-        if self.contains(Self::TRANSFORM_FEEDBACK_COUNTER_READ) {
-            result |= vk1_0::AccessFlags::TRANSFORM_FEEDBACK_COUNTER_READ_EXT;
-        }
-        if self.contains(Self::TRANSFORM_FEEDBACK_COUNTER_WRITE) {
-            result |= vk1_0::AccessFlags::TRANSFORM_FEEDBACK_COUNTER_WRITE_EXT;
-        }
+        // if self.contains(Self::TRANSFORM_FEEDBACK_WRITE) {
+        //     result |= vk1_0::AccessFlags::TRANSFORM_FEEDBACK_WRITE_EXT;
+        // }
+        // if self.contains(Self::TRANSFORM_FEEDBACK_COUNTER_READ) {
+        //     result |= vk1_0::AccessFlags::TRANSFORM_FEEDBACK_COUNTER_READ_EXT;
+        // }
+        // if self.contains(Self::TRANSFORM_FEEDBACK_COUNTER_WRITE) {
+        //     result |= vk1_0::AccessFlags::TRANSFORM_FEEDBACK_COUNTER_WRITE_EXT;
+        // }
         if self.contains(Self::CONDITIONAL_RENDERING_READ) {
             result |= vk1_0::AccessFlags::CONDITIONAL_RENDERING_READ_EXT;
         }

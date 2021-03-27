@@ -28,6 +28,58 @@ bitflags::bitflags! {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
+pub enum ShaderStage {
+    Vertex,
+    TessellationControl,
+    TessellationEvaluation,
+    Geometry,
+    Fragment,
+    Compute,
+    Raygen,
+    AnyHit,
+    ClosestHit,
+    Miss,
+    Intersection,
+}
+
+impl Display for ShaderStage {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Vertex => fmt.write_str("Vertex"),
+            Self::TessellationControl => fmt.write_str("TessellationControl"),
+            Self::TessellationEvaluation => fmt.write_str("TessellationEvaluation"),
+            Self::Geometry => fmt.write_str("Geometry"),
+            Self::Fragment => fmt.write_str("Fragment"),
+            Self::Compute => fmt.write_str("Compute"),
+            Self::Raygen => fmt.write_str("Raygen"),
+            Self::AnyHit => fmt.write_str("AnyHit"),
+            Self::ClosestHit => fmt.write_str("ClosestHit"),
+            Self::Miss => fmt.write_str("Miss"),
+            Self::Intersection => fmt.write_str("Intersection"),
+        }
+    }
+}
+
+impl From<ShaderStage> for ShaderStageFlags {
+    fn from(stage: ShaderStage) -> Self {
+        match stage {
+            ShaderStage::Vertex => ShaderStageFlags::VERTEX,
+            ShaderStage::TessellationControl => ShaderStageFlags::TESSELLATION_CONTROL,
+            ShaderStage::TessellationEvaluation => ShaderStageFlags::TESSELLATION_EVALUATION,
+            ShaderStage::Geometry => ShaderStageFlags::GEOMETRY,
+            ShaderStage::Fragment => ShaderStageFlags::FRAGMENT,
+            ShaderStage::Compute => ShaderStageFlags::COMPUTE,
+            ShaderStage::Raygen => ShaderStageFlags::RAYGEN,
+            ShaderStage::AnyHit => ShaderStageFlags::ANY_HIT,
+            ShaderStage::ClosestHit => ShaderStageFlags::CLOSEST_HIT,
+            ShaderStage::Miss => ShaderStageFlags::MISS,
+            ShaderStage::Intersection => ShaderStageFlags::INTERSECTION,
+        }
+    }
+}
+
 /// Shader language.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
@@ -261,58 +313,6 @@ pub enum CreateShaderModuleError {
 
     #[error("Shader language {language:?} is unsupported")]
     UnsupportedShaderLanguage { language: ShaderLanguage },
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
-pub enum ShaderStage {
-    Vertex,
-    TessellationControl,
-    TessellationEvaluation,
-    Geometry,
-    Fragment,
-    Compute,
-    Raygen,
-    AnyHit,
-    ClosestHit,
-    Miss,
-    Intersection,
-}
-
-impl Display for ShaderStage {
-    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Vertex => fmt.write_str("Vertex"),
-            Self::TessellationControl => fmt.write_str("TessellationControl"),
-            Self::TessellationEvaluation => fmt.write_str("TessellationEvaluation"),
-            Self::Geometry => fmt.write_str("Geometry"),
-            Self::Fragment => fmt.write_str("Fragment"),
-            Self::Compute => fmt.write_str("Compute"),
-            Self::Raygen => fmt.write_str("Raygen"),
-            Self::AnyHit => fmt.write_str("AnyHit"),
-            Self::ClosestHit => fmt.write_str("ClosestHit"),
-            Self::Miss => fmt.write_str("Miss"),
-            Self::Intersection => fmt.write_str("Intersection"),
-        }
-    }
-}
-
-impl From<ShaderStage> for ShaderStageFlags {
-    fn from(stage: ShaderStage) -> Self {
-        match stage {
-            ShaderStage::Vertex => ShaderStageFlags::VERTEX,
-            ShaderStage::TessellationControl => ShaderStageFlags::TESSELLATION_CONTROL,
-            ShaderStage::TessellationEvaluation => ShaderStageFlags::TESSELLATION_EVALUATION,
-            ShaderStage::Geometry => ShaderStageFlags::GEOMETRY,
-            ShaderStage::Fragment => ShaderStageFlags::FRAGMENT,
-            ShaderStage::Compute => ShaderStageFlags::COMPUTE,
-            ShaderStage::Raygen => ShaderStageFlags::RAYGEN,
-            ShaderStage::AnyHit => ShaderStageFlags::ANY_HIT,
-            ShaderStage::ClosestHit => ShaderStageFlags::CLOSEST_HIT,
-            ShaderStage::Miss => ShaderStageFlags::MISS,
-            ShaderStage::Intersection => ShaderStageFlags::INTERSECTION,
-        }
-    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, thiserror::Error)]

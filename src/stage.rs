@@ -1,4 +1,5 @@
 bitflags::bitflags! {
+    /// Flags to specify set of pipeline stages.
     #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
     pub struct PipelineStageFlags: u32 {
         /// Pseudo-stage that precedes all other stages and doesn't execute any commands.
@@ -31,7 +32,7 @@ bitflags::bitflags! {
         const LATE_FRAGMENT_TESTS = 0x00000200;
 
         /// Stage at which color output of fragment shader is written
-        /// and multisample resolve operation happens.
+        /// and multi-sample resolve operation happens.
         const COLOR_ATTACHMENT_OUTPUT = 0x00000400;
 
         /// Stage at which compute shader is executed.
@@ -65,4 +66,64 @@ bitflags::bitflags! {
         /// Stage at which acceleration structures are built.
         const ACCELERATION_STRUCTURE_BUILD = 0x02000000;
     }
+}
+
+/// Enum to specify one pipeline stage.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
+pub enum PipelineStage {
+    /// Pseudo-stage that precedes all other stages and doesn't execute any commands.
+    /// Using it in first scope of dependency will
+    /// not cause any waiting, because no operations should be waited upon.
+    /// Using it in second scope will make all operations in second scope to wait for operations first scope.
+    TopOfPipe,
+
+    /// Stage at which indirect draw buffer is read.
+    DrawIndirect,
+
+    /// Stage at which vertex buffers are read.
+    VertexInput,
+
+    /// Stage at which vertex shader is executed.
+    VertexShader,
+    //,
+    //,
+    //,
+    /// Stage at which early fragment depth and stencil test is performed
+    /// before fragment shader execution.
+    EarlyFragmentTests,
+
+    /// Stage at which fragment shader is executed.
+    FragmentShader,
+
+    /// Stage at which late fragment depth and stencil test is performed
+    /// after fragment shader execution.
+    LateFragmentTests,
+
+    /// Stage at which color output of fragment shader is written
+    /// and multi-sample resolve operation happens.
+    ColorAttachmentOutput,
+
+    /// Stage at which compute shader is executed.
+    ComputeShader,
+
+    /// Stage at which transfer commands (Copy, Blit etc) are executed.
+    Transfer,
+
+    /// Pseudo-stage that follows all other stages and doesn't execute any commands.
+    /// Using it in first scope will make operations in second scope to wait for all operations first scope.
+    /// Using it in second scope of dependency will
+    /// not cause any waiting, because no operations should be waited upon.
+    BottomOfPipe,
+
+    /// Pseudo-stage at which HOST access to resources is performed.
+    /// It has very limited use because command submission creates
+    /// memory dependency between host access and device operations.
+    Host,
+
+    /// Stage at which ray-tracing pipeline is executed.
+    RayTracingShader,
+
+    /// Stage at which acceleration structures are built.
+    AccelerationStructureBuild,
 }
