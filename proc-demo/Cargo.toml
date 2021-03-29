@@ -3,6 +3,7 @@ name = "sierra-proc-demo"
 version = "0.1.0"
 authors = ["Zakarum <zakarumych@ya.ru>"]
 edition = "2018"
+description = "Demonstrates sierra's code generation abilities"
 
 [dependencies]
 sierra = { version = "0.1.0", path = ".." }

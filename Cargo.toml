@@ -8,6 +8,7 @@ documentation = "https://docs.rs/sierra/0.1.0"
 homepage = "https://github.com/zaq/sierra"
 repository = "https://github.com/zaq/sierra"
 readme = "README.md"
+description = "Vulkan-lite graphics API"
 categories = ["rendering::graphics-api"]
 keywords = ["vulkan"]
 
@@ -29,7 +30,6 @@ tracing = "0.1"
 ordered-float = "2.0"
 bytemuck = "1.4"
 erupt = { version = "0.17", optional = true, features = ["loading"] }
-#tvma = { path = "../tvma", optional = true }
 gpu-alloc-erupt = { version = "0.3", optional = true }
 gpu-alloc = { version = "0.3", optional = true }
 slab = "0.4"

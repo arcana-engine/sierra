@@ -5,6 +5,7 @@ authors = ["Zakarum <zakarumych@ya.ru>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
 readme = "../README.md"
+description = "Procedural macros for 'sierra' crate"
 
 [lib]
 proc-macro = true
