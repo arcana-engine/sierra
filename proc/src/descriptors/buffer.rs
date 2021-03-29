@@ -17,7 +17,7 @@ enum AttributeArgument {
     Type(syn::Type),
 }
 
-pub(crate) fn parse_buffer_attr(attr: &syn::Attribute) -> Option<Buffer> {
+pub(super) fn parse_buffer_attr(attr: &syn::Attribute) -> Option<Buffer> {
     if attr.path.get_ident().map_or(true, |i| i != "buffer") {
         return None;
     }

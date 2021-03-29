@@ -16,8 +16,10 @@ macro_rules! impl_unsafe_marker_for_array {
                 type Type = [Padded<T::Type, T::ArrayPadding>; $n];
                 type ArrayPadding = [u8; 0];
 
-                fn copy_to_repr(&self) -> [Padded<T::Type, T::ArrayPadding>; $n] {
-                    todo!()
+                fn copy_to_repr(&self, repr: &mut [Padded<T::Type, T::ArrayPadding>; $n]) {
+                    for i in 0..$n {
+                        self[i].copy_to_repr(&mut repr[i].value);
+                    }
                 }
             }
 
@@ -31,8 +33,10 @@ macro_rules! impl_unsafe_marker_for_array {
                 type Type = [Padded<T::Type, T::ArrayPadding>; $n];
                 type ArrayPadding = [u8; 0];
 
-                fn copy_to_repr(&self) -> [Padded<T::Type, T::ArrayPadding>; $n] {
-                    todo!()
+                fn copy_to_repr(&self, repr: &mut [Padded<T::Type, T::ArrayPadding>; $n]) {
+                    for i in 0..$n {
+                        self[i].copy_to_repr(&mut repr[i].value);
+                    }
                 }
             }
         )*

@@ -8,7 +8,7 @@ use {
         accel::{AccelerationStructureGeometry, AccelerationStructureLevel, IndexData},
         buffer::{BufferUsage, StridedBufferRegion},
         encode::*,
-        format::{FormatDescription, FormatType, Repr},
+        format::{FormatDescription, FormatRepr, FormatType},
         queue::QueueId,
         render_pass::{AttachmentLoadOp, ClearValue, RENDERPASS_SMALLVEC_ATTACHMENTS},
         IndexType, OutOfMemory,
@@ -775,9 +775,9 @@ fn color_f32_to_sint8(color: f32) -> i8 {
         .max(i8::max_value() as f32) as i8
 }
 
-fn colors_f32_to_value(r: f32, g: f32, b: f32, a: f32, repr: Repr) -> vk1_0::ClearColorValue {
+fn colors_f32_to_value(r: f32, g: f32, b: f32, a: f32, repr: FormatRepr) -> vk1_0::ClearColorValue {
     match repr {
-        Repr {
+        FormatRepr {
             bits: 8,
             ty: FormatType::Uint,
         } => vk1_0::ClearColorValue {
@@ -788,7 +788,7 @@ fn colors_f32_to_value(r: f32, g: f32, b: f32, a: f32, repr: Repr) -> vk1_0::Cle
                 color_f32_to_uint8(a) as _,
             ],
         },
-        Repr {
+        FormatRepr {
             bits: 8,
             ty: FormatType::Sint,
         } => vk1_0::ClearColorValue {
@@ -799,7 +799,7 @@ fn colors_f32_to_value(r: f32, g: f32, b: f32, a: f32, repr: Repr) -> vk1_0::Cle
                 color_f32_to_sint8(a) as _,
             ],
         },
-        Repr {
+        FormatRepr {
             bits: 16,
             ty: FormatType::Uint,
         } => vk1_0::ClearColorValue {
@@ -810,7 +810,7 @@ fn colors_f32_to_value(r: f32, g: f32, b: f32, a: f32, repr: Repr) -> vk1_0::Cle
                 color_f32_to_uint16(a) as _,
             ],
         },
-        Repr {
+        FormatRepr {
             bits: 16,
             ty: FormatType::Sint,
         } => vk1_0::ClearColorValue {
@@ -821,7 +821,7 @@ fn colors_f32_to_value(r: f32, g: f32, b: f32, a: f32, repr: Repr) -> vk1_0::Cle
                 color_f32_to_sint16(a) as _,
             ],
         },
-        Repr {
+        FormatRepr {
             bits: 32,
             ty: FormatType::Uint,
         } => vk1_0::ClearColorValue {
@@ -832,7 +832,7 @@ fn colors_f32_to_value(r: f32, g: f32, b: f32, a: f32, repr: Repr) -> vk1_0::Cle
                 color_f32_to_uint32(a) as _,
             ],
         },
-        Repr {
+        FormatRepr {
             bits: 32,
             ty: FormatType::Sint,
         } => vk1_0::ClearColorValue {
@@ -843,7 +843,7 @@ fn colors_f32_to_value(r: f32, g: f32, b: f32, a: f32, repr: Repr) -> vk1_0::Cle
                 color_f32_to_sint32(a) as _,
             ],
         },
-        Repr {
+        FormatRepr {
             bits: 64,
             ty: FormatType::Uint,
         } => vk1_0::ClearColorValue {
@@ -854,7 +854,7 @@ fn colors_f32_to_value(r: f32, g: f32, b: f32, a: f32, repr: Repr) -> vk1_0::Cle
                 color_f32_to_uint64(a) as _,
             ],
         },
-        Repr {
+        FormatRepr {
             bits: 64,
             ty: FormatType::Sint,
         } => vk1_0::ClearColorValue {

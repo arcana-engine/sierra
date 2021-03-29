@@ -2,46 +2,72 @@ use {
     super::{
         buffer,
         instance::instance_type_name,
-        parse::{Field, FieldType, Input},
+        parse::{Descriptor, DescriptorType, Input},
     },
-    crate::stage::Stage,
+    crate::stage::{combined_stages_tokens, combined_stages_tokens_dedup},
     proc_macro2::TokenStream,
+    std::convert::TryFrom as _,
 };
 
-pub(crate) fn layout_type_name(input: &Input) -> syn::Ident {
+pub(super) fn layout_type_name(input: &Input) -> syn::Ident {
     quote::format_ident!("{}Layout", input.item_struct.ident)
 }
 
-pub(crate) fn generate(input: &Input) -> TokenStream {
+pub(super) fn generate(input: &Input) -> TokenStream {
     let layout_ident = layout_type_name(input);
     let instance_ident = instance_type_name(input);
 
-    let bindings = input
-        .fields
+    let mut bindings = input
+        .descriptors
         .iter()
-        .map(|input_field| generate_layout_binding(input_field))
+        .enumerate()
+        .map(|(binding, descriptor)| {
+            generate_layout_binding(
+                descriptor,
+                u32::try_from(binding).expect("Too many descriptors"),
+            )
+        })
         .collect::<Vec<_>>();
+
+    if !input.uniforms.is_empty() {
+        let stages = combined_stages_tokens_dedup(
+            input.uniforms.iter().flat_map(|u| u.stages.iter().copied()),
+        );
+
+        let binding = u32::try_from(bindings.len()).expect("Too many descriptors");
+        bindings.push(quote::quote!(
+            ::sierra::DescriptorSetLayoutBinding {
+                binding: #binding,
+                ty: ::sierra::DescriptorType::UniformBuffer,
+                count: 1,
+                stages: #stages,
+                flags: ::sierra::DescriptorBindingFlags::empty(),
+            }
+        ));
+    }
 
     let vis = &input.item_struct.vis;
 
     quote::quote!(
         #[derive(Clone, Debug)]
         #[repr(transparent)]
-        #vis struct #layout_ident(::sierra::DescriptorSetLayout);
+        //#[doc(hidden)]
+        #vis struct #layout_ident {
+            pub layout: ::sierra::DescriptorSetLayout
+        }
 
         impl ::sierra::DescriptorsLayout for #layout_ident {
             type Instance = #instance_ident;
 
-            fn new(device: &::sierra::Device) -> Result<Self, ::sierra::OutOfMemory> {
+            fn new(device: &::sierra::Device) -> ::std::result::Result<Self, ::sierra::OutOfMemory> {
                 let layout =
                     device.create_descriptor_set_layout(::sierra::DescriptorSetLayoutInfo {
                         bindings: vec![#(#bindings),*],
                         flags: ::sierra::DescriptorSetLayoutFlags::empty(),
                     })?;
 
-                Ok(#layout_ident(layout))
+                ::std::result::Result::Ok(#layout_ident { layout })
             }
-
 
             fn instantiate(&self) -> #instance_ident {
                 #instance_ident::new(self)
@@ -51,21 +77,21 @@ pub(crate) fn generate(input: &Input) -> TokenStream {
     .into()
 }
 
-fn generate_layout_binding(input_field: &Field) -> TokenStream {
-    let ty = match input_field.ty {
-        FieldType::CombinedImageSampler(_) => {
+fn generate_layout_binding(descriptor: &Descriptor, binding: u32) -> TokenStream {
+    let ty = match descriptor.ty {
+        DescriptorType::CombinedImageSampler(_) => {
             quote::format_ident!("CombinedImageSampler")
         }
-        FieldType::AccelerationStructure(_) => {
+        DescriptorType::AccelerationStructure(_) => {
             quote::format_ident!("AccelerationStructure")
         }
-        FieldType::Buffer(buffer::Buffer {
+        DescriptorType::Buffer(buffer::Buffer {
             kind: buffer::Kind::Uniform,
             ..
         }) => {
             quote::format_ident!("UniformBuffer")
         }
-        FieldType::Buffer(buffer::Buffer {
+        DescriptorType::Buffer(buffer::Buffer {
             kind: buffer::Kind::Storage,
             ..
         }) => {
@@ -73,46 +99,14 @@ fn generate_layout_binding(input_field: &Field) -> TokenStream {
         }
     };
 
-    let binding = input_field.binding;
-
-    let stages = input_field
-        .stages
-        .iter()
-        .map(|stage| match stage {
-            Stage::Vertex => quote::quote!(::sierra::ShaderStageFlags::VERTEX),
-            Stage::TessellationControl => {
-                quote::quote!(::sierra::ShaderStageFlags::TESSELLATION_CONTROL)
-            }
-            Stage::TessellationEvaluation => {
-                quote::quote!(::sierra::ShaderStageFlags::TESSELLATION_EVALUATION)
-            }
-            Stage::Geometry => {
-                quote::quote!(::sierra::ShaderStageFlags::GEOMETRY)
-            }
-            Stage::Fragment => {
-                quote::quote!(::sierra::ShaderStageFlags::FRAGMENT)
-            }
-            Stage::Compute => {
-                quote::quote!(::sierra::ShaderStageFlags::COMPUTE)
-            }
-            Stage::Raygen => quote::quote!(::sierra::ShaderStageFlags::RAYGEN),
-            Stage::AnyHit => quote::quote!(::sierra::ShaderStageFlags::ANY_HIT),
-            Stage::ClosestHit => {
-                quote::quote!(::sierra::ShaderStageFlags::CLOSEST_HIT)
-            }
-            Stage::Miss => quote::quote!(::sierra::ShaderStageFlags::MISS),
-            Stage::Intersection => {
-                quote::quote!(::sierra::ShaderStageFlags::INTERSECTION)
-            }
-        })
-        .collect::<Vec<_>>();
+    let stages = combined_stages_tokens(descriptor.stages.iter().copied());
 
     quote::quote!(
         ::sierra::DescriptorSetLayoutBinding {
             binding: #binding,
             ty: ::sierra::DescriptorType::#ty,
             count: 1,
-            stages: ::sierra::ShaderStageFlags::empty() #(|#stages)*,
+            stages: #stages,
             flags: ::sierra::DescriptorBindingFlags::empty(),
         }
     )

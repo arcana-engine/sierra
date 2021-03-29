@@ -1,6 +1,6 @@
 pub struct AccelerationStructure;
 
-pub(crate) fn parse_acceleration_structure_attr(
+pub(super) fn parse_acceleration_structure_attr(
     attr: &syn::Attribute,
 ) -> Option<AccelerationStructure> {
     if attr
@@ -12,9 +12,7 @@ pub(crate) fn parse_acceleration_structure_attr(
     }
 
     if !attr.tokens.is_empty() {
-        panic!(
-            "`acceleration_structure` attribute does not support any arguments"
-        )
+        panic!("`acceleration_structure` attribute does not support any arguments")
     }
 
     // let () = attr.parse_args_with(|stream: syn::parse::ParseStream<'_>| {

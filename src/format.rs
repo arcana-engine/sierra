@@ -123,7 +123,7 @@ pub enum FormatType {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
-pub struct Repr {
+pub struct FormatRepr {
     pub ty: FormatType,
     pub bits: u8,
 }
@@ -131,15 +131,18 @@ pub struct Repr {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub enum FormatDescription {
-    R(Repr),
-    RG(Repr),
-    RGB(Repr),
-    BGR(Repr),
-    RGBA(Repr),
-    BGRA(Repr),
-    Depth(Repr),
-    Stencil(Repr),
-    DepthStencil { depth: Repr, stencil: Repr },
+    R(FormatRepr),
+    RG(FormatRepr),
+    RGB(FormatRepr),
+    BGR(FormatRepr),
+    RGBA(FormatRepr),
+    BGRA(FormatRepr),
+    Depth(FormatRepr),
+    Stencil(FormatRepr),
+    DepthStencil {
+        depth: FormatRepr,
+        stencil: FormatRepr,
+    },
 }
 
 bitflags::bitflags! {
@@ -216,420 +219,420 @@ impl Format {
 
     pub fn description(&self) -> FormatDescription {
         match self {
-            Self::R8Unorm => FormatDescription::R(Repr {
+            Self::R8Unorm => FormatDescription::R(FormatRepr {
                 bits: 8,
                 ty: FormatType::Unorm,
             }),
-            Self::R8Snorm => FormatDescription::R(Repr {
+            Self::R8Snorm => FormatDescription::R(FormatRepr {
                 bits: 8,
                 ty: FormatType::Snorm,
             }),
-            Self::R8Uscaled => FormatDescription::R(Repr {
+            Self::R8Uscaled => FormatDescription::R(FormatRepr {
                 bits: 8,
                 ty: FormatType::Uscaled,
             }),
-            Self::R8Sscaled => FormatDescription::R(Repr {
+            Self::R8Sscaled => FormatDescription::R(FormatRepr {
                 bits: 8,
                 ty: FormatType::Sscaled,
             }),
-            Self::R8Uint => FormatDescription::R(Repr {
+            Self::R8Uint => FormatDescription::R(FormatRepr {
                 bits: 8,
                 ty: FormatType::Uint,
             }),
-            Self::R8Sint => FormatDescription::R(Repr {
+            Self::R8Sint => FormatDescription::R(FormatRepr {
                 bits: 8,
                 ty: FormatType::Sint,
             }),
-            Self::R8Srgb => FormatDescription::R(Repr {
+            Self::R8Srgb => FormatDescription::R(FormatRepr {
                 bits: 8,
                 ty: FormatType::Srgb,
             }),
-            Self::RG8Unorm => FormatDescription::RG(Repr {
+            Self::RG8Unorm => FormatDescription::RG(FormatRepr {
                 bits: 8,
                 ty: FormatType::Unorm,
             }),
-            Self::RG8Snorm => FormatDescription::RG(Repr {
+            Self::RG8Snorm => FormatDescription::RG(FormatRepr {
                 bits: 8,
                 ty: FormatType::Snorm,
             }),
-            Self::RG8Uscaled => FormatDescription::RG(Repr {
+            Self::RG8Uscaled => FormatDescription::RG(FormatRepr {
                 bits: 8,
                 ty: FormatType::Uscaled,
             }),
-            Self::RG8Sscaled => FormatDescription::RG(Repr {
+            Self::RG8Sscaled => FormatDescription::RG(FormatRepr {
                 bits: 8,
                 ty: FormatType::Sscaled,
             }),
-            Self::RG8Uint => FormatDescription::RG(Repr {
+            Self::RG8Uint => FormatDescription::RG(FormatRepr {
                 bits: 8,
                 ty: FormatType::Uint,
             }),
-            Self::RG8Sint => FormatDescription::RG(Repr {
+            Self::RG8Sint => FormatDescription::RG(FormatRepr {
                 bits: 8,
                 ty: FormatType::Sint,
             }),
-            Self::RG8Srgb => FormatDescription::RG(Repr {
+            Self::RG8Srgb => FormatDescription::RG(FormatRepr {
                 bits: 8,
                 ty: FormatType::Srgb,
             }),
-            Self::RGB8Unorm => FormatDescription::RGB(Repr {
+            Self::RGB8Unorm => FormatDescription::RGB(FormatRepr {
                 bits: 8,
                 ty: FormatType::Unorm,
             }),
-            Self::RGB8Snorm => FormatDescription::RGB(Repr {
+            Self::RGB8Snorm => FormatDescription::RGB(FormatRepr {
                 bits: 8,
                 ty: FormatType::Snorm,
             }),
-            Self::RGB8Uscaled => FormatDescription::RGB(Repr {
+            Self::RGB8Uscaled => FormatDescription::RGB(FormatRepr {
                 bits: 8,
                 ty: FormatType::Uscaled,
             }),
-            Self::RGB8Sscaled => FormatDescription::RGB(Repr {
+            Self::RGB8Sscaled => FormatDescription::RGB(FormatRepr {
                 bits: 8,
                 ty: FormatType::Sscaled,
             }),
-            Self::RGB8Uint => FormatDescription::RGB(Repr {
+            Self::RGB8Uint => FormatDescription::RGB(FormatRepr {
                 bits: 8,
                 ty: FormatType::Uint,
             }),
-            Self::RGB8Sint => FormatDescription::RGB(Repr {
+            Self::RGB8Sint => FormatDescription::RGB(FormatRepr {
                 bits: 8,
                 ty: FormatType::Sint,
             }),
-            Self::RGB8Srgb => FormatDescription::RGB(Repr {
+            Self::RGB8Srgb => FormatDescription::RGB(FormatRepr {
                 bits: 8,
                 ty: FormatType::Srgb,
             }),
-            Self::BGR8Unorm => FormatDescription::BGR(Repr {
+            Self::BGR8Unorm => FormatDescription::BGR(FormatRepr {
                 bits: 8,
                 ty: FormatType::Unorm,
             }),
-            Self::BGR8Snorm => FormatDescription::BGR(Repr {
+            Self::BGR8Snorm => FormatDescription::BGR(FormatRepr {
                 bits: 8,
                 ty: FormatType::Snorm,
             }),
-            Self::BGR8Uscaled => FormatDescription::BGR(Repr {
+            Self::BGR8Uscaled => FormatDescription::BGR(FormatRepr {
                 bits: 8,
                 ty: FormatType::Uscaled,
             }),
-            Self::BGR8Sscaled => FormatDescription::BGR(Repr {
+            Self::BGR8Sscaled => FormatDescription::BGR(FormatRepr {
                 bits: 8,
                 ty: FormatType::Sscaled,
             }),
-            Self::BGR8Uint => FormatDescription::BGR(Repr {
+            Self::BGR8Uint => FormatDescription::BGR(FormatRepr {
                 bits: 8,
                 ty: FormatType::Uint,
             }),
-            Self::BGR8Sint => FormatDescription::BGR(Repr {
+            Self::BGR8Sint => FormatDescription::BGR(FormatRepr {
                 bits: 8,
                 ty: FormatType::Sint,
             }),
-            Self::BGR8Srgb => FormatDescription::BGR(Repr {
+            Self::BGR8Srgb => FormatDescription::BGR(FormatRepr {
                 bits: 8,
                 ty: FormatType::Srgb,
             }),
-            Self::RGBA8Unorm => FormatDescription::RGBA(Repr {
+            Self::RGBA8Unorm => FormatDescription::RGBA(FormatRepr {
                 bits: 8,
                 ty: FormatType::Unorm,
             }),
-            Self::RGBA8Snorm => FormatDescription::RGBA(Repr {
+            Self::RGBA8Snorm => FormatDescription::RGBA(FormatRepr {
                 bits: 8,
                 ty: FormatType::Snorm,
             }),
-            Self::RGBA8Uscaled => FormatDescription::RGBA(Repr {
+            Self::RGBA8Uscaled => FormatDescription::RGBA(FormatRepr {
                 bits: 8,
                 ty: FormatType::Uscaled,
             }),
-            Self::RGBA8Sscaled => FormatDescription::RGBA(Repr {
+            Self::RGBA8Sscaled => FormatDescription::RGBA(FormatRepr {
                 bits: 8,
                 ty: FormatType::Sscaled,
             }),
-            Self::RGBA8Uint => FormatDescription::RGBA(Repr {
+            Self::RGBA8Uint => FormatDescription::RGBA(FormatRepr {
                 bits: 8,
                 ty: FormatType::Uint,
             }),
-            Self::RGBA8Sint => FormatDescription::RGBA(Repr {
+            Self::RGBA8Sint => FormatDescription::RGBA(FormatRepr {
                 bits: 8,
                 ty: FormatType::Sint,
             }),
-            Self::RGBA8Srgb => FormatDescription::RGBA(Repr {
+            Self::RGBA8Srgb => FormatDescription::RGBA(FormatRepr {
                 bits: 8,
                 ty: FormatType::Srgb,
             }),
-            Self::BGRA8Unorm => FormatDescription::BGRA(Repr {
+            Self::BGRA8Unorm => FormatDescription::BGRA(FormatRepr {
                 bits: 8,
                 ty: FormatType::Unorm,
             }),
-            Self::BGRA8Snorm => FormatDescription::BGRA(Repr {
+            Self::BGRA8Snorm => FormatDescription::BGRA(FormatRepr {
                 bits: 8,
                 ty: FormatType::Snorm,
             }),
-            Self::BGRA8Uscaled => FormatDescription::BGRA(Repr {
+            Self::BGRA8Uscaled => FormatDescription::BGRA(FormatRepr {
                 bits: 8,
                 ty: FormatType::Uscaled,
             }),
-            Self::BGRA8Sscaled => FormatDescription::BGRA(Repr {
+            Self::BGRA8Sscaled => FormatDescription::BGRA(FormatRepr {
                 bits: 8,
                 ty: FormatType::Sscaled,
             }),
-            Self::BGRA8Uint => FormatDescription::BGRA(Repr {
+            Self::BGRA8Uint => FormatDescription::BGRA(FormatRepr {
                 bits: 8,
                 ty: FormatType::Uint,
             }),
-            Self::BGRA8Sint => FormatDescription::BGRA(Repr {
+            Self::BGRA8Sint => FormatDescription::BGRA(FormatRepr {
                 bits: 8,
                 ty: FormatType::Sint,
             }),
-            Self::BGRA8Srgb => FormatDescription::BGRA(Repr {
+            Self::BGRA8Srgb => FormatDescription::BGRA(FormatRepr {
                 bits: 8,
                 ty: FormatType::Srgb,
             }),
-            Self::R16Unorm => FormatDescription::R(Repr {
+            Self::R16Unorm => FormatDescription::R(FormatRepr {
                 bits: 16,
                 ty: FormatType::Unorm,
             }),
-            Self::R16Snorm => FormatDescription::R(Repr {
+            Self::R16Snorm => FormatDescription::R(FormatRepr {
                 bits: 16,
                 ty: FormatType::Snorm,
             }),
-            Self::R16Uscaled => FormatDescription::R(Repr {
+            Self::R16Uscaled => FormatDescription::R(FormatRepr {
                 bits: 16,
                 ty: FormatType::Uscaled,
             }),
-            Self::R16Sscaled => FormatDescription::R(Repr {
+            Self::R16Sscaled => FormatDescription::R(FormatRepr {
                 bits: 16,
                 ty: FormatType::Sscaled,
             }),
-            Self::R16Uint => FormatDescription::R(Repr {
+            Self::R16Uint => FormatDescription::R(FormatRepr {
                 bits: 16,
                 ty: FormatType::Uint,
             }),
-            Self::R16Sint => FormatDescription::R(Repr {
+            Self::R16Sint => FormatDescription::R(FormatRepr {
                 bits: 16,
                 ty: FormatType::Sint,
             }),
-            Self::R16Sfloat => FormatDescription::R(Repr {
+            Self::R16Sfloat => FormatDescription::R(FormatRepr {
                 bits: 16,
                 ty: FormatType::Sfloat,
             }),
-            Self::RG16Unorm => FormatDescription::RG(Repr {
+            Self::RG16Unorm => FormatDescription::RG(FormatRepr {
                 bits: 16,
                 ty: FormatType::Unorm,
             }),
-            Self::RG16Snorm => FormatDescription::RG(Repr {
+            Self::RG16Snorm => FormatDescription::RG(FormatRepr {
                 bits: 16,
                 ty: FormatType::Snorm,
             }),
-            Self::RG16Uscaled => FormatDescription::RG(Repr {
+            Self::RG16Uscaled => FormatDescription::RG(FormatRepr {
                 bits: 16,
                 ty: FormatType::Uscaled,
             }),
-            Self::RG16Sscaled => FormatDescription::RG(Repr {
+            Self::RG16Sscaled => FormatDescription::RG(FormatRepr {
                 bits: 16,
                 ty: FormatType::Sscaled,
             }),
-            Self::RG16Uint => FormatDescription::RG(Repr {
+            Self::RG16Uint => FormatDescription::RG(FormatRepr {
                 bits: 16,
                 ty: FormatType::Uint,
             }),
-            Self::RG16Sint => FormatDescription::RG(Repr {
+            Self::RG16Sint => FormatDescription::RG(FormatRepr {
                 bits: 16,
                 ty: FormatType::Sint,
             }),
-            Self::RG16Sfloat => FormatDescription::RG(Repr {
+            Self::RG16Sfloat => FormatDescription::RG(FormatRepr {
                 bits: 16,
                 ty: FormatType::Sfloat,
             }),
-            Self::RGB16Unorm => FormatDescription::RGB(Repr {
+            Self::RGB16Unorm => FormatDescription::RGB(FormatRepr {
                 bits: 16,
                 ty: FormatType::Unorm,
             }),
-            Self::RGB16Snorm => FormatDescription::RGB(Repr {
+            Self::RGB16Snorm => FormatDescription::RGB(FormatRepr {
                 bits: 16,
                 ty: FormatType::Snorm,
             }),
-            Self::RGB16Uscaled => FormatDescription::RGB(Repr {
+            Self::RGB16Uscaled => FormatDescription::RGB(FormatRepr {
                 bits: 16,
                 ty: FormatType::Uscaled,
             }),
-            Self::RGB16Sscaled => FormatDescription::RGB(Repr {
+            Self::RGB16Sscaled => FormatDescription::RGB(FormatRepr {
                 bits: 16,
                 ty: FormatType::Sscaled,
             }),
-            Self::RGB16Uint => FormatDescription::RGB(Repr {
+            Self::RGB16Uint => FormatDescription::RGB(FormatRepr {
                 bits: 16,
                 ty: FormatType::Uint,
             }),
-            Self::RGB16Sint => FormatDescription::RGB(Repr {
+            Self::RGB16Sint => FormatDescription::RGB(FormatRepr {
                 bits: 16,
                 ty: FormatType::Sint,
             }),
-            Self::RGB16Sfloat => FormatDescription::RGB(Repr {
+            Self::RGB16Sfloat => FormatDescription::RGB(FormatRepr {
                 bits: 16,
                 ty: FormatType::Sfloat,
             }),
-            Self::RGBA16Unorm => FormatDescription::RGBA(Repr {
+            Self::RGBA16Unorm => FormatDescription::RGBA(FormatRepr {
                 bits: 16,
                 ty: FormatType::Unorm,
             }),
-            Self::RGBA16Snorm => FormatDescription::RGBA(Repr {
+            Self::RGBA16Snorm => FormatDescription::RGBA(FormatRepr {
                 bits: 16,
                 ty: FormatType::Snorm,
             }),
-            Self::RGBA16Uscaled => FormatDescription::RGBA(Repr {
+            Self::RGBA16Uscaled => FormatDescription::RGBA(FormatRepr {
                 bits: 16,
                 ty: FormatType::Uscaled,
             }),
-            Self::RGBA16Sscaled => FormatDescription::RGBA(Repr {
+            Self::RGBA16Sscaled => FormatDescription::RGBA(FormatRepr {
                 bits: 16,
                 ty: FormatType::Sscaled,
             }),
-            Self::RGBA16Uint => FormatDescription::RGBA(Repr {
+            Self::RGBA16Uint => FormatDescription::RGBA(FormatRepr {
                 bits: 16,
                 ty: FormatType::Uint,
             }),
-            Self::RGBA16Sint => FormatDescription::RGBA(Repr {
+            Self::RGBA16Sint => FormatDescription::RGBA(FormatRepr {
                 bits: 16,
                 ty: FormatType::Sint,
             }),
-            Self::RGBA16Sfloat => FormatDescription::RGBA(Repr {
+            Self::RGBA16Sfloat => FormatDescription::RGBA(FormatRepr {
                 bits: 16,
                 ty: FormatType::Sfloat,
             }),
-            Self::R32Uint => FormatDescription::R(Repr {
+            Self::R32Uint => FormatDescription::R(FormatRepr {
                 bits: 32,
                 ty: FormatType::Uint,
             }),
-            Self::R32Sint => FormatDescription::R(Repr {
+            Self::R32Sint => FormatDescription::R(FormatRepr {
                 bits: 32,
                 ty: FormatType::Sint,
             }),
-            Self::R32Sfloat => FormatDescription::R(Repr {
+            Self::R32Sfloat => FormatDescription::R(FormatRepr {
                 bits: 32,
                 ty: FormatType::Sfloat,
             }),
-            Self::RG32Uint => FormatDescription::RG(Repr {
+            Self::RG32Uint => FormatDescription::RG(FormatRepr {
                 bits: 32,
                 ty: FormatType::Uint,
             }),
-            Self::RG32Sint => FormatDescription::RG(Repr {
+            Self::RG32Sint => FormatDescription::RG(FormatRepr {
                 bits: 32,
                 ty: FormatType::Sint,
             }),
-            Self::RG32Sfloat => FormatDescription::RG(Repr {
+            Self::RG32Sfloat => FormatDescription::RG(FormatRepr {
                 bits: 32,
                 ty: FormatType::Sfloat,
             }),
-            Self::RGB32Uint => FormatDescription::RGB(Repr {
+            Self::RGB32Uint => FormatDescription::RGB(FormatRepr {
                 bits: 32,
                 ty: FormatType::Uint,
             }),
-            Self::RGB32Sint => FormatDescription::RGB(Repr {
+            Self::RGB32Sint => FormatDescription::RGB(FormatRepr {
                 bits: 32,
                 ty: FormatType::Sint,
             }),
-            Self::RGB32Sfloat => FormatDescription::RGB(Repr {
+            Self::RGB32Sfloat => FormatDescription::RGB(FormatRepr {
                 bits: 32,
                 ty: FormatType::Sfloat,
             }),
-            Self::RGBA32Uint => FormatDescription::RGBA(Repr {
+            Self::RGBA32Uint => FormatDescription::RGBA(FormatRepr {
                 bits: 32,
                 ty: FormatType::Uint,
             }),
-            Self::RGBA32Sint => FormatDescription::RGBA(Repr {
+            Self::RGBA32Sint => FormatDescription::RGBA(FormatRepr {
                 bits: 32,
                 ty: FormatType::Sint,
             }),
-            Self::RGBA32Sfloat => FormatDescription::RGBA(Repr {
+            Self::RGBA32Sfloat => FormatDescription::RGBA(FormatRepr {
                 bits: 32,
                 ty: FormatType::Sfloat,
             }),
-            Self::R64Uint => FormatDescription::R(Repr {
+            Self::R64Uint => FormatDescription::R(FormatRepr {
                 bits: 64,
                 ty: FormatType::Uint,
             }),
-            Self::R64Sint => FormatDescription::R(Repr {
+            Self::R64Sint => FormatDescription::R(FormatRepr {
                 bits: 64,
                 ty: FormatType::Sint,
             }),
-            Self::R64Sfloat => FormatDescription::R(Repr {
+            Self::R64Sfloat => FormatDescription::R(FormatRepr {
                 bits: 64,
                 ty: FormatType::Sfloat,
             }),
-            Self::RG64Uint => FormatDescription::RG(Repr {
+            Self::RG64Uint => FormatDescription::RG(FormatRepr {
                 bits: 64,
                 ty: FormatType::Uint,
             }),
-            Self::RG64Sint => FormatDescription::RG(Repr {
+            Self::RG64Sint => FormatDescription::RG(FormatRepr {
                 bits: 64,
                 ty: FormatType::Sint,
             }),
-            Self::RG64Sfloat => FormatDescription::RG(Repr {
+            Self::RG64Sfloat => FormatDescription::RG(FormatRepr {
                 bits: 64,
                 ty: FormatType::Sfloat,
             }),
-            Self::RGB64Uint => FormatDescription::RGB(Repr {
+            Self::RGB64Uint => FormatDescription::RGB(FormatRepr {
                 bits: 64,
                 ty: FormatType::Uint,
             }),
-            Self::RGB64Sint => FormatDescription::RGB(Repr {
+            Self::RGB64Sint => FormatDescription::RGB(FormatRepr {
                 bits: 64,
                 ty: FormatType::Sint,
             }),
-            Self::RGB64Sfloat => FormatDescription::RGB(Repr {
+            Self::RGB64Sfloat => FormatDescription::RGB(FormatRepr {
                 bits: 64,
                 ty: FormatType::Sfloat,
             }),
-            Self::RGBA64Uint => FormatDescription::RGBA(Repr {
+            Self::RGBA64Uint => FormatDescription::RGBA(FormatRepr {
                 bits: 64,
                 ty: FormatType::Uint,
             }),
-            Self::RGBA64Sint => FormatDescription::RGBA(Repr {
+            Self::RGBA64Sint => FormatDescription::RGBA(FormatRepr {
                 bits: 64,
                 ty: FormatType::Sint,
             }),
-            Self::RGBA64Sfloat => FormatDescription::RGBA(Repr {
+            Self::RGBA64Sfloat => FormatDescription::RGBA(FormatRepr {
                 bits: 64,
                 ty: FormatType::Sfloat,
             }),
-            Self::D16Unorm => FormatDescription::Depth(Repr {
+            Self::D16Unorm => FormatDescription::Depth(FormatRepr {
                 bits: 16,
                 ty: FormatType::Unorm,
             }),
-            Self::D32Sfloat => FormatDescription::Depth(Repr {
+            Self::D32Sfloat => FormatDescription::Depth(FormatRepr {
                 bits: 32,
                 ty: FormatType::Sfloat,
             }),
-            Self::S8Uint => FormatDescription::Stencil(Repr {
+            Self::S8Uint => FormatDescription::Stencil(FormatRepr {
                 bits: 8,
                 ty: FormatType::Uint,
             }),
             Self::D16UnormS8Uint => FormatDescription::DepthStencil {
-                depth: Repr {
+                depth: FormatRepr {
                     bits: 16,
                     ty: FormatType::Unorm,
                 },
-                stencil: Repr {
+                stencil: FormatRepr {
                     bits: 8,
                     ty: FormatType::Uint,
                 },
             },
             Self::D24UnormS8Uint => FormatDescription::DepthStencil {
-                depth: Repr {
+                depth: FormatRepr {
                     bits: 24,
                     ty: FormatType::Unorm,
                 },
-                stencil: Repr {
+                stencil: FormatRepr {
                     bits: 8,
                     ty: FormatType::Uint,
                 },
             },
             Self::D32SfloatS8Uint => FormatDescription::DepthStencil {
-                depth: Repr {
+                depth: FormatRepr {
                     bits: 32,
                     ty: FormatType::Sfloat,
                 },
-                stencil: Repr {
+                stencil: FormatRepr {
                     bits: 8,
                     ty: FormatType::Uint,
                 },

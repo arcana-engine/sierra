@@ -6,7 +6,7 @@ use crate::{
     accel::AccelerationStructure,
     backend::{Device, PipelineLayout},
     buffer::BufferRegion,
-    encode::EncoderCommon,
+    encode::{Encoder, EncoderCommon},
     image::Image,
     image::Layout,
     image::{ImageExtent, ImageSubresourceRange},
@@ -205,6 +205,7 @@ pub trait DescriptorsInstance {
         fence: usize,
         device: &Device,
         writes: &mut impl Extend<WriteDescriptorSet<'a>>,
+        encoder: &mut Encoder<'a>,
     ) -> Result<(), OutOfMemory>;
 
     fn bind_graphics<'a>(

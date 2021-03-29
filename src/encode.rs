@@ -416,7 +416,6 @@ impl<'a> Encoder<'a> {
     }
 
     /// Updates a buffer's contents from host memory
-
     pub fn update_buffer<T>(&mut self, buffer: &'a Buffer, offset: u64, data: &'a [T])
     where
         T: Pod,

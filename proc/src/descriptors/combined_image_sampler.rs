@@ -8,7 +8,7 @@ enum AttributeArgument {
     SeparateSampler { member: syn::Member },
 }
 
-pub(crate) fn parse_combined_image_sampler_attr(
+pub(super) fn parse_combined_image_sampler_attr(
     attr: &syn::Attribute,
 ) -> Option<CombinedImageSampler> {
     if attr
@@ -23,29 +23,8 @@ pub(crate) fn parse_combined_image_sampler_attr(
             Ok(if stream.is_empty() {
                 Vec::new()
             } else {
-                stream
-                    .parse_terminated::<_, syn::Token![,]>(|stream| {
-                        let ident = stream.parse::<syn::Ident>()?;
-
-                        match ident {
-                            ident if ident == "sampler" => {
-                                if !stream.is_empty() {
-                                    stream.parse::<syn::Token![=]>()?;
-                                    let member = stream.parse::<syn::Member>()?;
-                                    Ok(AttributeArgument::SeparateSampler { member })
-                                } else {
-                                    Ok(AttributeArgument::SeparateSampler {
-                                        member: syn::Member::Named(quote::format_ident!("sampler")),
-                                    })
-                                }
-                            }
-                            _ => {
-                                return Err(stream.error("Unrecognized argument"));
-                            }
-                        }
-                    })?
-                    .into_iter()
-                    .collect()
+                let member = stream.parse::<syn::Member>()?;
+                vec![AttributeArgument::SeparateSampler { member }]
             })
         })
         .unwrap();

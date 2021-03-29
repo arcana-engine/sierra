@@ -1,41 +1,60 @@
-#[sierra::descriptors]
-pub struct Filter {
-    pub sampler: sierra::Sampler,
+//! This crate contains example for sierra's code-generation feature.\
+//! It contains uniform structures and descriptor set layout.\
+//! Generated types allows creating descriptor set layout
+//! and descriptor sets with functions, no additional args aside from device is
+//! required.\
+//! Additionally it allows updating uniforms and descriptors binding in
+//! straightforward manner in single function call `instance.update(&input)`,\
+//! and then bind descriptor set to encoder.
 
-    #[combined_image_sampler(sampler)]
+/// Dummy structure
+#[sierra::shader_repr]
+pub struct InstanceInfo {
+    pub transform: sierra::mat4,
+    pub pos: sierra::vec3,
+    pub fits_with_no_pad: f32,
+}
+
+/// Another dummy structure
+#[sierra::shader_repr]
+pub struct ComplexInfo {
+    pub instance: InstanceInfo,
+}
+
+/// Descriptor set
+#[sierra::descriptors]
+pub struct PBRDescriptors {
+    pub s: sierra::Sampler,
+
+    #[combined_image_sampler(s)]
     #[stages(Fragment)]
     pub albedo: sierra::Image,
 
-    #[combined_image_sampler(sampler)]
+    #[combined_image_sampler(s)]
     #[stages(Fragment)]
-    pub normal_depth: sierra::Image,
+    pub metalness_normals: sierra::Image,
 
-    #[combined_image_sampler(sampler)]
+    #[combined_image_sampler(s)]
     #[stages(Fragment)]
-    pub unfiltered: sierra::Image,
-}
+    pub shadows: sierra::Image,
 
-#[sierra::shader_repr]
-pub struct Bar {
-    pub transform: sierra::mat3,
-    pub pos: sierra::vec3,
-    pub fit: f32,
-}
+    #[uniform]
+    #[stages(Vertex)]
+    pub camera_view: sierra::mat4,
 
-#[sierra::shader_repr]
-pub struct Foo {
-    pub foo: Bar,
-}
+    #[uniform]
+    #[stages(Vertex)]
+    pub camera_proj: sierra::mat4,
 
-#[test]
-fn test() {
-    use {
-        core::mem::size_of,
-        sierra::{mat3, Repr, Std140, Std430},
-    };
+    #[uniform]
+    #[stages(Vertex)]
+    pub complex: ComplexInfo,
 
-    assert!(
-        dbg!(size_of::<<mat3 as Repr<Std140>>::Type>())
-            >= dbg!(size_of::<<mat3 as Repr<Std430>>::Type>())
-    );
+    #[uniform]
+    #[stages(Fragment)]
+    pub rgb: sierra::vec3,
+
+    #[uniform]
+    #[stages(Fragment)]
+    pub x: f32,
 }

@@ -118,8 +118,8 @@ macro_rules! impl_mats {
             type Type = [Padded<vec<T, $m>, <vec<T, $m> as ShaderNative>::ArrayPadding140>; $n];
             type ArrayPadding = [u8; 0];
 
-            fn copy_to_repr(&self) -> Self::Type {
-                todo!()
+            fn copy_to_repr(&self, repr: &mut Self::Type) {
+                ShaderRepr::<Std140>::copy_to_repr(&self.0, repr)
             }
         }
 
@@ -133,8 +133,8 @@ macro_rules! impl_mats {
             type Type = [Padded<vec<T, $m>, <vec<T, $m> as ShaderNative>::ArrayPadding430>; $n];
             type ArrayPadding = [u8; 0];
 
-            fn copy_to_repr(&self) -> Self::Type {
-                todo!()
+            fn copy_to_repr(&self, repr: &mut Self::Type) {
+                ShaderRepr::<Std430>::copy_to_repr(&self.0, repr)
             }
         }
     )*)*};

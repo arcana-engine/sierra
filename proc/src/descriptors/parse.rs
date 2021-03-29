@@ -3,6 +3,7 @@ use {
         acceleration_structure::{parse_acceleration_structure_attr, AccelerationStructure},
         buffer::{parse_buffer_attr, Buffer},
         combined_image_sampler::{parse_combined_image_sampler_attr, CombinedImageSampler},
+        uniform::parse_uniform_attr,
     },
     crate::{find_unique, stage::Stage},
     std::convert::TryFrom as _,
@@ -10,31 +11,27 @@ use {
 };
 
 pub struct Input {
-    pub fields: Vec<Field>,
+    pub descriptors: Vec<Descriptor>,
+    pub uniforms: Vec<Uniform>,
     pub item_struct: syn::ItemStruct,
 }
 
-pub struct Field {
+pub struct Descriptor {
     pub stages: Vec<Stage>,
-    pub ty: FieldType,
-    pub binding: u32,
+    pub ty: DescriptorType,
     pub member: syn::Member,
 }
 
-pub enum FieldType {
+pub struct Uniform {
+    pub stages: Vec<Stage>,
+    pub ty: syn::Type,
+    pub member: syn::Member,
+}
+
+pub enum DescriptorType {
     CombinedImageSampler(CombinedImageSampler),
     AccelerationStructure(AccelerationStructure),
     Buffer(Buffer),
-}
-
-impl FieldType {
-    pub fn is_descriptor(&self) -> bool {
-        match self {
-            Self::CombinedImageSampler(_) => true,
-            Self::AccelerationStructure(_) => true,
-            Self::Buffer(_) => true,
-        }
-    }
 }
 
 pub fn parse(attr: proc_macro::TokenStream, item: proc_macro::TokenStream) -> Input {
@@ -43,24 +40,37 @@ pub fn parse(attr: proc_macro::TokenStream, item: proc_macro::TokenStream) -> In
     let mut item_struct = syn::parse::<syn::ItemStruct>(item)
         .expect("`#[pipeline_layout]` can be applied only to structs");
 
-    let mut binding = 0;
+    let mut uniforms = Vec::new();
+    let mut descriptors = Vec::new();
 
-    let fields = item_struct
-        .fields
-        .iter_mut()
-        .enumerate()
-        .filter_map(|(index, field)| {
-            parse_field_attrs(field, u32::try_from(index).unwrap(), &mut binding)
-        })
-        .collect::<Vec<_>>();
+    for (index, field) in item_struct.fields.iter_mut().enumerate() {
+        match parse_field_attrs(field, u32::try_from(index).unwrap()) {
+            None => {}
+            Some(Field::Descriptor(descriptor)) => descriptors.push(descriptor),
+            Some(Field::Uniform(uniform)) => uniforms.push(uniform),
+        }
+    }
 
     Input {
         item_struct,
-        fields,
+        descriptors,
+        uniforms,
     }
 }
 
-fn parse_field_attrs(field: &mut syn::Field, field_index: u32, binding: &mut u32) -> Option<Field> {
+enum FieldType {
+    CombinedImageSampler(CombinedImageSampler),
+    AccelerationStructure(AccelerationStructure),
+    Buffer(Buffer),
+    Uniform,
+}
+
+enum Field {
+    Uniform(Uniform),
+    Descriptor(Descriptor),
+}
+
+fn parse_field_attrs(field: &mut syn::Field, field_index: u32) -> Option<Field> {
     let (ty, index) = find_unique(
         field.attrs.iter().enumerate().filter_map(|(index, attr)| {
             let ty = parse_input_field_type(attr)?;
@@ -129,12 +139,27 @@ fn parse_field_attrs(field: &mut syn::Field, field_index: u32, binding: &mut u32
         Some(field_ident) => syn::Member::Named(field_ident.clone()),
     };
 
-    *binding += 1;
-    Some(Field {
-        ty,
-        stages,
-        binding: *binding - 1,
-        member,
+    Some(match ty {
+        FieldType::Uniform => Field::Uniform(Uniform {
+            ty: field.ty.clone(),
+            stages,
+            member,
+        }),
+        FieldType::CombinedImageSampler(value) => Field::Descriptor(Descriptor {
+            ty: DescriptorType::CombinedImageSampler(value),
+            stages,
+            member,
+        }),
+        FieldType::AccelerationStructure(value) => Field::Descriptor(Descriptor {
+            ty: DescriptorType::AccelerationStructure(value),
+            stages,
+            member,
+        }),
+        FieldType::Buffer(value) => Field::Descriptor(Descriptor {
+            ty: DescriptorType::Buffer(value),
+            stages,
+            member,
+        }),
     })
 }
 
@@ -147,6 +172,7 @@ fn parse_input_field_type(attr: &syn::Attribute) -> Option<FieldType> {
         some_err(parse_combined_image_sampler_attr(attr).map(FieldType::CombinedImageSampler))?;
         some_err(parse_acceleration_structure_attr(attr).map(FieldType::AccelerationStructure))?;
         some_err(parse_buffer_attr(attr).map(FieldType::Buffer))?;
+        some_err(parse_uniform_attr(attr).map(|_| FieldType::Uniform))?;
         Ok(())
     }
 

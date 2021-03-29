@@ -2,51 +2,67 @@ use {
     super::{
         buffer,
         layout::layout_type_name,
-        parse::{FieldType, Input},
+        parse::{DescriptorType, Input},
     },
     proc_macro2::TokenStream,
 };
 
-pub(crate) fn instance_type_name(input: &Input) -> syn::Ident {
+pub(super) fn instance_type_name(input: &Input) -> syn::Ident {
     quote::format_ident!("{}Instance", input.item_struct.ident)
 }
 
-pub(crate) fn generate(input: &Input) -> TokenStream {
+pub(super) fn generate(input: &Input) -> TokenStream {
     let ident = &input.item_struct.ident;
     let layout_ident = layout_type_name(input);
     let instance_ident = instance_type_name(input);
     let elem_ident = quote::format_ident!("{}Elem", instance_ident);
 
-    let fields: TokenStream = input
-        .fields
+    let descriptors: TokenStream = input
+        .descriptors
         .iter()
-        .map(|input| match &input.ty {
-            FieldType::CombinedImageSampler(_) => {
+        .filter_map(|input| match &input.ty {
+            DescriptorType::CombinedImageSampler(_) => {
                 let descriptor_field = quote::format_ident!("descriptor_{}", input.member);
-                quote::quote!(
-                    #descriptor_field: ::std::option::Option<::sierra::CombinedImageSampler>,
-                )
+                Some(quote::quote!(
+                    pub #descriptor_field: ::std::option::Option<::sierra::CombinedImageSampler>,
+                ))
             }
-            FieldType::AccelerationStructure(_) => {
+            DescriptorType::AccelerationStructure(_) => {
                 let descriptor_field = quote::format_ident!("descriptor_{}", input.member);
-                quote::quote!(
-                    #descriptor_field: ::std::option::Option<::sierra::AccelerationStructure>,
-                )
+                Some(quote::quote!(
+                    pub #descriptor_field: ::std::option::Option<::sierra::AccelerationStructure>,
+                ))
             }
-            FieldType::Buffer(_) => {
+            DescriptorType::Buffer(_) => {
                 let descriptor_field = quote::format_ident!("descriptor_{}", input.member);
-                quote::quote!(
-                    #descriptor_field: ::std::option::Option<::sierra::BufferRegion>,
-                )
+                Some(quote::quote!(
+                    pub #descriptor_field: ::std::option::Option<::sierra::BufferRegion>,
+                ))
             }
         })
         .collect();
 
-    let update_field_statements: TokenStream = input
-        .fields
+    let mut binding = 0u32;
+
+    let update_descriptor_statements: TokenStream = input
+        .descriptors
         .iter()
-        .map(|input| match &input.ty {
-            ty if ty.is_descriptor() => {
+        .filter_map(|input| {
+            let descriptors = match input.ty {
+                DescriptorType::CombinedImageSampler(_) => {
+                    Some(quote::quote!(::sierra::Descriptors::CombinedImageSampler(std::slice::from_ref(descriptor))))
+                }
+                DescriptorType::AccelerationStructure(_) => {
+                    Some(quote::quote!(::sierra::Descriptors::AccelerationStructure(std::slice::from_ref(descriptor))))
+                }
+                DescriptorType::Buffer(buffer::Buffer { kind: buffer::Kind::Uniform,.. }) => {
+                    Some(quote::quote!(::sierra::Descriptors::UniformBuffer(std::slice::from_ref(descriptor))))
+                }
+                DescriptorType::Buffer(buffer::Buffer { kind: buffer::Kind::Storage,.. }) => {
+                    Some(quote::quote!(::sierra::Descriptors::StorageBuffer(std::slice::from_ref(descriptor))))
+                }
+            }?;
+
                 let descriptor_field =
                     quote::format_ident!("descriptor_{}", input.member);
 
@@ -56,24 +72,7 @@ pub(crate) fn generate(input: &Input) -> TokenStream {
                 let get_field_descriptor =
                     quote::format_ident!("get_{}_descriptor", input.member);
 
-                let binding = input.binding;
-
-                let descriptors = match ty {
-                    FieldType::CombinedImageSampler(_) => {
-                        quote::quote!(::sierra::Descriptors::CombinedImageSampler(std::slice::from_ref(descriptor)))
-                    }
-                    FieldType::AccelerationStructure(_) => {
-                        quote::quote!(::sierra::Descriptors::AccelerationStructure(std::slice::from_ref(descriptor)))
-                    }
-                    FieldType::Buffer(buffer::Buffer { kind: buffer::Kind::Uniform,.. }) => {
-                        quote::quote!(::sierra::Descriptors::UniformBuffer(std::slice::from_ref(descriptor)))
-                    }
-                    FieldType::Buffer(buffer::Buffer { kind: buffer::Kind::Storage,.. }) => {
-                        quote::quote!(::sierra::Descriptors::StorageBuffer(std::slice::from_ref(descriptor)))
-                    }
-                };
-
-                quote::quote!(
+                let stream = quote::quote!(
                     match &mut elem.#descriptor_field {
                         Some(descriptor) if input.#is_fresh_field(descriptor) => {}
                         _ => {
@@ -87,57 +86,101 @@ pub(crate) fn generate(input: &Input) -> TokenStream {
                             }));
                         }
                     }
-                )
-            }
-            _ => unreachable!(),
+                );
+
+                binding += 1;
+                Some(stream)
+            
         })
         .collect();
 
-    let get_update_field_assertions: TokenStream = input
-        .fields
+    let get_update_descriptor_assertions: TokenStream = input
+        .descriptors
         .iter()
-        .map(|input| match &input.ty {
-            ty if ty.is_descriptor() => {
-                let descriptor_field = quote::format_ident!("descriptor_{}", input.member);
-                quote::quote!(
-                    assert!(elem.#descriptor_field.is_some());
-                )
-            }
-            _ => unreachable!(),
+        .map(|input| {
+            let descriptor_field = quote::format_ident!("descriptor_{}", input.member);
+            quote::quote!(
+                assert!(elem.#descriptor_field.is_some());
+            )
         })
         .collect();
 
-    let new_cycle_elem_fields: TokenStream = input
-        .fields
+    let new_cycle_elem_descriptors: TokenStream = input
+        .descriptors
         .iter()
-        .map(|input| match &input.ty {
-            ty if ty.is_descriptor() => {
-                let descriptor_field = quote::format_ident!("descriptor_{}", input.member);
-                quote::quote!(
-                    #descriptor_field: ::std::option::Option::None,
-                )
-            }
-            _ => unreachable!(),
+        .map(|input| {
+            let descriptor_field = quote::format_ident!("descriptor_{}", input.member);
+            quote::quote!(
+                #descriptor_field: ::std::option::Option::None,
+            )
         })
         .collect();
 
     let vis = &input.item_struct.vis;
+    let uniforms_ident = quote::format_ident!("{}Uniforms", input.item_struct.ident);
+
+    let uniforms_field = if input.uniforms.is_empty() {
+        TokenStream::new()
+    } else {
+        quote::quote!(pub uniforms_buffer: ::std::option::Option<(#uniforms_ident, ::sierra::BufferRegion)>,)
+    };
+
+    let new_cycle_elem_uniforms_buffer = if input.uniforms.is_empty() {
+        TokenStream::new()
+    } else {
+        quote::quote!(
+            uniforms_buffer: ::std::option::Option::None,
+        )
+    };
+
+    let update_uniforms_statements = if input.uniforms.is_empty() {
+        TokenStream::new()
+    } else {
+        quote::quote!(
+            if elem.uniforms_buffer.is_none() {
+                let mut uniforms: #uniforms_ident = ::sierra::Zeroable::zeroed();
+                uniforms.copy_from_input(input);
+                let buffer = device.create_buffer(::sierra::BufferInfo {
+                    align: 255,
+                    size: ::std::convert::TryFrom::try_from(::std::mem::size_of::<#uniforms_ident>() as u64).map_err(|_| ::sierra::OutOfMemory)?,
+                    usage: ::sierra::BufferUsage::UNIFORM | ::sierra::BufferUsage::TRANSFER_DST,
+                })?;
+
+                elem.uniforms_buffer = Some((uniforms, buffer.into()));
+
+                writes.extend(Some(::sierra::WriteDescriptorSet {
+                    set: &elem.set,
+                    binding: #binding,
+                    element: 0,
+                    descriptors: ::sierra::Descriptors::UniformBuffer(::std::slice::from_ref(&elem.uniforms_buffer.as_ref().unwrap().1)),
+                }));
+            } else {
+                elem.uniforms_buffer.as_mut().unwrap().0.copy_from_input(input);
+            }
+
+            let (uniforms, buffer) = elem.uniforms_buffer.as_ref().unwrap();
+            encoder.update_buffer(&buffer.buffer, 0, ::std::slice::from_ref(uniforms));
+        )
+    };
 
     quote::quote!(
+        //#[doc(hidden)]
         #vis struct #instance_ident {
-            layout: ::sierra::DescriptorSetLayout,
-            cycle: ::std::vec::Vec<#elem_ident>,
+            pub layout: ::sierra::DescriptorSetLayout,
+            pub cycle: ::std::vec::Vec<#elem_ident>,
         }
 
-        struct #elem_ident {
-            set: ::sierra::DescriptorSet,
-            #fields
+        //#[doc(hidden)]
+        #vis struct #elem_ident {
+            pub set: ::sierra::DescriptorSet,
+            #descriptors
+            #uniforms_field
         }
 
         impl #instance_ident {
             pub fn new(layout: &#layout_ident) -> Self {
                 #instance_ident {
-                    layout: layout.0.clone(),
+                    layout: layout.layout.clone(),
                     cycle: ::std::vec::Vec::new(),
                 }
             }
@@ -147,14 +190,15 @@ pub(crate) fn generate(input: &Input) -> TokenStream {
                     set: device.create_descriptor_set(::sierra::DescriptorSetInfo {
                         layout: self.layout.clone(),
                     })?,
-                    #new_cycle_elem_fields
+                    #new_cycle_elem_descriptors
+                    #new_cycle_elem_uniforms_buffer
                 })
             }
 
             fn get_updated(&self, fence: usize) -> &::sierra::DescriptorSet {
                 let elem = self.cycle.get(fence).expect("`fence` is out of bounds. call `update` with this `fence` value first");
 
-                #get_update_field_assertions
+                #get_update_descriptor_assertions
 
                 &elem.set
             }
@@ -169,15 +213,15 @@ pub(crate) fn generate(input: &Input) -> TokenStream {
                 fence: usize,
                 device: &::sierra::Device,
                 writes: &mut impl ::std::iter::Extend<::sierra::WriteDescriptorSet<'a>>,
+                encoder: &mut ::sierra::Encoder<'a>,
             ) -> ::std::result::Result<(), ::sierra::OutOfMemory> {
                 while self.cycle.len() <= fence {
-                    let new_elem = self.new_cycle_elem(device)?;
-                    self.cycle.push(new_elem);
+                        let new_elem = self.new_cycle_elem(device)?;
+                        self.cycle.push(new_elem);
                 }
-
                 let elem = self.cycle.get_mut(fence).unwrap();
-
-                #update_field_statements
+                #update_uniforms_statements
+                #update_descriptor_statements
 
                 ::std::result::Result::Ok(())
             }
