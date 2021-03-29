@@ -8,6 +8,8 @@ documentation = "https://docs.rs/sierra/0.1.0"
 homepage = "https://github.com/zaq/sierra"
 repository = "https://github.com/zaq/sierra"
 readme = "README.md"
+categories = ["rendering::graphics-api"]
+keywords = ["vulkan"]
 
 [features]
 serde-1 = ["serde", "serde_bytes", "smallvec/serde", "ordered-float/serde"]
