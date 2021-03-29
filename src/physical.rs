@@ -2,7 +2,7 @@ pub use crate::backend::PhysicalDevice;
 use crate::{assert_error, queue::FamilyInfo, OutOfMemory};
 
 /// Error occured during device enumeration.
-#[derive(Debug, thiserror::Error)]
+#[derive(Clone, Copy, Debug, thiserror::Error, PartialEq, Eq)]
 pub enum EnumerateDeviceError {
     #[error(transparent)]
     OutOfMemory {

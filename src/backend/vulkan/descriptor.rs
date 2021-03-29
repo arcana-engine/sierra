@@ -77,7 +77,7 @@ fn descriptor_type_from_index(index: usize) -> vk1_0::DescriptorType {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct DescriptorSizesBuilder {
     sizes: [u32; DESCRIPTOR_TYPES_COUNT],
 }
@@ -129,7 +129,7 @@ impl DescriptorSizesBuilder {
 }
 
 /// Number of descriptors per type.
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct DescriptorSizes {
     sizes: [vk1_0::DescriptorPoolSizeBuilder<'static>; DESCRIPTOR_TYPES_COUNT],
     count: u8,

@@ -29,7 +29,7 @@ mod encode;
 mod fence;
 mod format;
 mod framebuffer;
-mod glsl;
+// mod glsl;
 mod image;
 mod memory;
 mod physical;
@@ -217,7 +217,7 @@ impl From<Extent2d> for Rect2d {
 /// host or device memory is exhausted.
 ///
 /// It can be matched to see which.
-#[derive(Copy, Clone, Debug, thiserror::Error)]
+#[derive(Clone, Copy, Debug, thiserror::Error, PartialEq, Eq)]
 #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 #[error("Out of device memory")]
 pub struct OutOfMemory;
@@ -280,7 +280,7 @@ pub enum CreateDeviceError<E: Error + 'static> {
 }
 
 /// Possible error which can be returned from `create_buffer_*`.
-#[derive(Debug, thiserror::Error)]
+#[derive(Clone, Copy, Debug, thiserror::Error, PartialEq, Eq)]
 pub enum CreateBufferError {
     #[error(transparent)]
     OutOfMemory {
@@ -293,7 +293,7 @@ pub enum CreateBufferError {
 }
 
 /// Possible error which can be returned from `create_image_*)`.
-#[derive(Debug, thiserror::Error)]
+#[derive(Clone, Copy, Debug, thiserror::Error, PartialEq, Eq)]
 pub enum CreateImageError {
     #[error(transparent)]
     OutOfMemory {

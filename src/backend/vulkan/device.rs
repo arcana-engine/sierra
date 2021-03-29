@@ -2564,7 +2564,7 @@ impl Device {
     }
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Clone, Copy, Debug, thiserror::Error, PartialEq, Eq)]
 pub enum CreateRenderPassError {
     #[error(transparent)]
     OutOfMemory {

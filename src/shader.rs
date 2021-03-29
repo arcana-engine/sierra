@@ -284,7 +284,7 @@ impl Shader {
     }
 }
 
-#[derive(Clone, Copy, Debug, thiserror::Error)]
+#[derive(Clone, Copy, Debug, thiserror::Error, PartialEq, Eq)]
 #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub enum InvalidShader {
     #[error("Source is empty")]
@@ -297,7 +297,7 @@ pub enum InvalidShader {
     WrongMagic { found: u32 },
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Clone, Copy, Debug, thiserror::Error, PartialEq, Eq)]
 pub enum CreateShaderModuleError {
     #[error(transparent)]
     OutOfMemoryError {
@@ -305,7 +305,7 @@ pub enum CreateShaderModuleError {
         source: OutOfMemory,
     },
 
-    #[error("Shader is invalid {source}")]
+    #[error("Shader is invalid")]
     InvalidShader {
         #[from]
         source: InvalidShader,

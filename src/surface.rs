@@ -5,7 +5,7 @@ use {
     std::{error::Error, fmt::Debug, ops::RangeInclusive},
 };
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Clone, Copy, Debug, thiserror::Error, PartialEq, Eq)]
 pub enum SurfaceError {
     #[error(transparent)]
     OutOfMemory {
@@ -107,7 +107,7 @@ pub enum CreateSurfaceError {
         #[from]
         source: OutOfMemory,
     },
-    #[error("Window handle of kind {{{window:?}}} is not supported. {source:?}")]
+    #[error("Window handle of kind {{{window:?}}} is not supported")]
     UnsupportedWindow {
         window: RawWindowHandleKind,
         #[source]

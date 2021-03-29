@@ -167,7 +167,7 @@ pub struct QueueId {
     pub index: usize,
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Clone, Copy, Debug, thiserror::Error, PartialEq, Eq)]
 pub enum PresentError {
     #[error(transparent)]
     OutOfMemory {
@@ -179,9 +179,9 @@ pub enum PresentError {
 
     #[error("Surface was lost")]
     SurfaceLost,
-    // FullScreenExclusiveModeLost,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PresentOk {
     Success,
     Suboptimal,
