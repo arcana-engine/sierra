@@ -18,6 +18,7 @@ pub(super) fn parse_combined_image_sampler_attr(
     {
         return None;
     }
+
     let args = attr
         .parse_args_with(|stream: syn::parse::ParseStream<'_>| {
             Ok(if stream.is_empty() {

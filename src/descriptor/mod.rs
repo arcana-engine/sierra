@@ -2,18 +2,21 @@ mod layout;
 
 pub use {self::layout::*, crate::backend::DescriptorSet};
 
-use crate::{
-    accel::AccelerationStructure,
-    backend::{Device, PipelineLayout},
-    buffer::BufferRegion,
-    encode::{Encoder, EncoderCommon},
-    image::Image,
-    image::Layout,
-    image::{ImageExtent, ImageSubresourceRange},
-    sampler::Sampler,
-    view::ImageView,
-    view::ImageViewKind,
-    OutOfMemory,
+use {
+    crate::{
+        accel::AccelerationStructure,
+        backend::{Device, PipelineLayout},
+        buffer::BufferRegion,
+        encode::{Encoder, EncoderCommon},
+        image::Image,
+        image::Layout,
+        image::{ImageExtent, ImageSubresourceRange},
+        sampler::Sampler,
+        view::ImageView,
+        view::ImageViewKind,
+        OutOfMemory,
+    },
+    std::convert::TryFrom,
 };
 
 /// Contains information required to create `DescriptorSet` instance.
@@ -193,7 +196,9 @@ pub trait DescriptorsLayout {
     where
         Self: Sized;
 
-    fn instantiate(&self) -> Self::Instance;
+    fn raw(&self) -> &DescriptorSetLayout;
+
+    fn instance(&self) -> Self::Instance;
 }
 
 pub trait DescriptorsInstance {
@@ -208,13 +213,26 @@ pub trait DescriptorsInstance {
         encoder: &mut Encoder<'a>,
     ) -> Result<(), OutOfMemory>;
 
+    fn get_updated(&self, fence: usize) -> &DescriptorSet;
+
+    fn raw_layout(&self) -> &DescriptorSetLayout;
+
     fn bind_graphics<'a>(
         &'a self,
         fence: usize,
         layout: &'a PipelineLayout,
         index: u32,
         encoder: &mut EncoderCommon<'a>,
-    );
+    ) {
+        debug_assert_eq!(
+            usize::try_from(index).map(|index| &layout.info().sets[index]),
+            Ok(self.raw_layout())
+        );
+
+        let set = self.get_updated(fence);
+
+        encoder.bind_graphics_descriptor_sets(layout, index, ::std::slice::from_ref(set), &[]);
+    }
 
     fn bind_compute<'a>(
         &'a self,
@@ -222,7 +240,16 @@ pub trait DescriptorsInstance {
         layout: &'a PipelineLayout,
         index: u32,
         encoder: &mut EncoderCommon<'a>,
-    );
+    ) {
+        debug_assert_eq!(
+            usize::try_from(index).map(|index| &layout.info().sets[index]),
+            Ok(self.raw_layout())
+        );
+
+        let set = self.get_updated(fence);
+
+        encoder.bind_compute_descriptor_sets(layout, index, ::std::slice::from_ref(set), &[]);
+    }
 
     fn bind_ray_tracing<'a>(
         &'a self,
@@ -230,10 +257,23 @@ pub trait DescriptorsInstance {
         layout: &'a PipelineLayout,
         index: u32,
         encoder: &mut EncoderCommon<'a>,
-    );
+    ) {
+        debug_assert_eq!(
+            usize::try_from(index).map(|index| &layout.info().sets[index]),
+            Ok(self.raw_layout())
+        );
+
+        let set = self.get_updated(fence);
+
+        encoder.bind_ray_tracing_descriptor_sets(layout, index, ::std::slice::from_ref(set), &[]);
+    }
 }
 
 pub trait DescriptorsInput {
     type Layout: DescriptorsLayout<Instance = Self::Instance>;
     type Instance: DescriptorsInstance<Input = Self>;
+
+    fn layout(device: &Device) -> Result<Self::Layout, OutOfMemory> {
+        Self::Layout::new(device)
+    }
 }

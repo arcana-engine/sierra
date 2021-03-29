@@ -68,21 +68,40 @@ pub(super) fn generate(input: &Input) -> TokenStream {
             pub layout: ::sierra::DescriptorSetLayout
         }
 
-        impl ::sierra::DescriptorsLayout for #layout_ident {
-            type Instance = #instance_ident;
-
-            fn new(device: &::sierra::Device) -> ::std::result::Result<Self, ::sierra::OutOfMemory> {
+        impl #layout_ident {
+            pub fn new(device: &::sierra::Device) -> ::std::result::Result<Self, ::sierra::OutOfMemory> {
                 let layout =
                     device.create_descriptor_set_layout(::sierra::DescriptorSetLayoutInfo {
-                        bindings: vec![#(#bindings),*],
+                        bindings: ::std::vec![#(#bindings),*],
                         flags: ::sierra::DescriptorSetLayoutFlags::empty(),
                     })?;
 
                 ::std::result::Result::Ok(#layout_ident { layout })
             }
 
-            fn instantiate(&self) -> #instance_ident {
+            pub fn raw(&self) -> &::sierra::DescriptorSetLayout {
+                &self.layout
+            }
+
+            pub fn instance(&self) -> #instance_ident {
                 #instance_ident::new(self)
+            }
+        }
+
+
+        impl ::sierra::DescriptorsLayout for #layout_ident {
+            type Instance = #instance_ident;
+
+            fn new(device: &::sierra::Device) -> ::std::result::Result<Self, ::sierra::OutOfMemory> {
+                Self::new(device)
+            }
+
+            fn raw(&self) -> &::sierra::DescriptorSetLayout {
+                self.raw()
+            }
+
+            fn instance(&self) -> #instance_ident {
+                self.instance()
             }
         }
     )

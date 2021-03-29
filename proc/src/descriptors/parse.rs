@@ -38,13 +38,13 @@ pub fn parse(attr: proc_macro::TokenStream, item: proc_macro::TokenStream) -> In
     assert!(attr.is_empty());
 
     let mut item_struct = syn::parse::<syn::ItemStruct>(item)
-        .expect("`#[pipeline_layout]` can be applied only to structs");
+        .expect("`#[descriptors]` can be applied only to structs");
 
     let mut uniforms = Vec::new();
     let mut descriptors = Vec::new();
 
     for (index, field) in item_struct.fields.iter_mut().enumerate() {
-        match parse_field_attrs(field, u32::try_from(index).unwrap()) {
+        match parse_input_field(field, u32::try_from(index).unwrap()) {
             None => {}
             Some(Field::Descriptor(descriptor)) => descriptors.push(descriptor),
             Some(Field::Uniform(uniform)) => uniforms.push(uniform),
@@ -58,7 +58,7 @@ pub fn parse(attr: proc_macro::TokenStream, item: proc_macro::TokenStream) -> In
     }
 }
 
-enum FieldType {
+enum FieldAttribute {
     CombinedImageSampler(CombinedImageSampler),
     AccelerationStructure(AccelerationStructure),
     Buffer(Buffer),
@@ -70,10 +70,10 @@ enum Field {
     Descriptor(Descriptor),
 }
 
-fn parse_field_attrs(field: &mut syn::Field, field_index: u32) -> Option<Field> {
+fn parse_input_field(field: &mut syn::Field, field_index: u32) -> Option<Field> {
     let (ty, index) = find_unique(
         field.attrs.iter().enumerate().filter_map(|(index, attr)| {
-            let ty = parse_input_field_type(attr)?;
+            let ty = parse_input_field_attr(attr)?;
             Some((ty, index))
         }),
         "At most one shader input type for field must be specified",
@@ -140,22 +140,22 @@ fn parse_field_attrs(field: &mut syn::Field, field_index: u32) -> Option<Field> 
     };
 
     Some(match ty {
-        FieldType::Uniform => Field::Uniform(Uniform {
+        FieldAttribute::Uniform => Field::Uniform(Uniform {
             ty: field.ty.clone(),
             stages,
             member,
         }),
-        FieldType::CombinedImageSampler(value) => Field::Descriptor(Descriptor {
+        FieldAttribute::CombinedImageSampler(value) => Field::Descriptor(Descriptor {
             ty: DescriptorType::CombinedImageSampler(value),
             stages,
             member,
         }),
-        FieldType::AccelerationStructure(value) => Field::Descriptor(Descriptor {
+        FieldAttribute::AccelerationStructure(value) => Field::Descriptor(Descriptor {
             ty: DescriptorType::AccelerationStructure(value),
             stages,
             member,
         }),
-        FieldType::Buffer(value) => Field::Descriptor(Descriptor {
+        FieldAttribute::Buffer(value) => Field::Descriptor(Descriptor {
             ty: DescriptorType::Buffer(value),
             stages,
             member,
@@ -163,18 +163,10 @@ fn parse_field_attrs(field: &mut syn::Field, field_index: u32) -> Option<Field> 
     })
 }
 
-fn parse_input_field_type(attr: &syn::Attribute) -> Option<FieldType> {
-    fn some_err<T>(opt: Option<T>) -> Result<(), T> {
-        opt.map(Err).unwrap_or(Ok(()))
-    }
-
-    fn inner(attr: &syn::Attribute) -> Result<(), FieldType> {
-        some_err(parse_combined_image_sampler_attr(attr).map(FieldType::CombinedImageSampler))?;
-        some_err(parse_acceleration_structure_attr(attr).map(FieldType::AccelerationStructure))?;
-        some_err(parse_buffer_attr(attr).map(FieldType::Buffer))?;
-        some_err(parse_uniform_attr(attr).map(|_| FieldType::Uniform))?;
-        Ok(())
-    }
-
-    inner(attr).err()
+fn parse_input_field_attr(attr: &syn::Attribute) -> Option<FieldAttribute> {
+    on_first!(parse_combined_image_sampler_attr(attr).map(FieldAttribute::CombinedImageSampler));
+    on_first!(parse_acceleration_structure_attr(attr).map(FieldAttribute::AccelerationStructure));
+    on_first!(parse_buffer_attr(attr).map(FieldAttribute::Buffer));
+    on_first!(parse_uniform_attr(attr).map(|_| FieldAttribute::Uniform));
+    None
 }

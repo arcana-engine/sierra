@@ -71,7 +71,11 @@ pub use self::{
     view::*,
 };
 
-pub use sierra_proc::{descriptors, shader_repr};
+pub use sierra_proc::{descriptors, pipeline, shader_repr};
+
+/// Re-exporting bumpalo for code-gen.
+#[doc(hidden)]
+pub use bumpalo;
 
 /// Image size is defined to `u32` which is standard for graphics API of today.
 pub type ImageSize = u32;

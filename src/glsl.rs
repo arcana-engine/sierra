@@ -4,7 +4,7 @@ use {
 };
 
 /// Provides shader input
-pub trait ShaderInputDecl {
+pub trait ShaderInclude {
     fn glsl(stage: ShaderStage) -> String;
 
     fn include_glsl(stage: ShaderStage, code: &str) -> String {

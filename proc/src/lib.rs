@@ -1,6 +1,15 @@
 extern crate proc_macro;
 
+macro_rules! on_first {
+    ($e:expr) => {
+        if let Some(r) = $e {
+            return Some(r);
+        }
+    };
+}
+
 mod descriptors;
+mod pipeline;
 mod repr;
 mod stage;
 
@@ -18,6 +27,14 @@ pub fn shader_repr(
     item: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
     repr::shader_repr(attr, item).into()
+}
+
+#[proc_macro_attribute]
+pub fn pipeline(
+    attr: proc_macro::TokenStream,
+    item: proc_macro::TokenStream,
+) -> proc_macro::TokenStream {
+    pipeline::pipeline(attr, item).into()
 }
 
 fn find_unique<I>(iter: I, msg: &'static str) -> Option<I::Item>

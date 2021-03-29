@@ -191,29 +191,7 @@ pub(super) fn generate(input: &Input) -> TokenStream {
                 }
             }
 
-            fn new_cycle_elem(&self, device: &::sierra::Device) -> ::std::result::Result<#elem_ident, ::sierra::OutOfMemory> {
-                ::std::result::Result::Ok(#elem_ident {
-                    set: device.create_descriptor_set(::sierra::DescriptorSetInfo {
-                        layout: self.layout.clone(),
-                    })?,
-                    #new_cycle_elem_descriptors
-                    #new_cycle_elem_uniforms_buffer
-                })
-            }
-
-            fn get_updated(&self, fence: usize) -> &::sierra::DescriptorSet {
-                let elem = self.cycle.get(fence).expect("`fence` is out of bounds. call `update` with this `fence` value first");
-
-                #get_update_descriptor_assertions
-
-                &elem.set
-            }
-        }
-
-        impl ::sierra::DescriptorsInstance for #instance_ident {
-            type Input = #ident;
-
-            fn update<'a>(
+            pub fn update<'a>(
                 &'a mut self,
                 input: &#ident,
                 fence: usize,
@@ -232,61 +210,49 @@ pub(super) fn generate(input: &Input) -> TokenStream {
                 ::std::result::Result::Ok(())
             }
 
-            fn bind_graphics<'a>(
-                &'a self,
-                fence: usize,
-                layout: &'a ::sierra::PipelineLayout,
-                index: u32,
-                encoder: &mut ::sierra::EncoderCommon<'a>,
-            ) {
-                debug_assert_eq!(<usize as ::std::convert::TryFrom<u32>>::try_from(index).map(|index| &layout.info().sets[index]), Ok(&self.layout));
+            pub fn get_updated(&self, fence: usize) -> &::sierra::DescriptorSet {
+                let elem = self.cycle.get(fence).expect("`fence` is out of bounds. call `update` with this `fence` value first");
 
-                let set = self.get_updated(fence);
+                #get_update_descriptor_assertions
 
-                encoder.bind_graphics_descriptor_sets(
-                    layout,
-                    index,
-                    ::std::slice::from_ref(set),
-                    &[],
-                );
+                &elem.set
             }
 
-            fn bind_compute<'a>(
-                &'a self,
-                fence: usize,
-                layout: &'a ::sierra::PipelineLayout,
-                index: u32,
-                encoder: &mut ::sierra::EncoderCommon<'a>,
-            ) {
-                debug_assert_eq!(<usize as ::std::convert::TryFrom<u32>>::try_from(index).map(|index| &layout.info().sets[index]), Ok(&self.layout));
-
-                let set = self.get_updated(fence);
-
-                encoder.bind_compute_descriptor_sets(
-                    layout,
-                    index,
-                    ::std::slice::from_ref(set),
-                    &[],
-                );
+            pub fn raw_layout(&self) -> &::sierra::DescriptorSetLayout {
+                &self.layout
             }
 
-            fn bind_ray_tracing<'a>(
-                &'a self,
+            fn new_cycle_elem(&self, device: &::sierra::Device) -> ::std::result::Result<#elem_ident, ::sierra::OutOfMemory> {
+                ::std::result::Result::Ok(#elem_ident {
+                    set: device.create_descriptor_set(::sierra::DescriptorSetInfo {
+                        layout: self.layout.clone(),
+                    })?,
+                    #new_cycle_elem_descriptors
+                    #new_cycle_elem_uniforms_buffer
+                })
+            }
+        }
+
+        impl ::sierra::DescriptorsInstance for #instance_ident {
+            type Input = #ident;
+
+            fn update<'a>(
+                &'a mut self,
+                input: &#ident,
                 fence: usize,
-                layout: &'a ::sierra::PipelineLayout,
-                index: u32,
-                encoder: &mut ::sierra::EncoderCommon<'a>,
-            ) {
-                debug_assert_eq!(<usize as ::std::convert::TryFrom<u32>>::try_from(index).map(|index| &layout.info().sets[index]), Ok(&self.layout));
+                device: &::sierra::Device,
+                writes: &mut impl ::std::iter::Extend<::sierra::WriteDescriptorSet<'a>>,
+                encoder: &mut ::sierra::Encoder<'a>,
+            ) -> ::std::result::Result<(), ::sierra::OutOfMemory> {
+                self.update(input, fence, device, writes, encoder)
+            }
 
-                let set = self.get_updated(fence);
+            fn get_updated(&self, fence: usize) -> &::sierra::DescriptorSet {
+                self.get_updated(fence)
+            }
 
-                encoder.bind_ray_tracing_descriptor_sets(
-                    layout,
-                    index,
-                    ::std::slice::from_ref(set),
-                    &[],
-                );
+            fn raw_layout(&self) -> &::sierra::DescriptorSetLayout {
+                self.raw_layout()
             }
         }
     )
