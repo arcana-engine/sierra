@@ -4,6 +4,9 @@ version = "0.1.0"
 authors = ["Zakarum <zakarumych@ya.ru>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
+documentation = "https://docs.rs/sierra-proc/0.1.0"
+homepage = "https://github.com/zaq/sierra"
+repository = "https://github.com/zaq/sierra"
 readme = "../README.md"
 description = "Procedural macros for 'sierra' crate"
 
