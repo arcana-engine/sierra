@@ -11,7 +11,7 @@ proc-macro = true
 
 [features]
 # do not hide generated types in docs
-verbose = []
+verbose-docs = []
 
 [dependencies]
 proc-macro2 = "1.0"

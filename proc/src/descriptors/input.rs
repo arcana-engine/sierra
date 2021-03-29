@@ -72,8 +72,8 @@ fn generate_uniform_struct(input: &Input) -> TokenStream {
     let uniforms_ident = quote::format_ident!("{}Uniforms", ident);
     let vis = &input.item_struct.vis;
 
-    let doc_attr = if cfg!(feature = "verbose") {
-        TokenStream::new()
+    let doc_attr = if cfg!(feature = "verbose-docs") {
+        format!("#[doc = \"Combined uniforms for descriptors input [`{}`]\"]", ident).parse().unwrap()
     } else {
         quote::quote!(#[doc(hidden)])
     };

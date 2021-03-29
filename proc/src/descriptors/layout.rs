@@ -47,9 +47,15 @@ pub(super) fn generate(input: &Input) -> TokenStream {
     }
 
     let vis = &input.item_struct.vis;
+    let ident = &input.item_struct.ident;
 
-    let doc_attr = if cfg!(feature = "verbose") {
-        TokenStream::new()
+    let doc_attr = if cfg!(feature = "verbose-docs") {
+        format!(
+            "#[doc = \"[`sierra::DescriptorsLayout`] implementation for [`{}`]\"]",
+            ident
+        )
+        .parse()
+        .unwrap()
     } else {
         quote::quote!(#[doc(hidden)])
     };

@@ -163,8 +163,8 @@ pub(super) fn generate(input: &Input) -> TokenStream {
         )
     };
 
-    let doc_attr = if cfg!(feature = "verbose") {
-        TokenStream::new()
+    let doc_attr = if cfg!(feature = "verbose-docs") {
+        format!("#[doc = \"[`sierra::DescriptorsInstance`] implementation for [`{}`]\"]", ident).parse().unwrap()
     } else {
         quote::quote!(#[doc(hidden)])
     };

@@ -6,3 +6,4 @@ edition = "2018"
 
 [dependencies]
 sierra = { version = "0.1.0", path = ".." }
+sierra-proc = { version = "0.1.0", path = "../proc", features = ["verbose-docs"] }

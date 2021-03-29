@@ -114,8 +114,24 @@ pub fn generate_repr(input: &Input) -> TokenStream {
     let std140_ident = quote::format_ident!("{}ReprStd140", input.item_struct.ident);
     let std430_ident = quote::format_ident!("{}ReprStd430", input.item_struct.ident);
 
-    let doc_attr = if cfg!(feature = "verbose") {
-        TokenStream::new()
+    let doc_attr_140 = if cfg!(feature = "verbose-docs") {
+        format!(
+            "#[doc = \"Structure generated to represent [`{}`] in shader with std140 compatible layout\"]" ,
+            ident
+        )
+        .parse()
+        .unwrap()
+    } else {
+        quote::quote!(#[doc(hidden)])
+    };
+
+    let doc_attr_430 = if cfg!(feature = "verbose-docs") {
+        format!(
+            "#[doc = \"Structure generated to represent [`{}`] in shader with std430 compatible layout\"]",
+            ident
+        )
+        .parse()
+        .unwrap()
     } else {
         quote::quote!(#[doc(hidden)])
     };
@@ -123,7 +139,7 @@ pub fn generate_repr(input: &Input) -> TokenStream {
     quote::quote! {
         #[repr(C)]
         #[derive(Clone, Copy)]
-        #doc_attr
+        #doc_attr_140
         #vis struct #std140_ident {
             #fields_140
             pub end_pad: [u8; #pad_size_140],
@@ -144,7 +160,7 @@ pub fn generate_repr(input: &Input) -> TokenStream {
 
         #[repr(C)]
         #[derive(Clone, Copy)]
-        #doc_attr
+        #doc_attr_430
         #vis struct #std430_ident {
             #fields_430
             pub end_pad: [u8; #pad_size_430],
