@@ -48,10 +48,16 @@ pub(super) fn generate(input: &Input) -> TokenStream {
 
     let vis = &input.item_struct.vis;
 
+    let doc_attr = if cfg!(feature = "verbose") {
+        TokenStream::new()
+    } else {
+        quote::quote!(#[doc(hidden)])
+    };
+
     quote::quote!(
         #[derive(Clone, Debug)]
         #[repr(transparent)]
-        //#[doc(hidden)]
+        #doc_attr
         #vis struct #layout_ident {
             pub layout: ::sierra::DescriptorSetLayout
         }

@@ -72,10 +72,16 @@ fn generate_uniform_struct(input: &Input) -> TokenStream {
     let uniforms_ident = quote::format_ident!("{}Uniforms", ident);
     let vis = &input.item_struct.vis;
 
+    let doc_attr = if cfg!(feature = "verbose") {
+        TokenStream::new()
+    } else {
+        quote::quote!(#[doc(hidden)])
+    };
+
     quote::quote! {
         #[repr(C)]
         #[derive(Clone, Copy)]
-        //#[doc(hidden)]
+        #doc_attr
         #vis struct #uniforms_ident {
             #fields
             pub end_pad: [u8; #pad_size],

@@ -163,14 +163,20 @@ pub(super) fn generate(input: &Input) -> TokenStream {
         )
     };
 
+    let doc_attr = if cfg!(feature = "verbose") {
+        TokenStream::new()
+    } else {
+        quote::quote!(#[doc(hidden)])
+    };
+
     quote::quote!(
-        //#[doc(hidden)]
+        #doc_attr
         #vis struct #instance_ident {
             pub layout: ::sierra::DescriptorSetLayout,
             pub cycle: ::std::vec::Vec<#elem_ident>,
         }
 
-        //#[doc(hidden)]
+        #doc_attr
         #vis struct #elem_ident {
             pub set: ::sierra::DescriptorSet,
             #descriptors

@@ -114,10 +114,16 @@ pub fn generate_repr(input: &Input) -> TokenStream {
     let std140_ident = quote::format_ident!("{}ReprStd140", input.item_struct.ident);
     let std430_ident = quote::format_ident!("{}ReprStd430", input.item_struct.ident);
 
+    let doc_attr = if cfg!(feature = "verbose") {
+        TokenStream::new()
+    } else {
+        quote::quote!(#[doc(hidden)])
+    };
+
     quote::quote! {
         #[repr(C)]
         #[derive(Clone, Copy)]
-        //#[doc(hidden)]
+        #doc_attr
         #vis struct #std140_ident {
             #fields_140
             pub end_pad: [u8; #pad_size_140],
@@ -138,7 +144,7 @@ pub fn generate_repr(input: &Input) -> TokenStream {
 
         #[repr(C)]
         #[derive(Clone, Copy)]
-        //#[doc(hidden)]
+        #doc_attr
         #vis struct #std430_ident {
             #fields_430
             pub end_pad: [u8; #pad_size_430],
