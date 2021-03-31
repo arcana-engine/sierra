@@ -100,16 +100,22 @@ impl Queue {
         Ok(Encoder::new(cbuf, self.capabilities))
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip(cbufs))]
     pub fn submit(
         &mut self,
         wait: &[(PipelineStageFlags, Semaphore)],
-        cbuf: CommandBuffer,
+        cbufs: impl IntoIterator<Item = CommandBuffer>,
         signal: &[Semaphore],
         fence: Option<&Fence>,
     ) {
-        assert_owner!(cbuf, self.device);
-        assert_eq!(self.id, cbuf.queue());
+        let cbufs: SmallVec<[_; 8]> = cbufs
+            .into_iter()
+            .map(|cbuf| {
+                assert_owner!(cbuf, self.device);
+                assert_eq!(self.id, cbuf.queue());
+                cbuf.handle()
+            })
+            .collect();
 
         for (_, semaphore) in wait {
             assert_owner!(semaphore, self.device);
@@ -122,8 +128,6 @@ impl Queue {
         if let Some(fence) = fence {
             assert_owner!(fence, self.device);
         }
-
-        let cbuf = cbuf.handle();
 
         // FIXME: Check semaphore states.
         let (wait_stages, wait_semaphores): (SmallVec<[_; 8]>, SmallVec<[_; 8]>) = wait
@@ -142,7 +146,7 @@ impl Queue {
                         .wait_semaphores(&wait_semaphores)
                         .wait_dst_stage_mask(&wait_stages)
                         .signal_semaphores(&signal_semaphores)
-                        .command_buffers(&[cbuf])],
+                        .command_buffers(&cbufs)],
                     fence.map(|f| f.handle()),
                 )
                 .expect("TODO: Handle queue submit error")
@@ -150,8 +154,8 @@ impl Queue {
     }
 
     #[tracing::instrument]
-    pub fn submit_no_semaphores(&mut self, buffer: CommandBuffer, fence: Option<&Fence>) {
-        self.submit(&[], buffer, &[], fence);
+    pub fn submit_one(&mut self, buffer: CommandBuffer, fence: Option<&Fence>) {
+        self.submit(&[], Some(buffer), &[], fence);
     }
 
     #[tracing::instrument]

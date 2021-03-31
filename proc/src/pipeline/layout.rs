@@ -1,4 +1,4 @@
-use {super::parse::Input, proc_macro2::TokenStream};
+use {super::parse::Input, proc_macro2::TokenStream, std::convert::TryFrom};
 
 pub(super) fn layout_type_name(input: &Input) -> syn::Ident {
     quote::format_ident!("{}Layout", input.item_struct.ident)
@@ -53,6 +53,21 @@ pub(super) fn generate(input: &Input) -> TokenStream {
         })
         .collect::<Vec<_>>();
 
+    let pipeline_descriptors = input
+        .sets
+        .iter()
+        .enumerate()
+        .map(|(index, set)| {
+            let ty = &set.ty;
+            let index = u32::try_from(index).expect("Too many sets");
+            quote::quote!(
+                impl ::sierra::UpdatedPipelineDescriptors<#layout_ident> for <<#ty as ::sierra::DescriptorsInput>::Instance as ::sierra::DescriptorsInstance>::Updated {
+                    const N: u32 = #index;
+                }
+            )
+        })
+        .collect::<TokenStream>();
+
     let vis = &input.item_struct.vis;
     let ident = &input.item_struct.ident;
 
@@ -93,6 +108,42 @@ pub(super) fn generate(input: &Input) -> TokenStream {
             pub fn raw(&self) -> &::sierra::PipelineLayout {
                 &self.pipeline_layout
             }
+
+            pub fn bind_graphics<'a, D>(&'a self, updated_descriptors: &'a D, encoder: &mut ::sierra::EncoderCommon<'a>)
+            where
+                D: ::sierra::UpdatedPipelineDescriptors<Self>,
+            {
+                encoder.bind_graphics_descriptor_sets(
+                    &self.pipeline_layout,
+                    D::N,
+                    ::std::slice::from_ref(::sierra::UpdatedDescriptors::raw(updated_descriptors)),
+                    &[],
+                )
+            }
+
+            pub fn bind_compute<'a, D>(&'a self, updated_descriptors: &'a D, encoder: &mut ::sierra::EncoderCommon<'a>)
+            where
+                D: ::sierra::UpdatedPipelineDescriptors<Self>,
+            {
+                encoder.bind_compute_descriptor_sets(
+                    &self.pipeline_layout,
+                    D::N,
+                    ::std::slice::from_ref(::sierra::UpdatedDescriptors::raw(updated_descriptors)),
+                    &[],
+                )
+            }
+
+            pub fn bind_ray_tracing<'a, D>(&'a self, updated_descriptors: &'a D, encoder: &mut ::sierra::EncoderCommon<'a>)
+            where
+                D: ::sierra::UpdatedPipelineDescriptors<Self>,
+            {
+                encoder.bind_ray_tracing_descriptor_sets(
+                    &self.pipeline_layout,
+                    D::N,
+                    ::std::slice::from_ref(::sierra::UpdatedDescriptors::raw(updated_descriptors)),
+                    &[],
+                )
+            }
         }
 
         impl ::sierra::TypedPipelineLayout for #layout_ident {
@@ -103,7 +154,30 @@ pub(super) fn generate(input: &Input) -> TokenStream {
             fn raw(&self) -> &::sierra::PipelineLayout {
                 self.raw()
             }
+
+            fn bind_graphics<'a, D>(&'a self, updated_descriptors: &'a D, encoder: &mut ::sierra::EncoderCommon<'a>)
+            where
+                D: ::sierra::UpdatedPipelineDescriptors<Self>,
+            {
+                self.bind_graphics(updated_descriptors, encoder);
+            }
+
+            fn bind_compute<'a, D>(&'a self, updated_descriptors: &'a D, encoder: &mut ::sierra::EncoderCommon<'a>)
+            where
+                D: ::sierra::UpdatedPipelineDescriptors<Self>,
+            {
+                self.bind_compute(updated_descriptors, encoder);
+            }
+
+            fn bind_ray_tracing<'a, D>(&'a self, updated_descriptors: &'a D, encoder: &mut ::sierra::EncoderCommon<'a>)
+            where
+                D: ::sierra::UpdatedPipelineDescriptors<Self>,
+            {
+                self.bind_ray_tracing(updated_descriptors, encoder);
+            }
         }
+
+        #pipeline_descriptors
 
     )
     .into()

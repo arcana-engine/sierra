@@ -65,7 +65,7 @@ pub struct Object {
 
 /// Pipeline definition
 #[sierra::pipeline]
-pub struct PBR {
+pub struct Pipeline {
     #[set]
     globals: Globals,
 
@@ -79,30 +79,79 @@ pub fn example(
     fence: usize,
     globals: &Globals,
     objects: &mut Vec<(&Object, Option<ObjectInstance>)>,
+    render_pass: &::sierra::RenderPass,
+    framebuffer: &::sierra::Framebuffer,
+    clears: &[::sierra::ClearValue],
+    mut graphics_pipeline: ::sierra::GraphicsPipelineInfo,
+    bump: &bumpalo::Bump,
 ) -> Result<(), sierra::OutOfMemory> {
-    let mut encoder = queue.create_encoder()?;
-
     // Create pipeline layout
-    let pbr = PBR::layout(device)?;
+    let pbr = Pipeline::layout(device)?;
 
-    // Create instances
+    // Finish creating graphics pipeline
+    graphics_pipeline.layout = pbr.raw().clone();
+    graphics_pipeline.render_pass = render_pass.clone();
+    let graphics_pipeline = device.create_graphics_pipeline(graphics_pipeline)?;
+
+    // Create globals instance
     let mut globals_instance = pbr.globals.instance();
 
-    // Then on each frame do the rest.
-    let mut writes = Vec::new();
-    globals_instance.update(globals, fence, device, &mut writes, &mut encoder)?;
+    // The following should be repeated each frame.
 
-    for (object, object_instance) in objects.iter_mut() {
-        let object_instance = match object_instance {
-            Some(object_instance) => object_instance,
+    // Make vector to store descriptor writes.
+    let mut writes = bumpalo::collections::Vec::new_in(bump);
+
+    // Create encoder to encode commands before render pass.
+    let mut encoder = queue.create_encoder()?;
+
+    // Update globals.
+    // This may extend descriptors writes and record some commands.
+    let globals = globals_instance.update(globals, fence, device, &mut writes, &mut encoder)?;
+
+    // Begin render pass encoding in parallel.
+    let mut render_pass_encoder = queue.create_encoder()?;
+    let mut render_pass = render_pass_encoder.with_render_pass(render_pass, framebuffer, clears);
+
+    // Don't forget to bind graphics pipeline.
+    render_pass.bind_graphics_pipeline(&graphics_pipeline);
+
+    // Bind globals to graphics pipeline
+    pbr.bind_graphics(globals, &mut render_pass);
+
+    for (object, instance) in objects.iter_mut() {
+        // Ensure object descriptors instance is attached to each object
+        let instance = match instance {
+            Some(instance) => instance,
             slot => slot.get_or_insert(pbr.object.instance()),
         };
-        object_instance.update(object, fence, device, &mut writes, &mut encoder)?;
+
+        // Update object descriptors
+        let object = instance.update(object, fence, device, &mut writes, &mut encoder)?;
+
+        // Bind object descriptors to graphics pipeline.
+        pbr.bind_graphics(object, &mut render_pass);
+
+        // Currently vertices and instances binding is not covered by sierra's code-gen.
+        // Here's dummy values.
+        let vertices = 0..0;
+        let instances = 0..0;
+
+        render_pass.draw(vertices, instances);
     }
 
+    // Render pass recording ends here.
+    drop(render_pass);
+
+    // Ensure to flush descriptors writes before submitting commands.
     device.update_descriptor_sets(&writes, &[]);
 
-    // Do draws here
+    // Submit commands.
+    queue.submit(
+        &[],
+        std::array::IntoIter::new([encoder.finish(), render_pass_encoder.finish()]),
+        &[],
+        None,
+    );
 
     Ok(())
 }

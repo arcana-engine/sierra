@@ -201,8 +201,13 @@ pub trait DescriptorsLayout {
     fn instance(&self) -> Self::Instance;
 }
 
+pub trait UpdatedDescriptors {
+    fn raw(&self) -> &DescriptorSet;
+}
+
 pub trait DescriptorsInstance {
     type Input;
+    type Updated: UpdatedDescriptors;
 
     fn update<'a>(
         &'a mut self,
@@ -211,62 +216,9 @@ pub trait DescriptorsInstance {
         device: &Device,
         writes: &mut impl Extend<WriteDescriptorSet<'a>>,
         encoder: &mut Encoder<'a>,
-    ) -> Result<(), OutOfMemory>;
-
-    fn get_updated(&self, fence: usize) -> &DescriptorSet;
+    ) -> Result<&'a Self::Updated, OutOfMemory>;
 
     fn raw_layout(&self) -> &DescriptorSetLayout;
-
-    fn bind_graphics<'a>(
-        &'a self,
-        fence: usize,
-        layout: &'a PipelineLayout,
-        index: u32,
-        encoder: &mut EncoderCommon<'a>,
-    ) {
-        debug_assert_eq!(
-            usize::try_from(index).map(|index| &layout.info().sets[index]),
-            Ok(self.raw_layout())
-        );
-
-        let set = self.get_updated(fence);
-
-        encoder.bind_graphics_descriptor_sets(layout, index, ::std::slice::from_ref(set), &[]);
-    }
-
-    fn bind_compute<'a>(
-        &'a self,
-        fence: usize,
-        layout: &'a PipelineLayout,
-        index: u32,
-        encoder: &mut EncoderCommon<'a>,
-    ) {
-        debug_assert_eq!(
-            usize::try_from(index).map(|index| &layout.info().sets[index]),
-            Ok(self.raw_layout())
-        );
-
-        let set = self.get_updated(fence);
-
-        encoder.bind_compute_descriptor_sets(layout, index, ::std::slice::from_ref(set), &[]);
-    }
-
-    fn bind_ray_tracing<'a>(
-        &'a self,
-        fence: usize,
-        layout: &'a PipelineLayout,
-        index: u32,
-        encoder: &mut EncoderCommon<'a>,
-    ) {
-        debug_assert_eq!(
-            usize::try_from(index).map(|index| &layout.info().sets[index]),
-            Ok(self.raw_layout())
-        );
-
-        let set = self.get_updated(fence);
-
-        encoder.bind_ray_tracing_descriptor_sets(layout, index, ::std::slice::from_ref(set), &[]);
-    }
 }
 
 pub trait DescriptorsInput {
@@ -276,4 +228,8 @@ pub trait DescriptorsInput {
     fn layout(device: &Device) -> Result<Self::Layout, OutOfMemory> {
         Self::Layout::new(device)
     }
+}
+
+pub trait UpdatedPipelineDescriptors<P: ?Sized>: UpdatedDescriptors {
+    const N: u32;
 }

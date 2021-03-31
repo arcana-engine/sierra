@@ -31,7 +31,7 @@ ordered-float = "2.0"
 bytemuck = "1.4"
 erupt = { version = "0.17", optional = true, features = ["loading"] }
 gpu-alloc-erupt = { version = "0.3", optional = true }
-gpu-alloc = { version = "0.3", optional = true }
+gpu-alloc = { version = "0.4.1", optional = true, features = ["freelist"] }
 slab = "0.4"
 libloading = "0.7"
 lazy_static = "1.4"

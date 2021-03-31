@@ -6,7 +6,7 @@ pub use {
     self::{compute::*, graphics::*, ray_tracing::*},
     crate::{
         backend::PipelineLayout,
-        descriptor::WriteDescriptorSet,
+        descriptor::{UpdatedDescriptors, UpdatedPipelineDescriptors, WriteDescriptorSet},
         encode::{Encoder, EncoderCommon},
     },
 };
@@ -35,14 +35,21 @@ pub trait TypedPipelineLayout {
         Self: Sized;
 
     fn raw(&self) -> &PipelineLayout;
-}
 
-pub trait PipelineInstance<'a> {
-    fn bind_graphics(&'a self, fence: usize, encoder: &mut EncoderCommon<'a>);
+    fn bind_graphics<'a, D>(&'a self, updated_descriptors: &'a D, encoder: &mut EncoderCommon<'a>)
+    where
+        D: UpdatedPipelineDescriptors<Self>;
 
-    fn bind_compute(&'a self, fence: usize, encoder: &mut EncoderCommon<'a>);
+    fn bind_compute<'a, D>(&'a self, updated_descriptors: &'a D, encoder: &mut EncoderCommon<'a>)
+    where
+        D: UpdatedPipelineDescriptors<Self>;
 
-    fn bind_ray_tracing(&'a self, fence: usize, encoder: &mut EncoderCommon<'a>);
+    fn bind_ray_tracing<'a, D>(
+        &'a self,
+        updated_descriptors: &'a D,
+        encoder: &mut EncoderCommon<'a>,
+    ) where
+        D: UpdatedPipelineDescriptors<Self>;
 }
 
 pub trait PipelineInput {
