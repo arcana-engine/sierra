@@ -2,21 +2,18 @@ mod layout;
 
 pub use {self::layout::*, crate::backend::DescriptorSet};
 
-use {
-    crate::{
-        accel::AccelerationStructure,
-        backend::{Device, PipelineLayout},
-        buffer::BufferRegion,
-        encode::{Encoder, EncoderCommon},
-        image::Image,
-        image::Layout,
-        image::{ImageExtent, ImageSubresourceRange},
-        sampler::Sampler,
-        view::ImageView,
-        view::ImageViewKind,
-        OutOfMemory,
-    },
-    std::convert::TryFrom,
+use crate::{
+    accel::AccelerationStructure,
+    backend::Device,
+    buffer::BufferRegion,
+    encode::Encoder,
+    image::Image,
+    image::Layout,
+    image::{ImageExtent, ImageSubresourceRange},
+    sampler::Sampler,
+    view::ImageView,
+    view::ImageViewKind,
+    OutOfMemory,
 };
 
 /// Contains information required to create `DescriptorSet` instance.

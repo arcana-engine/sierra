@@ -1,4 +1,4 @@
-use crate::find_unique;
+use crate::find_unique_attribute;
 
 pub struct Input {
     pub item_struct: syn::ItemStruct,
@@ -10,8 +10,13 @@ pub struct Set {
     pub ty: syn::Type,
 }
 
-pub fn parse(attr: proc_macro::TokenStream, item: proc_macro::TokenStream) -> Input {
-    assert!(attr.is_empty());
+pub fn parse(attr: proc_macro::TokenStream, item: proc_macro::TokenStream) -> syn::Result<Input> {
+    if !attr.is_empty() {
+        return Err(syn::Error::new_spanned(
+            proc_macro2::TokenStream::from(attr),
+            "#[pipeline] attribute does not accept arguments",
+        ));
+    }
 
     let mut item_struct =
         syn::parse::<syn::ItemStruct>(item).expect("`#[pipeline]` can be applied only to structs");
@@ -19,64 +24,51 @@ pub fn parse(attr: proc_macro::TokenStream, item: proc_macro::TokenStream) -> In
     let mut sets = Vec::new();
 
     for field in item_struct.fields.iter_mut() {
-        match parse_field_attrs(field) {
+        match parse_set_field(field)? {
             None => {}
-            Some(Field::Set(set)) => sets.push(set),
+            Some(set) => sets.push(set),
         }
     }
 
-    Input { item_struct, sets }
+    Ok(Input { item_struct, sets })
 }
 
-enum Field {
-    Set(Set),
-}
-
-enum FieldAttribute {
-    Set,
-}
-
-fn parse_field_attrs(field: &mut syn::Field) -> Option<Field> {
-    let (attr, index) = find_unique(
-        field
-            .attrs
-            .iter()
-            .enumerate()
-            .filter_map(|(index, attr)| parse_input_field_attr(attr).map(|attr| (attr, index))),
+fn parse_set_field(field: &mut syn::Field) -> syn::Result<Option<Set>> {
+    let attr = find_unique_attribute(
+        &mut field.attrs,
+        parse_set_attr,
         "At most one `set` attribute",
     )?;
 
-    field.attrs.swap_remove(index);
+    if let Some(SetAttribute) = attr {
+        let ident = field
+            .ident
+            .clone()
+            .expect("Only named struct are supported");
 
-    let ident = field
-        .ident
-        .clone()
-        .expect("Only named struct are supported");
-
-    Some(match attr {
-        FieldAttribute::Set => Field::Set(Set {
+        Ok(Some(Set {
             ident,
             ty: field.ty.clone(),
-        }),
-    })
-}
-
-fn parse_input_field_attr(attr: &syn::Attribute) -> Option<FieldAttribute> {
-    on_first!(parse_set_attr(attr).map(|SetAttribute| FieldAttribute::Set));
-    None
+        }))
+    } else {
+        Ok(None)
+    }
 }
 
 struct SetAttribute;
 
-fn parse_set_attr(attr: &syn::Attribute) -> Option<SetAttribute> {
-    if attr.path.get_ident().map_or(true, |i| i != "set") {
-        return None;
+fn parse_set_attr(attr: &syn::Attribute) -> syn::Result<Option<SetAttribute>> {
+    match attr.path.get_ident() {
+        Some(ident) if ident == "set" => {
+            if attr.tokens.is_empty() {
+                Ok(Some(SetAttribute))
+            } else {
+                Err(syn::Error::new_spanned(
+                    attr,
+                    "`set` attribute does not accept arguments",
+                ))
+            }
+        }
+        _ => Ok(None),
     }
-
-    assert!(
-        attr.tokens.is_empty(),
-        "`set` attribute does not support any arguments"
-    );
-
-    Some(SetAttribute)
 }

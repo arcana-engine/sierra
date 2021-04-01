@@ -5,7 +5,7 @@ use {
         combined_image_sampler::{parse_combined_image_sampler_attr, CombinedImageSampler},
         uniform::parse_uniform_attr,
     },
-    crate::{find_unique, stage::Stage},
+    crate::{find_unique_attribute, stage::Stage, take_attributes},
     std::convert::TryFrom as _,
     syn::spanned::Spanned as _,
 };
@@ -34,7 +34,7 @@ pub enum DescriptorType {
     Buffer(Buffer),
 }
 
-pub fn parse(attr: proc_macro::TokenStream, item: proc_macro::TokenStream) -> Input {
+pub fn parse(attr: proc_macro::TokenStream, item: proc_macro::TokenStream) -> syn::Result<Input> {
     assert!(attr.is_empty());
 
     let mut item_struct = syn::parse::<syn::ItemStruct>(item)
@@ -44,18 +44,25 @@ pub fn parse(attr: proc_macro::TokenStream, item: proc_macro::TokenStream) -> In
     let mut descriptors = Vec::new();
 
     for (index, field) in item_struct.fields.iter_mut().enumerate() {
-        match parse_input_field(field, u32::try_from(index).unwrap()) {
+        let index = match u32::try_from(index) {
+            Ok(index) => index,
+            Err(_) => {
+                return Err(syn::Error::new_spanned(field, "Too many fields"));
+            }
+        };
+
+        match parse_input_field(field, index)? {
             None => {}
             Some(Field::Descriptor(descriptor)) => descriptors.push(descriptor),
             Some(Field::Uniform(uniform)) => uniforms.push(uniform),
         }
     }
 
-    Input {
+    Ok(Input {
         item_struct,
         descriptors,
         uniforms,
-    }
+    })
 }
 
 enum FieldAttribute {
@@ -70,28 +77,21 @@ enum Field {
     Descriptor(Descriptor),
 }
 
-fn parse_input_field(field: &mut syn::Field, field_index: u32) -> Option<Field> {
-    let (ty, index) = find_unique(
-        field.attrs.iter().enumerate().filter_map(|(index, attr)| {
-            let ty = parse_input_field_attr(attr)?;
-            Some((ty, index))
-        }),
+fn parse_input_field(field: &mut syn::Field, field_index: u32) -> syn::Result<Option<Field>> {
+    let ty = find_unique_attribute(
+        &mut field.attrs,
+        parse_input_field_attr,
         "At most one shader input type for field must be specified",
     )?;
-    field.attrs.swap_remove(index);
 
-    let stages = find_unique(
-        field.attrs.iter().enumerate().filter_map(|(index, attr)| {
-            let ident = attr.path.get_ident()?;
-            if ident != "stages" {
-                None
-            } else {
-                Some((
-                    index,
-                    attr.parse_args_with(|stream: syn::parse::ParseStream<'_>| {
-                        let stages = stream
-                            .parse_terminated::<_, syn::Token![,]>(|stream| {
-                                match stream.parse::<syn::Ident>()? {
+    match ty {
+        Some(ty) => {
+            let stages: Vec<_> =
+                take_attributes(&mut field.attrs, |attr| match attr.path.get_ident() {
+                    Some(ident) if ident == "stages" => attr
+                        .parse_args_with(|stream: syn::parse::ParseStream<'_>| {
+                            let stages = stream.parse_terminated::<_, syn::Token![,]>(
+                                |stream| match stream.parse::<syn::Ident>()? {
                                     i if i == "Vertex" => Ok(Stage::Vertex),
                                     i if i == "TessellationControl" => {
                                         Ok(Stage::TessellationControl)
@@ -108,65 +108,58 @@ fn parse_input_field(field: &mut syn::Field, field_index: u32) -> Option<Field> 
                                     i if i == "Miss" => Ok(Stage::Miss),
                                     i if i == "Intersection" => Ok(Stage::Intersection),
                                     i => Err(stream.error(format!("Unrecognized stage `{}`", i))),
-                                }
-                            })?
-                            .into_iter()
-                            .collect::<Vec<_>>();
-                        Ok(stages)
-                    })
-                    .expect("Failed to parse `stages` arg"),
-                ))
-            }
-        }),
-        "Expected at most one `stages` attribute",
-    );
+                                },
+                            )?;
+                            Ok(stages)
+                        })
+                        .map(Some),
+                    _ => Ok(None),
+                })?
+                .into_iter()
+                .flatten()
+                .collect();
 
-    let stages = match stages {
-        Some((index, stages)) => {
-            field.attrs.swap_remove(index);
-            stages
+            let member = match field.ident.as_ref() {
+                None => syn::Member::Unnamed(syn::Index {
+                    index: field_index,
+                    span: field.span(),
+                }),
+                Some(field_ident) => syn::Member::Named(field_ident.clone()),
+            };
+
+            Ok(Some(match ty {
+                FieldAttribute::Uniform => Field::Uniform(Uniform {
+                    ty: field.ty.clone(),
+                    stages,
+                    member,
+                }),
+                FieldAttribute::CombinedImageSampler(value) => Field::Descriptor(Descriptor {
+                    ty: DescriptorType::CombinedImageSampler(value),
+                    stages,
+                    member,
+                }),
+                FieldAttribute::AccelerationStructure(value) => Field::Descriptor(Descriptor {
+                    ty: DescriptorType::AccelerationStructure(value),
+                    stages,
+                    member,
+                }),
+                FieldAttribute::Buffer(value) => Field::Descriptor(Descriptor {
+                    ty: DescriptorType::Buffer(value),
+                    stages,
+                    member,
+                }),
+            }))
         }
-        _ => {
-            vec![]
-        }
-    };
-
-    let member = match field.ident.as_ref() {
-        None => syn::Member::Unnamed(syn::Index {
-            index: field_index,
-            span: field.span(),
-        }),
-        Some(field_ident) => syn::Member::Named(field_ident.clone()),
-    };
-
-    Some(match ty {
-        FieldAttribute::Uniform => Field::Uniform(Uniform {
-            ty: field.ty.clone(),
-            stages,
-            member,
-        }),
-        FieldAttribute::CombinedImageSampler(value) => Field::Descriptor(Descriptor {
-            ty: DescriptorType::CombinedImageSampler(value),
-            stages,
-            member,
-        }),
-        FieldAttribute::AccelerationStructure(value) => Field::Descriptor(Descriptor {
-            ty: DescriptorType::AccelerationStructure(value),
-            stages,
-            member,
-        }),
-        FieldAttribute::Buffer(value) => Field::Descriptor(Descriptor {
-            ty: DescriptorType::Buffer(value),
-            stages,
-            member,
-        }),
-    })
+        None => Ok(None),
+    }
 }
 
-fn parse_input_field_attr(attr: &syn::Attribute) -> Option<FieldAttribute> {
-    on_first!(parse_combined_image_sampler_attr(attr).map(FieldAttribute::CombinedImageSampler));
-    on_first!(parse_acceleration_structure_attr(attr).map(FieldAttribute::AccelerationStructure));
-    on_first!(parse_buffer_attr(attr).map(FieldAttribute::Buffer));
-    on_first!(parse_uniform_attr(attr).map(|_| FieldAttribute::Uniform));
-    None
+fn parse_input_field_attr(attr: &syn::Attribute) -> syn::Result<Option<FieldAttribute>> {
+    on_first_ok!(parse_combined_image_sampler_attr(attr)?.map(FieldAttribute::CombinedImageSampler));
+    on_first_ok!(
+        parse_acceleration_structure_attr(attr)?.map(FieldAttribute::AccelerationStructure)
+    );
+    on_first_ok!(parse_buffer_attr(attr)?.map(FieldAttribute::Buffer));
+    on_first_ok!(parse_uniform_attr(attr)?.map(|_| FieldAttribute::Uniform));
+    Ok(None)
 }

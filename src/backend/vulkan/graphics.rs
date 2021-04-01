@@ -284,6 +284,7 @@ impl Graphics {
         "Erupt"
     }
 
+    #[tracing::instrument]
     pub fn devices(&self) -> Result<Vec<PhysicalDevice>, EnumerateDeviceError> {
         tracing::trace!("Enumerating physical devices");
 
@@ -308,6 +309,7 @@ impl Graphics {
             .collect())
     }
 
+    #[tracing::instrument(skip(window), fields(?window = window.raw_window_handle()))]
     pub fn create_surface(
         &self,
         window: &impl HasRawWindowHandle,

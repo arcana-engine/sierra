@@ -5,27 +5,52 @@ use {
         repr::{ShaderRepr, Std140, Std430},
         vec::vec,
     },
-    bytemuck::Pod,
+    bytemuck::{Pod, Zeroable},
+    core::{
+        convert::TryFrom,
+        mem::{align_of, align_of_val, size_of, size_of_val},
+    },
 };
 
 /// Generic matrix type.
-#[repr(transparent)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[repr(transparent)]
 pub struct mat<T, const N: usize, const M: usize>(pub [vec<T, M>; N]);
 
-impl<T: Pod, const N: usize, const M: usize> From<[[T; M]; N]> for mat<T, N, M> {
-    fn from(v: [[T; M]; N]) -> Self {
-        let mut zeroed: [vec<T, M>; N] = unsafe {
-            // safe to init array of pods with zeros.
-            // required til `bytemuck` implements `Zeroed` for all arrays of pods.
-            core::mem::zeroed()
-        };
-        for i in 0..N {
-            zeroed[i] = vec(v[i]);
+// impl<T: Pod, const N: usize, const M: usize> From<[[T; M]; N]> for mat<T, N, M> {
+//     fn from(v: [[T; M]; N]) -> Self {
+//         bytemuck::cast(v)
+//     }
+// }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum WrongNumberOfElements {
+    NotEnoughElements,
+    TooManyElements,
+}
+
+impl<T: Pod, const N: usize, const M: usize> TryFrom<&[T]> for mat<T, N, M> {
+    type Error = WrongNumberOfElements;
+
+    fn try_from(v: &[T]) -> Result<Self, WrongNumberOfElements> {
+        debug_assert_eq!(align_of_val(v), align_of::<Self>());
+
+        let len = v.len();
+        if len < N * M {
+            debug_assert!(size_of_val(v) < size_of::<Self>());
+            Err(WrongNumberOfElements::NotEnoughElements)
+        } else if len > N * M {
+            debug_assert!(size_of_val(v) > size_of::<Self>());
+            Err(WrongNumberOfElements::TooManyElements)
+        } else {
+            debug_assert_eq!(size_of_val(v), size_of::<Self>());
+            Ok(bytemuck::cast_slice(v)[0])
         }
-        mat(zeroed)
     }
 }
+
+unsafe impl<T: Zeroable, const N: usize, const M: usize> Zeroable for mat<T, N, M> {}
+unsafe impl<T: Pod, const N: usize, const M: usize> Pod for mat<T, N, M> {}
 
 pub type mat2x2<T = f32> = mat<T, 2, 2>;
 pub type mat3x2<T = f32> = mat<T, 3, 2>;
@@ -137,6 +162,19 @@ macro_rules! impl_mats {
                 ShaderRepr::<Std430>::copy_to_repr(&self.0, repr)
             }
         }
+
+        impl<T: Pod> From<[[T; $m]; $n]> for mat<T, $n, $m> {
+            fn from(v: [[T; $m]; $n]) -> Self {
+                bytemuck::cast(v)
+            }
+        }
+
+        impl<T: Pod> From<[T; $m * $n]> for mat<T, $n, $m> {
+            fn from(v: [T; $m * $n]) -> Self {
+                bytemuck::cast(v)
+            }
+        }
+
     )*)*};
 }
 

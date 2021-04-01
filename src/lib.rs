@@ -71,7 +71,7 @@ pub use self::{
     view::*,
 };
 
-pub use sierra_proc::{descriptors, pipeline, shader_repr};
+pub use sierra_proc::{descriptors, pass, pipeline, shader_repr};
 
 /// Re-exporting bumpalo for code-gen.
 #[doc(hidden)]
@@ -150,7 +150,7 @@ impl Extent3d {
     }
 }
 
-/// Image offset is defiend to `i32` which is standard for graphics API today.
+/// Image offset is defined to `i32` which is standard for graphics API today.
 pub type ImageOffset = i32;
 
 /// Two dimensional offset.
@@ -230,7 +230,8 @@ fn merge_ordering(left: Ordering, right: Ordering) -> Option<Ordering> {
     match (left, right) {
         (Ordering::Equal, right) => Some(right),
         (left, Ordering::Equal) => Some(left),
-        (left, right) if left == right => Some(left),
+        (Ordering::Less, Ordering::Less) => Some(Ordering::Less),
+        (Ordering::Greater, Ordering::Greater) => Some(Ordering::Greater),
         _ => None,
     }
 }
@@ -305,7 +306,7 @@ pub enum CreateImageError {
         source: OutOfMemory,
     },
 
-    #[error("Combination paramters `{info:?}` is unsupported")]
+    #[error("Parameters combination `{info:?}` is unsupported")]
     Unsupported { info: ImageInfo },
 }
 

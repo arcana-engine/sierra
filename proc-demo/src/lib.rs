@@ -73,6 +73,17 @@ pub struct Pipeline {
     object: Object,
 }
 
+#[sierra::pass]
+#[subpass(color = target, depth = depth)]
+pub struct Main {
+    #[clear]
+    #[store]
+    target: sierra::Image,
+
+    #[clear]
+    depth: sierra::Format,
+}
+
 pub fn example(
     device: &sierra::Device,
     queue: &mut sierra::Queue,
@@ -86,15 +97,15 @@ pub fn example(
     bump: &bumpalo::Bump,
 ) -> Result<(), sierra::OutOfMemory> {
     // Create pipeline layout
-    let pbr = Pipeline::layout(device)?;
+    let pipeline_layout = Pipeline::layout(device)?;
 
     // Finish creating graphics pipeline
-    graphics_pipeline.layout = pbr.raw().clone();
+    graphics_pipeline.layout = pipeline_layout.raw().clone();
     graphics_pipeline.render_pass = render_pass.clone();
     let graphics_pipeline = device.create_graphics_pipeline(graphics_pipeline)?;
 
     // Create globals instance
-    let mut globals_instance = pbr.globals.instance();
+    let mut globals_instance = pipeline_layout.globals.instance();
 
     // The following should be repeated each frame.
 
@@ -116,20 +127,20 @@ pub fn example(
     render_pass.bind_graphics_pipeline(&graphics_pipeline);
 
     // Bind globals to graphics pipeline
-    pbr.bind_graphics(globals, &mut render_pass);
+    pipeline_layout.bind_graphics(globals, &mut render_pass);
 
     for (object, instance) in objects.iter_mut() {
         // Ensure object descriptors instance is attached to each object
         let instance = match instance {
             Some(instance) => instance,
-            slot => slot.get_or_insert(pbr.object.instance()),
+            slot => slot.get_or_insert(pipeline_layout.object.instance()),
         };
 
         // Update object descriptors
         let object = instance.update(object, fence, device, &mut writes, &mut encoder)?;
 
         // Bind object descriptors to graphics pipeline.
-        pbr.bind_graphics(object, &mut render_pass);
+        pipeline_layout.bind_graphics(object, &mut render_pass);
 
         // Currently vertices and instances binding is not covered by sierra's code-gen.
         // Here's dummy values.

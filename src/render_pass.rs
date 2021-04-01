@@ -4,6 +4,7 @@ use {
         format::Format,
         image::{Layout, Samples},
         stage::PipelineStageFlags,
+        Device, Extent2d,
     },
     smallvec::SmallVec,
 };
