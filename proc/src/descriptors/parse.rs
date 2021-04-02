@@ -22,10 +22,27 @@ pub struct Descriptor {
     pub member: syn::Member,
 }
 
+impl Descriptor {
+    fn validate(&self, item_struct: &syn::ItemStruct) -> syn::Result<()> {
+        match &self.ty {
+            DescriptorType::CombinedImageSampler(args) => args.validate(item_struct),
+            DescriptorType::AccelerationStructure(args) => args.validate(item_struct),
+            DescriptorType::Buffer(args) => args.validate(item_struct),
+        }
+    }
+}
+
 pub struct Uniform {
     pub stages: Vec<Stage>,
     pub ty: syn::Type,
     pub member: syn::Member,
+}
+
+impl Uniform {
+    #[inline]
+    fn validate(&self, _item_struct: &syn::ItemStruct) -> syn::Result<()> {
+        Ok(())
+    }
 }
 
 pub enum DescriptorType {
@@ -37,8 +54,7 @@ pub enum DescriptorType {
 pub fn parse(attr: proc_macro::TokenStream, item: proc_macro::TokenStream) -> syn::Result<Input> {
     assert!(attr.is_empty());
 
-    let mut item_struct = syn::parse::<syn::ItemStruct>(item)
-        .expect("`#[descriptors]` can be applied only to structs");
+    let mut item_struct = syn::parse::<syn::ItemStruct>(item)?;
 
     let mut uniforms = Vec::new();
     let mut descriptors = Vec::new();
@@ -53,9 +69,19 @@ pub fn parse(attr: proc_macro::TokenStream, item: proc_macro::TokenStream) -> sy
 
         match parse_input_field(field, index)? {
             None => {}
-            Some(Field::Descriptor(descriptor)) => descriptors.push(descriptor),
+            Some(Field::Descriptor(descriptor)) => {
+                descriptors.push(descriptor);
+            }
             Some(Field::Uniform(uniform)) => uniforms.push(uniform),
         }
+    }
+
+    for descriptor in &descriptors {
+        descriptor.validate(&item_struct)?;
+    }
+
+    for uniform in &uniforms {
+        uniform.validate(&item_struct)?;
     }
 
     Ok(Input {

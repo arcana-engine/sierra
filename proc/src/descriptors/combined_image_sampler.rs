@@ -1,6 +1,16 @@
-use crate::find_unique;
+use crate::{find_unique, validate_member};
+
 pub struct CombinedImageSampler {
     pub separate_sampler: Option<syn::Member>,
+}
+
+impl CombinedImageSampler {
+    pub fn validate(&self, item_struct: &syn::ItemStruct) -> syn::Result<()> {
+        match &self.separate_sampler {
+            None => Ok(()),
+            Some(member) => validate_member(member, item_struct),
+        }
+    }
 }
 
 enum AttributeArgument {

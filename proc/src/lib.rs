@@ -1,3 +1,5 @@
+use std::convert::TryFrom as _;
+
 extern crate proc_macro;
 
 macro_rules! on_first_ok {
@@ -98,30 +100,31 @@ fn find_unique_attribute<T>(
     }
 }
 
-fn get_unique_attribute<T>(
-    attrs: &mut Vec<syn::Attribute>,
-    mut f: impl FnMut(&syn::Attribute) -> syn::Result<Option<T>>,
-    msg: impl std::fmt::Display,
-) -> syn::Result<T> {
-    let mut found = None;
-    for (index, attr) in attrs.iter().enumerate() {
-        if let Some(v) = f(attr)? {
-            if found.is_none() {
-                found = Some((index, v));
-            } else {
-                return Err(syn::Error::new_spanned(attr, msg));
-            }
-        }
-    }
+// fn get_unique_attribute<T>(
+//     attrs: &mut Vec<syn::Attribute>,
+//     mut f: impl FnMut(&syn::Attribute) -> syn::Result<Option<T>>,
+//     spanned: &impl quote::ToTokens,
+//     msg: impl std::fmt::Display,
+// ) -> syn::Result<T> {
+//     let mut found = None;
+//     for (index, attr) in attrs.iter().enumerate() {
+//         if let Some(v) = f(attr)? {
+//             if found.is_none() {
+//                 found = Some((index, v));
+//             } else {
+//                 return Err(syn::Error::new_spanned(attr, msg));
+//             }
+//         }
+//     }
 
-    match found {
-        Some((i, v)) => {
-            attrs.remove(i);
-            Ok(v)
-        }
-        None => Err(syn::Error::new(proc_macro2::Span::call_site(), msg)),
-    }
-}
+//     match found {
+//         Some((i, v)) => {
+//             attrs.remove(i);
+//             Ok(v)
+//         }
+//         None => Err(syn::Error::new_spanned(spanned, msg)),
+//     }
+// }
 
 fn find_unique<I>(
     iter: I,
@@ -159,4 +162,46 @@ where
         }
     }
     Err(syn::Error::new_spanned(spanned, msg))
+}
+
+fn validate_member(member: &syn::Member, item_struct: &syn::ItemStruct) -> syn::Result<()> {
+    match (member, &item_struct.fields) {
+        (syn::Member::Named(member_ident), syn::Fields::Named(fields)) => {
+            for field in &fields.named {
+                let field_ident = field.ident.as_ref().unwrap();
+                if field_ident == member_ident {
+                    return Ok(());
+                }
+            }
+            Err(syn::Error::new_spanned(
+                member,
+                "Member not found in structure",
+            ))
+        }
+        (syn::Member::Unnamed(unnamed), syn::Fields::Unnamed(fields)) => {
+            let valid =
+                usize::try_from(unnamed.index).map_or(false, |index| index < fields.unnamed.len());
+
+            if !valid {
+                Err(syn::Error::new_spanned(
+                    member,
+                    "Member index is out of bounds",
+                ))
+            } else {
+                Ok(())
+            }
+        }
+        (syn::Member::Named(named), syn::Fields::Unnamed(_)) => Err(syn::Error::new_spanned(
+            named,
+            "Expected unnamed member for tuple-struct",
+        )),
+        (syn::Member::Unnamed(unnamed), syn::Fields::Named(_)) => Err(syn::Error::new_spanned(
+            unnamed,
+            "Expected named member for struct",
+        )),
+        (member, syn::Fields::Unit) => Err(syn::Error::new_spanned(
+            member,
+            "Unexpected member reference for unit-struct",
+        )),
+    }
 }

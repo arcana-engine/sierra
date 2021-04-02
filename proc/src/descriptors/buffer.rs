@@ -6,6 +6,13 @@ pub struct Buffer {
     pub ty: syn::Type,
 }
 
+impl Buffer {
+    #[inline]
+    pub fn validate(&self, _item_struct: &syn::ItemStruct) -> syn::Result<()> {
+        Ok(())
+    }
+}
+
 #[derive(Clone, Copy)]
 pub enum Kind {
     Storage,

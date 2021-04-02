@@ -1,6 +1,6 @@
 use {
-    crate::{find_unique_attribute, take_attributes},
-    std::convert::TryFrom as _,
+    crate::{find_unique_attribute, take_attributes, validate_member},
+    std::{collections::HashSet, convert::TryFrom as _},
     syn::spanned::Spanned as _,
 };
 
@@ -28,9 +28,41 @@ pub struct Attachment {
     pub store_op: StoreOp,
 }
 
+impl Attachment {
+    fn validate(&self, _item_struct: &syn::ItemStruct) -> syn::Result<()> {
+        Ok(())
+    }
+}
+
 pub struct Subpass {
     pub colors: Vec<syn::Member>,
     pub depth: Option<syn::Member>,
+}
+
+impl Subpass {
+    fn validate(&self, item_struct: &syn::ItemStruct) -> syn::Result<()> {
+        let mut unique = HashSet::with_capacity(self.colors.len() + self.depth.is_some() as usize);
+
+        for color in &self.colors {
+            validate_member(color, item_struct)?;
+            if !unique.insert(color) {
+                return Err(syn::Error::new_spanned(
+                    color,
+                    "Duplicate attachment references are not allowed",
+                ));
+            }
+        }
+        for depth in &self.depth {
+            validate_member(depth, item_struct)?;
+            if !unique.insert(depth) {
+                return Err(syn::Error::new_spanned(
+                    depth,
+                    "Duplicate attachment references are not allowed",
+                ));
+            }
+        }
+        Ok(())
+    }
 }
 
 pub fn parse(attr: proc_macro::TokenStream, item: proc_macro::TokenStream) -> syn::Result<Input> {
@@ -53,6 +85,14 @@ pub fn parse(attr: proc_macro::TokenStream, item: proc_macro::TokenStream) -> sy
 
     let subpasses = take_attributes(&mut item_struct.attrs, parse_subpass_attr)?;
 
+    for attachment in &attachments {
+        attachment.validate(&item_struct)?;
+    }
+
+    for subpass in &subpasses {
+        subpass.validate(&item_struct)?;
+    }
+
     Ok(Input {
         item_struct,
         attachments,
@@ -61,8 +101,19 @@ pub fn parse(attr: proc_macro::TokenStream, item: proc_macro::TokenStream) -> sy
 }
 
 enum SubpassArg {
-    Color { member: syn::Member },
-    Depth { member: syn::Member },
+    Color {
+        #[allow(dead_code)]
+        ident: syn::Ident,
+        #[allow(dead_code)]
+        assign: syn::Token![=],
+        member: syn::Member,
+    },
+    Depth {
+        ident: syn::Ident,
+        #[allow(dead_code)]
+        assign: syn::Token![=],
+        member: syn::Member,
+    },
 }
 
 fn parse_subpass_attr(attr: &syn::Attribute) -> syn::Result<Option<Subpass>> {
@@ -74,18 +125,27 @@ fn parse_subpass_attr(attr: &syn::Attribute) -> syn::Result<Option<Subpass>> {
     let args = attr
         .parse_args_with(|stream: syn::parse::ParseStream<'_>| {
             stream.parse_terminated::<_, syn::Token![,]>(|stream: syn::parse::ParseStream<'_>| {
-                match stream.parse::<syn::Ident>()? {
-                    i if i == "color" => {
-                        let _assign = stream.parse::<syn::Token![=]>()?;
+                let ident = stream.parse::<syn::Ident>()?;
+                match () {
+                    () if ident == "color" => {
+                        let assign = stream.parse::<syn::Token![=]>()?;
                         let member = stream.parse::<syn::Member>()?;
-                        Ok(SubpassArg::Color { member })
+                        Ok(SubpassArg::Color {
+                            ident,
+                            assign,
+                            member,
+                        })
                     }
-                    i if i == "depth" => {
-                        let _assign = stream.parse::<syn::Token![=]>()?;
+                    () if ident == "depth" => {
+                        let assign = stream.parse::<syn::Token![=]>()?;
                         let member = stream.parse::<syn::Member>()?;
-                        Ok(SubpassArg::Depth { member })
+                        Ok(SubpassArg::Depth {
+                            ident,
+                            assign,
+                            member,
+                        })
                     }
-                    ident => Err(stream.error(format!("Unrecognized subpass argument {}", ident))),
+                    () => Err(stream.error(format!("Unrecognized subpass argument {}", ident))),
                 }
             })
         })
@@ -96,11 +156,11 @@ fn parse_subpass_attr(attr: &syn::Attribute) -> syn::Result<Option<Subpass>> {
 
     for arg in args {
         match arg {
-            SubpassArg::Color { member } => colors.push(member),
-            SubpassArg::Depth { member } => {
+            SubpassArg::Color { member, .. } => colors.push(member),
+            SubpassArg::Depth { ident, member, .. } => {
                 if depth.is_some() {
                     return Err(syn::Error::new_spanned(
-                        attr,
+                        ident,
                         "At most one `depth` argument for `subpass` attribute can be specified",
                     ));
                 }

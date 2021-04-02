@@ -1,5 +1,12 @@
 pub struct AccelerationStructure;
 
+impl AccelerationStructure {
+    #[inline]
+    pub fn validate(&self, _item_struct: &syn::ItemStruct) -> syn::Result<()> {
+        Ok(())
+    }
+}
+
 pub(super) fn parse_acceleration_structure_attr(
     attr: &syn::Attribute,
 ) -> syn::Result<Option<AccelerationStructure>> {
