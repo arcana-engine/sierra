@@ -76,12 +76,12 @@ pub struct Pipeline {
 #[sierra::pass]
 #[subpass(color = target, depth = depth)]
 pub struct Main {
-    #[attachment(clear(bg), store(const Present))]
+    #[attachment(clear(bg), store(const sierra::Layout::Present))]
     target: sierra::Image,
 
     bg: sierra::ClearColor,
 
-    #[attachment(clear(const(0.0)))]
+    #[attachment(clear(const sierra::ClearDepth(0.0)))]
     depth: sierra::Format,
 }
 

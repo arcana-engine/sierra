@@ -195,12 +195,9 @@ pub(super) fn generate(input: &Input) -> TokenStream {
             LoadOp::Clear(ClearValue::Member(member)) => {
                 Some(quote::quote!(::std::convert::Into::into(input.#member),))
             }
-            LoadOp::Clear(ClearValue::Color(r, g, b, a)) => Some(quote::quote!(
-                ::sierra::ClearValue::Color(#r, #g, #b, #a),
-            )),
-            LoadOp::Clear(ClearValue::DepthStencil(d, s)) => Some(quote::quote!(
-                ::sierra::ClearValue::DepthStencil(#d, #s),
-            )),
+            LoadOp::Clear(ClearValue::Expr(expr)) => {
+                Some(quote::quote!(::std::convert::Into::into(#expr),))
+            }
             _ => None,
         })
         .collect::<TokenStream>();
@@ -337,8 +334,8 @@ fn initial_layout(load_op: &LoadOp) -> TokenStream {
     match load_op {
         LoadOp::Clear(_) => quote::quote!(::std::option::Option::None),
         LoadOp::DontCare => quote::quote!(::std::option::Option::None),
-        LoadOp::Load(Layout::Const(layout)) => {
-            quote::quote!(::std::option::Option::Some(::sierra::Layout::#layout))
+        LoadOp::Load(Layout::Expr(expr)) => {
+            quote::quote!(::std::option::Option::Some(::std::convert::Into::into(#expr)))
         }
         LoadOp::Load(Layout::Member(layout)) => {
             quote::quote!(::std::option::Option::Some(self.#layout))
@@ -349,7 +346,9 @@ fn initial_layout(load_op: &LoadOp) -> TokenStream {
 fn final_layout(store_op: &StoreOp) -> Option<TokenStream> {
     match store_op {
         StoreOp::DontCare => None,
-        StoreOp::Store(Layout::Const(layout)) => Some(quote::quote!(::sierra::Layout::#layout)),
+        StoreOp::Store(Layout::Expr(expr)) => {
+            Some(quote::quote!(::std::convert::Into::into(#expr)))
+        }
         StoreOp::Store(Layout::Member(layout)) => Some(quote::quote!(self.#layout)),
     }
 }

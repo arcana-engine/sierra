@@ -183,7 +183,7 @@ pub enum ClearValue {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct ClearColor(f32, f32, f32, f32);
+pub struct ClearColor(pub f32, pub f32, pub f32, pub f32);
 
 impl From<ClearColor> for ClearValue {
     fn from(ClearColor(r, g, b, a): ClearColor) -> Self {
@@ -192,7 +192,7 @@ impl From<ClearColor> for ClearValue {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct ClearDepth(f32);
+pub struct ClearDepth(pub f32);
 
 impl From<ClearDepth> for ClearValue {
     fn from(ClearDepth(d): ClearDepth) -> Self {
@@ -201,7 +201,7 @@ impl From<ClearDepth> for ClearValue {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct ClearStencil(u32);
+pub struct ClearStencil(pub u32);
 
 impl From<ClearStencil> for ClearValue {
     fn from(ClearStencil(s): ClearStencil) -> Self {
@@ -210,7 +210,7 @@ impl From<ClearStencil> for ClearValue {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct ClearDepthStencil(f32, u32);
+pub struct ClearDepthStencil(pub f32, pub u32);
 
 impl From<ClearDepthStencil> for ClearValue {
     fn from(ClearDepthStencil(d, s): ClearDepthStencil) -> Self {

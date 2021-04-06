@@ -12,14 +12,13 @@ pub struct Input {
 
 #[derive(Clone)]
 pub enum Layout {
-    Const(syn::Ident),
+    Expr(syn::Expr),
     Member(syn::Member),
 }
 
 #[derive(Clone)]
 pub enum ClearValue {
-    Color(f32, f32, f32, f32),
-    DepthStencil(f32, u32),
+    Expr(syn::Expr),
     Member(syn::Member),
 }
 
@@ -301,10 +300,8 @@ fn parse_attachment_attr(attr: &syn::Attribute) -> syn::Result<Option<Attachment
 
                         let value = if value.peek(syn::Token![const]) {
                             let _const = value.parse::<syn::Token![const]>()?;
-                            let constant;
-                            syn::parenthesized!(constant in value);
-
-                            parse_clear_value(&constant)?
+                            let expr = value.parse::<syn::Expr>()?;
+                            ClearValue::Expr(expr)
                         } else {
                             let member = value.parse::<syn::Member>()?;
                             ClearValue::Member(member)
@@ -313,37 +310,37 @@ fn parse_attachment_attr(attr: &syn::Attribute) -> syn::Result<Option<Attachment
                         Ok(AttachmentAttributeArgument::LoadOp(LoadOp::Clear(value)))
                     }
                     () if ident == "load" => {
-                        let layout;
-                        syn::parenthesized!(layout in stream);
+                        let value;
+                        syn::parenthesized!(value in stream);
 
-                        let layout = if layout.peek(syn::Token![const]) {
-                            let _const = layout.parse::<syn::Token![const]>()?;
-                            let layout = layout.parse::<syn::Ident>()?;
-                            Layout::Const(layout)
+                        let layout = if value.peek(syn::Token![const]) {
+                            let _const = value.parse::<syn::Token![const]>()?;
+                            let expr = value.parse::<syn::Expr>()?;
+                            Layout::Expr(expr)
                         } else {
-                            let member = layout.parse::<syn::Member>()?;
+                            let member = value.parse::<syn::Member>()?;
                             Layout::Member(member)
                         };
 
                         Ok(AttachmentAttributeArgument::LoadOp(LoadOp::Load(layout)))
                     }
                     () if ident == "store" => {
-                        let layout;
-                        syn::parenthesized!(layout in stream);
+                        let value;
+                        syn::parenthesized!(value in stream);
 
-                        let layout = if layout.peek(syn::Token![const]) {
-                            let _const = layout.parse::<syn::Token![const]>()?;
-                            let layout = layout.parse::<syn::Ident>()?;
-                            Layout::Const(layout)
+                        let layout = if value.peek(syn::Token![const]) {
+                            let _const = value.parse::<syn::Token![const]>()?;
+                            let expr = value.parse::<syn::Expr>()?;
+                            Layout::Expr(expr)
                         } else {
-                            let member = layout.parse::<syn::Member>()?;
+                            let member = value.parse::<syn::Member>()?;
                             Layout::Member(member)
                         };
 
                         Ok(AttachmentAttributeArgument::StoreOp(StoreOp::Store(layout)))
                     }
                     _ => Err(stream.error(format!(
-                        "Unexpected arguemnt `{}` for `attachment` attribute",
+                        "Unexpected argument `{}` for `attachment` attribute",
                         ident
                     ))),
                 }
@@ -377,34 +374,34 @@ fn parse_attachment_attr(attr: &syn::Attribute) -> syn::Result<Option<Attachment
     }
 }
 
-fn parse_clear_value(stream: ParseStream) -> syn::Result<ClearValue> {
-    if stream.fork().parse::<syn::LitInt>().is_ok() {
-        let s = stream.parse::<syn::LitInt>()?.base10_parse::<u32>()?;
-        Ok(ClearValue::DepthStencil(0.0, s))
-    } else {
-        let r_or_d = stream.parse::<syn::LitFloat>()?.base10_parse::<f32>()?;
-        if stream.peek(syn::Token![,]) {
-            stream.parse::<syn::Token![,]>()?;
-            if stream.is_empty() {
-                Ok(ClearValue::DepthStencil(r_or_d, 0))
-            } else if stream.fork().parse::<syn::LitInt>().is_ok() {
-                let s = stream.parse::<syn::LitInt>()?.base10_parse::<u32>()?;
-                Ok(ClearValue::DepthStencil(r_or_d, s))
-            } else {
-                let g = stream.parse::<syn::LitFloat>()?.base10_parse::<f32>()?;
-                stream.parse::<syn::Token![,]>()?;
-                let b = stream.parse::<syn::LitFloat>()?.base10_parse::<f32>()?;
-                stream.parse::<syn::Token![,]>()?;
-                let a = stream.parse::<syn::LitFloat>()?.base10_parse::<f32>()?;
+// fn parse_clear_value(stream: ParseStream) -> syn::Result<ClearValue> {
+//     if stream.fork().parse::<syn::LitInt>().is_ok() {
+//         let s = stream.parse::<syn::LitInt>()?.base10_parse::<u32>()?;
+//         Ok(ClearValue::DepthStencil(0.0, s))
+//     } else {
+//         let r_or_d = stream.parse::<syn::LitFloat>()?.base10_parse::<f32>()?;
+//         if stream.peek(syn::Token![,]) {
+//             stream.parse::<syn::Token![,]>()?;
+//             if stream.is_empty() {
+//                 Ok(ClearValue::DepthStencil(r_or_d, 0))
+//             } else if stream.fork().parse::<syn::LitInt>().is_ok() {
+//                 let s = stream.parse::<syn::LitInt>()?.base10_parse::<u32>()?;
+//                 Ok(ClearValue::DepthStencil(r_or_d, s))
+//             } else {
+//                 let g = stream.parse::<syn::LitFloat>()?.base10_parse::<f32>()?;
+//                 stream.parse::<syn::Token![,]>()?;
+//                 let b = stream.parse::<syn::LitFloat>()?.base10_parse::<f32>()?;
+//                 stream.parse::<syn::Token![,]>()?;
+//                 let a = stream.parse::<syn::LitFloat>()?.base10_parse::<f32>()?;
 
-                if stream.peek(syn::Token![,]) {
-                    stream.parse::<syn::Token![,]>()?;
-                }
+//                 if stream.peek(syn::Token![,]) {
+//                     stream.parse::<syn::Token![,]>()?;
+//                 }
 
-                Ok(ClearValue::Color(r_or_d, g, b, a))
-            }
-        } else {
-            Ok(ClearValue::DepthStencil(r_or_d, 0))
-        }
-    }
-}
+//                 Ok(ClearValue::Color(r_or_d, g, b, a))
+//             }
+//         } else {
+//             Ok(ClearValue::DepthStencil(r_or_d, 0))
+//         }
+//     }
+// }
