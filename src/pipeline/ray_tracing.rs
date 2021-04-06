@@ -1,5 +1,5 @@
 pub use crate::backend::RayTracingPipeline;
-use crate::{buffer::StridedBufferRegion, shader::Shader, PipelineLayout};
+use crate::{buffer::StridedBufferRange, shader::Shader, PipelineLayout};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct RayTracingPipelineInfo {
@@ -46,8 +46,8 @@ pub struct ShaderBindingTableInfo<'a> {
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ShaderBindingTable {
-    pub raygen: Option<StridedBufferRegion>,
-    pub miss: Option<StridedBufferRegion>,
-    pub hit: Option<StridedBufferRegion>,
-    pub callable: Option<StridedBufferRegion>,
+    pub raygen: Option<StridedBufferRange>,
+    pub miss: Option<StridedBufferRange>,
+    pub hit: Option<StridedBufferRange>,
+    pub callable: Option<StridedBufferRange>,
 }

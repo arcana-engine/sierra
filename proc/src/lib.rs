@@ -164,13 +164,14 @@ where
     Err(syn::Error::new_spanned(spanned, msg))
 }
 
-fn validate_member(member: &syn::Member, item_struct: &syn::ItemStruct) -> syn::Result<()> {
+fn validate_member(member: &syn::Member, item_struct: &syn::ItemStruct) -> syn::Result<u32> {
     match (member, &item_struct.fields) {
         (syn::Member::Named(member_ident), syn::Fields::Named(fields)) => {
-            for field in &fields.named {
+            for (index, field) in fields.named.iter().enumerate() {
                 let field_ident = field.ident.as_ref().unwrap();
                 if field_ident == member_ident {
-                    return Ok(());
+                    return u32::try_from(index)
+                        .map_err(|_| syn::Error::new_spanned(member, "Too many fields"));
                 }
             }
             Err(syn::Error::new_spanned(
@@ -181,14 +182,13 @@ fn validate_member(member: &syn::Member, item_struct: &syn::ItemStruct) -> syn::
         (syn::Member::Unnamed(unnamed), syn::Fields::Unnamed(fields)) => {
             let valid =
                 usize::try_from(unnamed.index).map_or(false, |index| index < fields.unnamed.len());
-
             if !valid {
                 Err(syn::Error::new_spanned(
                     member,
                     "Member index is out of bounds",
                 ))
             } else {
-                Ok(())
+                Ok(unnamed.index)
             }
         }
         (syn::Member::Named(named), syn::Fields::Unnamed(_)) => Err(syn::Error::new_spanned(

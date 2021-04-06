@@ -1,14 +1,13 @@
 use crate::{
     out_of_host_memory, AccelerationStructureBuildFlags, AccelerationStructureLevel, AccessFlags,
-    AspectFlags, AttachmentLoadOp, AttachmentStoreOp, BlendFactor, BlendOp, BorderColor,
-    BufferCopy, BufferImageCopy, BufferUsage, CompareOp, ComponentMask, Culling,
-    DescriptorBindingFlags, DescriptorSetLayoutFlags, DescriptorType, DeviceAddress, Extent2d,
-    Extent3d, Filter, Format, FrontFace, GeometryFlags, ImageBlit, ImageCopy, ImageExtent,
-    ImageSubresource, ImageSubresourceLayers, ImageSubresourceRange, ImageUsage, ImageViewKind,
-    IndexType, Layout, LogicOp, MemoryUsage, MipmapMode, Offset2d, Offset3d, OutOfMemory,
-    PipelineStageFlags, PolygonMode, PresentMode, PrimitiveTopology, QueueCapabilityFlags, Rect2d,
-    SamplerAddressMode, Samples, ShaderStage, ShaderStageFlags, StencilOp, VertexInputRate,
-    Viewport,
+    AspectFlags, BlendFactor, BlendOp, BorderColor, BufferCopy, BufferImageCopy, BufferUsage,
+    CompareOp, ComponentMask, Culling, DescriptorBindingFlags, DescriptorSetLayoutFlags,
+    DescriptorType, DeviceAddress, Extent2d, Extent3d, Filter, Format, FrontFace, GeometryFlags,
+    ImageBlit, ImageCopy, ImageExtent, ImageUsage, ImageViewKind, IndexType, Layout, LoadOp,
+    LogicOp, MemoryUsage, MipmapMode, Offset2d, Offset3d, OutOfMemory, PipelineStageFlags,
+    PolygonMode, PresentMode, PrimitiveTopology, QueueCapabilityFlags, Rect2d, SamplerAddressMode,
+    Samples, ShaderStage, ShaderStageFlags, StencilOp, StoreOp, Subresource, SubresourceLayers,
+    SubresourceRange, VertexInputRate, Viewport,
 };
 use erupt::{
     extensions::{khr_acceleration_structure as vkacc, khr_surface::PresentModeKHR},
@@ -600,21 +599,21 @@ pub(crate) fn oom_error_from_erupt(err: vk1_0::Result) -> OutOfMemory {
     }
 }
 
-impl ToErupt<vk1_0::AttachmentLoadOp> for AttachmentLoadOp {
+impl ToErupt<vk1_0::AttachmentLoadOp> for LoadOp {
     fn to_erupt(self) -> vk1_0::AttachmentLoadOp {
         match self {
-            AttachmentLoadOp::Load => vk1_0::AttachmentLoadOp::LOAD,
-            AttachmentLoadOp::Clear => vk1_0::AttachmentLoadOp::CLEAR,
-            AttachmentLoadOp::DontCare => vk1_0::AttachmentLoadOp::DONT_CARE,
+            LoadOp::Load => vk1_0::AttachmentLoadOp::LOAD,
+            LoadOp::Clear => vk1_0::AttachmentLoadOp::CLEAR,
+            LoadOp::DontCare => vk1_0::AttachmentLoadOp::DONT_CARE,
         }
     }
 }
 
-impl ToErupt<vk1_0::AttachmentStoreOp> for AttachmentStoreOp {
+impl ToErupt<vk1_0::AttachmentStoreOp> for StoreOp {
     fn to_erupt(self) -> vk1_0::AttachmentStoreOp {
         match self {
-            AttachmentStoreOp::Store => vk1_0::AttachmentStoreOp::STORE,
-            AttachmentStoreOp::DontCare => vk1_0::AttachmentStoreOp::DONT_CARE,
+            StoreOp::Store => vk1_0::AttachmentStoreOp::STORE,
+            StoreOp::DontCare => vk1_0::AttachmentStoreOp::DONT_CARE,
         }
     }
 }
@@ -1223,7 +1222,7 @@ impl ToErupt<vk1_0::SamplerAddressMode> for SamplerAddressMode {
     }
 }
 
-impl ToErupt<vk1_0::ImageSubresource> for ImageSubresource {
+impl ToErupt<vk1_0::ImageSubresource> for Subresource {
     fn to_erupt(self) -> vk1_0::ImageSubresource {
         vk1_0::ImageSubresource {
             aspect_mask: self.aspect.to_erupt(),
@@ -1233,7 +1232,7 @@ impl ToErupt<vk1_0::ImageSubresource> for ImageSubresource {
     }
 }
 
-impl ToErupt<vk1_0::ImageSubresourceLayers> for ImageSubresourceLayers {
+impl ToErupt<vk1_0::ImageSubresourceLayers> for SubresourceLayers {
     fn to_erupt(self) -> vk1_0::ImageSubresourceLayers {
         vk1_0::ImageSubresourceLayers {
             aspect_mask: self.aspect.to_erupt(),
@@ -1244,7 +1243,7 @@ impl ToErupt<vk1_0::ImageSubresourceLayers> for ImageSubresourceLayers {
     }
 }
 
-impl ToErupt<vk1_0::ImageSubresourceRange> for ImageSubresourceRange {
+impl ToErupt<vk1_0::ImageSubresourceRange> for SubresourceRange {
     fn to_erupt(self) -> vk1_0::ImageSubresourceRange {
         vk1_0::ImageSubresourceRange {
             aspect_mask: self.aspect.to_erupt(),

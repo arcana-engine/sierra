@@ -2,17 +2,13 @@ use {
     super::{
         instance::instance_type_name,
         layout::layout_type_name,
-        parse::{Descriptor, DescriptorType, Input},
+        parse::{Input},
     },
     proc_macro2::TokenStream,
 };
 
 pub(super) fn generate(input: &Input) -> TokenStream {
-    input
-        .descriptors
-        .iter()
-        .map(|descriptor| generate_for_input_descriptor(&input.item_struct.ident, descriptor))
-        .chain(Some(generate_input_impl(input)))
+    std::iter::once(generate_input_impl(input))
         .chain(Some(generate_uniform_struct(input)))
         .collect::<TokenStream>()
 }
@@ -107,103 +103,6 @@ fn generate_input_impl(input: &Input) -> TokenStream {
         impl ::sierra::DescriptorsInput for #ident {
             type Layout = #layout_ident;
             type Instance = #instance_ident;
-        }
-    }
-}
-
-fn generate_for_input_descriptor(input_name: &syn::Ident, input_field: &Descriptor) -> TokenStream {
-    let field_member = &input_field.member;
-
-    match &input_field.ty {
-        DescriptorType::CombinedImageSampler(attr) => {
-            let is_fresh_field = quote::format_ident!("is_fresh_{}", field_member);
-
-            let get_field_descriptor = quote::format_ident!("get_{}_descriptor", field_member);
-
-            match &attr.separate_sampler {
-                Some(separate_sampler) => {
-                    quote::quote!(
-                        impl #input_name {
-                            fn #is_fresh_field(&self, fresh: &::sierra::CombinedImageSampler) -> bool {
-                                // combined_image_sampler
-                                let current = ::sierra::CombinedImageSamplerEq {
-                                    image: &self.#field_member,
-                                    layout: ::sierra::Layout::ShaderReadOnlyOptimal,
-                                    sampler: &self.#separate_sampler,
-                                };
-                                current == *fresh
-                            }
-
-                            fn #get_field_descriptor(
-                                &self,
-                                device: &::sierra::Device,
-                            ) -> Result<::sierra::CombinedImageSampler, ::sierra::OutOfMemory> {
-                                Ok(::sierra::CombinedImageSampler {
-                                    view: ::sierra::MakeImageView::make_view(&self.#field_member, device)?,
-                                    layout: ::sierra::Layout::ShaderReadOnlyOptimal,
-                                    sampler: self.#separate_sampler.clone(),
-                                })
-                            }
-                        }
-                    )
-                }
-                None => quote::quote!(
-                    impl #input_name {
-                        fn #is_fresh_field(&self, fresh: &::sierra::CombinedImageSampler) -> bool {
-                            self.#field_member == current
-                        }
-
-                        fn #get_field_descriptor(
-                            &self,
-                            device: &::sierra::Device,
-                        ) -> Result<::sierra::CombinedImageSampler, ::sierra::OutOfMemory> {
-                            Ok(self.#field_member.clone())
-                        }
-                    }
-                ),
-            }
-        }
-        DescriptorType::AccelerationStructure(_) => {
-            let is_fresh_field = quote::format_ident!("is_fresh_{}", field_member);
-
-            let get_field_descriptor = quote::format_ident!("get_{}_descriptor", field_member);
-
-            quote::quote!(
-                impl #input_name {
-                    fn #is_fresh_field(&self, fresh: &::sierra::AccelerationStructure) -> bool {
-                        // combined_image_sampler
-                        self.#field_member == *fresh
-                    }
-
-                    fn #get_field_descriptor(
-                        &self,
-                        device: &::sierra::Device,
-                    ) -> Result<::sierra::AccelerationStructure, ::sierra::OutOfMemory> {
-                        Ok(self.#field_member.clone())
-                    }
-                }
-            )
-        }
-        DescriptorType::Buffer(_) => {
-            let is_fresh_field = quote::format_ident!("is_fresh_{}", field_member);
-
-            let get_field_descriptor = quote::format_ident!("get_{}_descriptor", field_member);
-
-            quote::quote!(
-                impl #input_name {
-                    fn #is_fresh_field(&self, fresh: &::sierra::BufferRegion) -> bool {
-                        // combined_image_sampler
-                        ::sierra::BufferRegionEq { buffer: & self.#field_member } == *fresh
-                    }
-
-                    fn #get_field_descriptor(
-                        &self,
-                        device: &::sierra::Device,
-                    ) -> Result<::sierra::BufferRegion, ::sierra::OutOfMemory> {
-                        Ok(self.#field_member.clone().into())
-                    }
-                }
-            )
         }
     }
 }

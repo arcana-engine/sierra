@@ -76,35 +76,32 @@ pub struct Pipeline {
 #[sierra::pass]
 #[subpass(color = target, depth = depth)]
 pub struct Main {
-    #[clear]
-    #[store]
+    #[attachment(clear(bg), store(const Present))]
     target: sierra::Image,
 
-    #[clear]
+    bg: sierra::ClearColor,
+
+    #[attachment(clear(const(0.0)))]
     depth: sierra::Format,
 }
 
 pub fn example(
     device: &sierra::Device,
     queue: &mut sierra::Queue,
+    main: &Main,
     fence: usize,
     globals: &Globals,
     objects: &mut Vec<(&Object, Option<ObjectInstance>)>,
-    render_pass: &::sierra::RenderPass,
-    framebuffer: &::sierra::Framebuffer,
-    clears: &[::sierra::ClearValue],
-    mut graphics_pipeline: ::sierra::GraphicsPipelineInfo,
+    mut graphics_pipeline_info: ::sierra::GraphicsPipelineInfo,
     bump: &bumpalo::Bump,
-) -> Result<(), sierra::OutOfMemory> {
-    // Create pipeline layout
-    let pipeline_layout = Pipeline::layout(device)?;
+) -> Result<(), sierra::FramebufferError> {
+    let graphics_pipeline;
 
-    // Finish creating graphics pipeline
-    graphics_pipeline.layout = pipeline_layout.raw().clone();
-    graphics_pipeline.render_pass = render_pass.clone();
-    let graphics_pipeline = device.create_graphics_pipeline(graphics_pipeline)?;
+    // Create pipeline layout
+    let mut main_instance = Main::instance();
 
     // Create globals instance
+    let pipeline_layout = Pipeline::layout(device)?;
     let mut globals_instance = pipeline_layout.globals.instance();
 
     // The following should be repeated each frame.
@@ -113,15 +110,20 @@ pub fn example(
     let mut writes = bumpalo::collections::Vec::new_in(bump);
 
     // Create encoder to encode commands before render pass.
-    let mut encoder = queue.create_encoder()?;
+    let mut encoder = queue.create_encoder(bump)?;
 
     // Update globals.
     // This may extend descriptors writes and record some commands.
     let globals = globals_instance.update(globals, fence, device, &mut writes, &mut encoder)?;
 
     // Begin render pass encoding in parallel.
-    let mut render_pass_encoder = queue.create_encoder()?;
-    let mut render_pass = render_pass_encoder.with_render_pass(render_pass, framebuffer, clears);
+    let mut render_pass_encoder = queue.create_encoder(bump)?;
+    let mut render_pass = render_pass_encoder.with_render_pass(&mut main_instance, main, device)?;
+
+    // Finish creating graphics pipeline
+    graphics_pipeline_info.layout = pipeline_layout.raw().clone();
+    graphics_pipeline_info.render_pass = render_pass.render_pass().clone();
+    graphics_pipeline = device.create_graphics_pipeline(graphics_pipeline_info)?;
 
     // Don't forget to bind graphics pipeline.
     render_pass.bind_graphics_pipeline(&graphics_pipeline);
@@ -162,6 +164,7 @@ pub fn example(
         std::array::IntoIter::new([encoder.finish(), render_pass_encoder.finish()]),
         &[],
         None,
+        bump,
     );
 
     Ok(())

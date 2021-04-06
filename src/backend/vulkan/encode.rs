@@ -6,11 +6,11 @@ use {
     },
     crate::{
         accel::{AccelerationStructureGeometry, AccelerationStructureLevel, IndexData},
-        buffer::{BufferUsage, StridedBufferRegion},
+        buffer::{BufferUsage, StridedBufferRange},
         encode::*,
         format::{FormatDescription, FormatRepr, FormatType},
         queue::QueueId,
-        render_pass::{AttachmentLoadOp, ClearValue, RENDERPASS_SMALLVEC_ATTACHMENTS},
+        render_pass::{ClearValue, LoadOp},
         IndexType, OutOfMemory,
     },
     erupt::{
@@ -92,15 +92,13 @@ impl CommandBuffer {
         for command in commands {
             match *command {
                 Command::BeginRenderPass {
-                    pass,
                     framebuffer,
                     clears,
                 } => {
-                    assert_owner!(pass, device);
                     assert_owner!(framebuffer, device);
+                    let pass = &framebuffer.info().render_pass;
 
                     let mut clears = clears.into_iter();
-
                     let clear_values = pass
                             .info()
                             .attachments
@@ -108,7 +106,7 @@ impl CommandBuffer {
                             .map(|attachment| {
                                 use FormatDescription::*;
 
-                                if attachment.load_op == AttachmentLoadOp::Clear {
+                                if attachment.load_op == LoadOp::Clear {
                                     let clear = clears.next().expect("Not enough clear values");
                                     match clear {
                                         &ClearValue::Color(r, g, b, a) => vk1_0::ClearValue {
@@ -137,7 +135,7 @@ impl CommandBuffer {
                                     }
                                 }
                             })
-                            .collect::<SmallVec<[_; RENDERPASS_SMALLVEC_ATTACHMENTS]>>();
+                            .collect::<SmallVec<[_; 8]>>();
 
                     assert!(clears.next().is_none(), "Too many clear values");
 
@@ -512,35 +510,35 @@ impl CommandBuffer {
                 } => {
                     assert!(device.logical().enabled().khr_ray_tracing_pipeline);
                     if let Some(raygen) = &shader_binding_table.raygen {
-                        assert_owner!(raygen.region.buffer, device);
+                        assert_owner!(raygen.range.buffer, device);
                     }
                     if let Some(miss) = &shader_binding_table.miss {
-                        assert_owner!(miss.region.buffer, device);
+                        assert_owner!(miss.range.buffer, device);
                     }
                     if let Some(hit) = &shader_binding_table.hit {
-                        assert_owner!(hit.region.buffer, device);
+                        assert_owner!(hit.range.buffer, device);
                     }
                     if let Some(callable) = &shader_binding_table.callable {
-                        assert_owner!(callable.region.buffer, device);
+                        assert_owner!(callable.range.buffer, device);
                     }
 
                     let sbr = vkrt::StridedDeviceAddressRegionKHR::default();
 
-                    let to_erupt = |sbr: &StridedBufferRegion| {
+                    let to_erupt = |sbr: &StridedBufferRange| {
                         assert!(sbr
-                            .region
+                            .range
                             .buffer
                             .info()
                             .usage
                             .contains(BufferUsage::SHADER_BINDING_TABLE), "Buffers used to store shader binding table must be created with `SHADER_BINDING_TABLE` usage");
 
                         let device_address =
-                            sbr.region.buffer.address().expect("Buffers used to store shader binding table must be created with `DEVICE_ADDRESS` usage").0.get();
+                            sbr.range.buffer.address().expect("Buffers used to store shader binding table must be created with `DEVICE_ADDRESS` usage").0.get();
 
                         vkrt::StridedDeviceAddressRegionKHRBuilder::new()
-                            .device_address(device_address + sbr.region.offset)
+                            .device_address(device_address + sbr.range.offset)
                             .stride(sbr.stride)
-                            .size(sbr.region.size)
+                            .size(sbr.range.size)
                             .build()
                     };
 
@@ -648,6 +646,7 @@ impl CommandBuffer {
                     src,
                     dst,
                     images,
+                    buffers,
                     memory,
                 } => unsafe {
                     for barrier in images {
@@ -676,30 +675,25 @@ impl CommandBuffer {
                             .map(|image| {
                                 vk1_0::ImageMemoryBarrierBuilder::new()
                                     .image(image.image.handle())
-                                    .src_access_mask(
-                                        image
-                                            .old
-                                            .map(|(a, __)| a.to_erupt())
-                                            .unwrap_or(vk1_0::AccessFlags::empty()),
-                                    )
-                                    .dst_access_mask(image.new.0.to_erupt())
-                                    .old_layout(image.old.map(|(_, l)| l).to_erupt())
-                                    .new_layout(image.new.1.to_erupt())
+                                    .src_access_mask(image.old_access.to_erupt())
+                                    .dst_access_mask(image.new_access.to_erupt())
+                                    .old_layout(image.old_layout.to_erupt())
+                                    .new_layout(image.new_layout.to_erupt())
                                     .src_queue_family_index(
                                         image
                                             .family_transfer
                                             .as_ref()
-                                            .map(|r| r.start)
+                                            .map(|r| r.0)
                                             .unwrap_or(vk1_0::QUEUE_FAMILY_IGNORED),
                                     )
                                     .dst_queue_family_index(
                                         image
                                             .family_transfer
                                             .as_ref()
-                                            .map(|r| r.end)
+                                            .map(|r| r.1)
                                             .unwrap_or(vk1_0::QUEUE_FAMILY_IGNORED),
                                     )
-                                    .subresource_range(image.subresource.to_erupt())
+                                    .subresource_range(image.range.to_erupt())
                             })
                             .collect::<SmallVec<[_; 8]>>(),
                     )

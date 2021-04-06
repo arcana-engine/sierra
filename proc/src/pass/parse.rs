@@ -1,7 +1,7 @@
 use {
-    crate::{find_unique_attribute, take_attributes, validate_member},
+    crate::{find_unique, find_unique_attribute, take_attributes, validate_member},
     std::{collections::HashSet, convert::TryFrom as _},
-    syn::spanned::Spanned as _,
+    syn::{parse::ParseStream, spanned::Spanned as _},
 };
 
 pub struct Input {
@@ -10,15 +10,30 @@ pub struct Input {
     pub subpasses: Vec<Subpass>,
 }
 
-pub enum LoadOp {
-    Load,
-    Clear,
-    DontCare,
+#[derive(Clone)]
+pub enum Layout {
+    Const(syn::Ident),
+    Member(syn::Member),
 }
 
-pub enum StoreOp {
-    Store,
+#[derive(Clone)]
+pub enum ClearValue {
+    Color(f32, f32, f32, f32),
+    DepthStencil(f32, u32),
+    Member(syn::Member),
+}
+
+#[derive(Clone)]
+pub enum LoadOp {
     DontCare,
+    Clear(ClearValue),
+    Load(Layout),
+}
+
+#[derive(Clone)]
+pub enum StoreOp {
+    DontCare,
+    Store(Layout),
 }
 
 pub struct Attachment {
@@ -29,39 +44,98 @@ pub struct Attachment {
 }
 
 impl Attachment {
-    fn validate(&self, _item_struct: &syn::ItemStruct) -> syn::Result<()> {
+    fn validate(&self, item_struct: &syn::ItemStruct) -> syn::Result<()> {
+        match &self.load_op {
+            LoadOp::Load(Layout::Member(layout)) => {
+                validate_member(layout, item_struct)?;
+            }
+            LoadOp::Clear(ClearValue::Member(value)) => {
+                validate_member(value, item_struct)?;
+            }
+            _ => {}
+        }
+        match &self.store_op {
+            StoreOp::Store(Layout::Member(layout)) => {
+                validate_member(layout, item_struct)?;
+            }
+            _ => {}
+        }
         Ok(())
     }
 }
 
 pub struct Subpass {
+    pub colors: Vec<u32>,
+    pub depth: Option<u32>,
+}
+
+struct SubpassAttribute {
     pub colors: Vec<syn::Member>,
     pub depth: Option<syn::Member>,
 }
 
-impl Subpass {
-    fn validate(&self, item_struct: &syn::ItemStruct) -> syn::Result<()> {
+impl SubpassAttribute {
+    fn convert(
+        &self,
+        attachments: &[Attachment],
+        item_struct: &syn::ItemStruct,
+    ) -> syn::Result<Subpass> {
         let mut unique = HashSet::with_capacity(self.colors.len() + self.depth.is_some() as usize);
 
+        let mut color_indices = Vec::with_capacity(self.colors.len());
+        let mut depth_index = None;
+
         for color in &self.colors {
-            validate_member(color, item_struct)?;
             if !unique.insert(color) {
                 return Err(syn::Error::new_spanned(
                     color,
                     "Duplicate attachment references are not allowed",
                 ));
             }
+
+            validate_member(color, item_struct)?;
+
+            match attachments.iter().position(|a| a.member == *color) {
+                Some(index) => {
+                    let index = u32::try_from(index).unwrap();
+
+                    color_indices.push(index);
+                }
+                None => {
+                    return Err(syn::Error::new_spanned(
+                        color,
+                        "Member is not an attachment",
+                    ))
+                }
+            }
         }
         for depth in &self.depth {
-            validate_member(depth, item_struct)?;
             if !unique.insert(depth) {
                 return Err(syn::Error::new_spanned(
                     depth,
                     "Duplicate attachment references are not allowed",
                 ));
             }
+            validate_member(depth, item_struct)?;
+
+            match attachments.iter().position(|a| a.member == *depth) {
+                Some(index) => {
+                    let index = u32::try_from(index).unwrap();
+                    depth_index = Some(index);
+                }
+                None => {
+                    return Err(syn::Error::new_spanned(
+                        depth,
+                        "Member is not an attachment",
+                    ))
+                }
+            }
         }
-        Ok(())
+
+        Ok(Subpass {
+            colors: color_indices,
+            depth: depth_index,
+        })
     }
 }
 
@@ -80,17 +154,19 @@ pub fn parse(attr: proc_macro::TokenStream, item: proc_macro::TokenStream) -> sy
             }
         };
 
-        attachments.push(parse_attachment(f, i)?);
+        attachments.extend(parse_attachment(f, i)?);
     }
 
-    let subpasses = take_attributes(&mut item_struct.attrs, parse_subpass_attr)?;
+    let subpass_attrs = take_attributes(&mut item_struct.attrs, parse_subpass_attr)?;
 
     for attachment in &attachments {
         attachment.validate(&item_struct)?;
     }
 
-    for subpass in &subpasses {
-        subpass.validate(&item_struct)?;
+    let mut subpasses = Vec::with_capacity(subpass_attrs.len());
+
+    for subpass in &subpass_attrs {
+        subpasses.push(subpass.convert(&attachments, &item_struct)?);
     }
 
     Ok(Input {
@@ -116,7 +192,7 @@ enum SubpassArg {
     },
 }
 
-fn parse_subpass_attr(attr: &syn::Attribute) -> syn::Result<Option<Subpass>> {
+fn parse_subpass_attr(attr: &syn::Attribute) -> syn::Result<Option<SubpassAttribute>> {
     match attr.path.get_ident() {
         Some(ident) if ident == "subpass" => {}
         _ => return Ok(None),
@@ -170,77 +246,165 @@ fn parse_subpass_attr(attr: &syn::Attribute) -> syn::Result<Option<Subpass>> {
         }
     }
 
-    Ok(Some(Subpass { colors, depth }))
+    Ok(Some(SubpassAttribute { colors, depth }))
 }
 
-fn parse_attachment(field: &mut syn::Field, field_index: u32) -> syn::Result<Attachment> {
-    let load_op = find_unique_attribute(
+fn parse_attachment(field: &mut syn::Field, field_index: u32) -> syn::Result<Option<Attachment>> {
+    let attachment = find_unique_attribute(
         &mut field.attrs,
-        parse_load_attr,
-        "At most one `clear` or `load` attribute",
-    )?
-    .unwrap_or(LoadOp::DontCare);
+        parse_attachment_attr,
+        "At most one `attachment` attribute can be specified",
+    )?;
 
-    let store_op = find_unique_attribute(
-        &mut field.attrs,
-        parse_store_attr,
-        "At most one `clear` or `load` attribute",
-    )?
-    .unwrap_or(StoreOp::DontCare);
+    match attachment {
+        None => Ok(None),
+        Some(attachment) => {
+            let member = match field.ident.as_ref() {
+                None => syn::Member::Unnamed(syn::Index {
+                    index: field_index,
+                    span: field.span(),
+                }),
+                Some(field_ident) => syn::Member::Named(field_ident.clone()),
+            };
 
-    let member = match field.ident.as_ref() {
-        None => syn::Member::Unnamed(syn::Index {
-            index: field_index,
-            span: field.span(),
-        }),
-        Some(field_ident) => syn::Member::Named(field_ident.clone()),
-    };
-
-    Ok(Attachment {
-        ty: field.ty.clone(),
-        member,
-        load_op,
-        store_op,
-    })
-}
-
-fn parse_load_attr(attr: &syn::Attribute) -> syn::Result<Option<LoadOp>> {
-    match attr.path.get_ident() {
-        Some(i) if i == "clear" => {
-            if attr.tokens.is_empty() {
-                Ok(Some(LoadOp::Clear))
-            } else {
-                Err(syn::Error::new_spanned(
-                    attr,
-                    "`clear` attribute does not accept arguments",
-                ))
-            }
+            Ok(Some(Attachment {
+                ty: field.ty.clone(),
+                member,
+                load_op: attachment.load_op,
+                store_op: attachment.store_op,
+            }))
         }
-        Some(i) if i == "load" => {
-            if attr.tokens.is_empty() {
-                Ok(Some(LoadOp::Load))
-            } else {
-                Err(syn::Error::new_spanned(
-                    attr,
-                    "`load` attribute does not accept arguments",
-                ))
-            }
-        }
-        _ => Ok(None),
     }
 }
-fn parse_store_attr(attr: &syn::Attribute) -> syn::Result<Option<StoreOp>> {
-    match attr.path.get_ident() {
-        Some(i) if i == "store" => {
-            if attr.tokens.is_empty() {
-                Ok(Some(StoreOp::Store))
+
+struct AttachmentAttribute {
+    load_op: LoadOp,
+    store_op: StoreOp,
+}
+
+enum AttachmentAttributeArgument {
+    LoadOp(LoadOp),
+    StoreOp(StoreOp),
+}
+
+fn parse_attachment_attr(attr: &syn::Attribute) -> syn::Result<Option<AttachmentAttribute>> {
+    if attr.path.get_ident().map_or(true, |i| i != "attachment") {
+        Ok(None)
+    } else {
+        attr.parse_args_with(|stream: ParseStream| {
+            let args = stream.parse_terminated::<_, syn::Token![,]>(|stream: ParseStream| {
+                let ident = stream.parse::<syn::Ident>()?;
+                match () {
+                    () if ident == "clear" => {
+                        let value;
+                        syn::parenthesized!(value in stream);
+
+                        let value = if value.peek(syn::Token![const]) {
+                            let _const = value.parse::<syn::Token![const]>()?;
+                            let constant;
+                            syn::parenthesized!(constant in value);
+
+                            parse_clear_value(&constant)?
+                        } else {
+                            let member = value.parse::<syn::Member>()?;
+                            ClearValue::Member(member)
+                        };
+
+                        Ok(AttachmentAttributeArgument::LoadOp(LoadOp::Clear(value)))
+                    }
+                    () if ident == "load" => {
+                        let layout;
+                        syn::parenthesized!(layout in stream);
+
+                        let layout = if layout.peek(syn::Token![const]) {
+                            let _const = layout.parse::<syn::Token![const]>()?;
+                            let layout = layout.parse::<syn::Ident>()?;
+                            Layout::Const(layout)
+                        } else {
+                            let member = layout.parse::<syn::Member>()?;
+                            Layout::Member(member)
+                        };
+
+                        Ok(AttachmentAttributeArgument::LoadOp(LoadOp::Load(layout)))
+                    }
+                    () if ident == "store" => {
+                        let layout;
+                        syn::parenthesized!(layout in stream);
+
+                        let layout = if layout.peek(syn::Token![const]) {
+                            let _const = layout.parse::<syn::Token![const]>()?;
+                            let layout = layout.parse::<syn::Ident>()?;
+                            Layout::Const(layout)
+                        } else {
+                            let member = layout.parse::<syn::Member>()?;
+                            Layout::Member(member)
+                        };
+
+                        Ok(AttachmentAttributeArgument::StoreOp(StoreOp::Store(layout)))
+                    }
+                    _ => Err(stream.error(format!(
+                        "Unexpected arguemnt `{}` for `attachment` attribute",
+                        ident
+                    ))),
+                }
+            })?;
+
+            let load_op = find_unique(
+                args.iter().filter_map(|arg| match arg {
+                    AttachmentAttributeArgument::LoadOp(load_op) => Some(load_op),
+                    _ => None,
+                }),
+                attr,
+                "`attribute` argument must have at most one `clear` or `load` argument",
+            )?
+            .cloned()
+            .unwrap_or(LoadOp::DontCare);
+
+            let store_op = find_unique(
+                args.iter().filter_map(|arg| match arg {
+                    AttachmentAttributeArgument::StoreOp(store_op) => Some(store_op),
+                    _ => None,
+                }),
+                attr,
+                "`attribute` argument must have at most one `clear` or `load` argument",
+            )?
+            .cloned()
+            .unwrap_or(StoreOp::DontCare);
+
+            Ok(AttachmentAttribute { load_op, store_op })
+        })
+        .map(Some)
+    }
+}
+
+fn parse_clear_value(stream: ParseStream) -> syn::Result<ClearValue> {
+    if stream.fork().parse::<syn::LitInt>().is_ok() {
+        let s = stream.parse::<syn::LitInt>()?.base10_parse::<u32>()?;
+        Ok(ClearValue::DepthStencil(0.0, s))
+    } else {
+        let r_or_d = stream.parse::<syn::LitFloat>()?.base10_parse::<f32>()?;
+        if stream.peek(syn::Token![,]) {
+            stream.parse::<syn::Token![,]>()?;
+            if stream.is_empty() {
+                Ok(ClearValue::DepthStencil(r_or_d, 0))
+            } else if stream.fork().parse::<syn::LitInt>().is_ok() {
+                let s = stream.parse::<syn::LitInt>()?.base10_parse::<u32>()?;
+                Ok(ClearValue::DepthStencil(r_or_d, s))
             } else {
-                Err(syn::Error::new_spanned(
-                    attr,
-                    "`store` attribute does not accept arguments",
-                ))
+                let g = stream.parse::<syn::LitFloat>()?.base10_parse::<f32>()?;
+                stream.parse::<syn::Token![,]>()?;
+                let b = stream.parse::<syn::LitFloat>()?.base10_parse::<f32>()?;
+                stream.parse::<syn::Token![,]>()?;
+                let a = stream.parse::<syn::LitFloat>()?.base10_parse::<f32>()?;
+
+                if stream.peek(syn::Token![,]) {
+                    stream.parse::<syn::Token![,]>()?;
+                }
+
+                Ok(ClearValue::Color(r_or_d, g, b, a))
             }
+        } else {
+            Ok(ClearValue::DepthStencil(r_or_d, 0))
         }
-        _ => Ok(None),
     }
 }

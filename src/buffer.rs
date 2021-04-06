@@ -1,5 +1,11 @@
-use crate::align_up;
 pub use crate::backend::{Buffer, MappableBuffer};
+use crate::{
+    access::AccessFlags,
+    align_up,
+    encode::Encoder,
+    queue::{Ownership, QueueId},
+    stage::PipelineStageFlags,
+};
 
 bitflags::bitflags! {
     #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
@@ -50,17 +56,17 @@ impl BufferInfo {
     }
 }
 
-/// Buffer region.
+/// Buffer range.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct BufferRegion {
+pub struct BufferRange {
     pub buffer: Buffer,
     pub offset: u64,
     pub size: u64,
 }
 
-impl BufferRegion {
+impl BufferRange {
     pub fn whole(buffer: Buffer) -> Self {
-        BufferRegion {
+        BufferRange {
             offset: 0,
             size: buffer.info().size,
             buffer,
@@ -68,15 +74,134 @@ impl BufferRegion {
     }
 }
 
-impl From<Buffer> for BufferRegion {
+impl From<Buffer> for BufferRange {
     fn from(buffer: Buffer) -> Self {
-        BufferRegion::whole(buffer)
+        BufferRange::whole(buffer)
     }
 }
 
-/// Buffer region with specified stride value.
+/// Buffer range with specified stride value.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct StridedBufferRegion {
-    pub region: BufferRegion,
+pub struct StridedBufferRange {
+    pub range: BufferRange,
     pub stride: u64,
+}
+
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
+pub struct BufferMemoryBarrier<'a> {
+    pub range: &'a Buffer,
+    pub old: AccessFlags,
+    pub new: AccessFlags,
+    pub family_transfer: Option<(u32, u32)>,
+    pub offset: u64,
+    pub size: u64,
+}
+
+/// Buffer range with access mask,
+/// specifying how it may be accessed "before".
+///
+/// Note that "before" is loosely defined,
+/// as whatever previous owners do.
+/// Which should be translated to "earlier GPU operations"
+/// but this crate doesn't attempt to enforce that.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct BufferRangeState {
+    pub range: BufferRange,
+    pub access: AccessFlags,
+    pub stages: PipelineStageFlags,
+    pub family: Ownership,
+}
+
+impl BufferRangeState {
+    ///
+    pub fn access<'a>(
+        &'a mut self,
+        access: AccessFlags,
+        stages: PipelineStageFlags,
+        queue: QueueId,
+        encoder: &mut Encoder<'a>,
+    ) -> &'a BufferRange {
+        match self.family {
+            Ownership::NotOwned => encoder.buffer_barriers(
+                self.stages,
+                stages,
+                &[BufferMemoryBarrier {
+                    range: &self.range.buffer,
+                    old: self.access,
+                    new: access,
+                    family_transfer: None,
+                    offset: self.range.offset,
+                    size: self.range.size,
+                }],
+            ),
+            Ownership::Owned { family } => {
+                assert_eq!(family, queue.family, "Wrong queue family owns the buffer");
+
+                encoder.buffer_barriers(
+                    self.stages,
+                    stages,
+                    &[BufferMemoryBarrier {
+                        range: &self.range.buffer,
+                        old: self.access,
+                        new: access,
+                        family_transfer: None,
+                        offset: self.range.offset,
+                        size: self.range.size,
+                    }],
+                )
+            }
+            Ownership::Transition { from, to } => {
+                assert_eq!(
+                    to, queue.family,
+                    "Buffer is being transitioned to wrong queue family"
+                );
+
+                encoder.buffer_barriers(
+                    self.stages,
+                    stages,
+                    &[BufferMemoryBarrier {
+                        range: &self.range.buffer,
+                        old: self.access,
+                        new: access,
+                        family_transfer: Some((from, to)),
+                        offset: self.range.offset,
+                        size: self.range.size,
+                    }],
+                )
+            }
+        }
+        self.family = Ownership::Owned {
+            family: queue.family,
+        };
+        self.stages = stages;
+        self.access = access;
+        &self.range
+    }
+
+    pub fn overwrite<'a>(
+        &'a mut self,
+        access: AccessFlags,
+        stages: PipelineStageFlags,
+        queue: QueueId,
+        encoder: &mut Encoder<'a>,
+    ) -> &'a BufferRange {
+        encoder.buffer_barriers(
+            self.stages,
+            stages,
+            &[BufferMemoryBarrier {
+                range: &self.range.buffer,
+                old: AccessFlags::empty(),
+                new: access,
+                family_transfer: None,
+                offset: self.range.offset,
+                size: self.range.size,
+            }],
+        );
+        self.family = Ownership::Owned {
+            family: queue.family,
+        };
+        self.stages = stages;
+        self.access = access;
+        &self.range
+    }
 }

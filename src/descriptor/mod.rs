@@ -1,15 +1,20 @@
+mod buffer;
+mod image;
 mod layout;
 
-pub use {self::layout::*, crate::backend::DescriptorSet};
+pub use {
+    self::{buffer::*, image::*, layout::*},
+    crate::backend::DescriptorSet,
+};
 
 use crate::{
     accel::AccelerationStructure,
     backend::Device,
-    buffer::BufferRegion,
+    buffer::BufferRange,
     encode::Encoder,
     image::Image,
     image::Layout,
-    image::{ImageExtent, ImageSubresourceRange},
+    image::{ImageExtent, SubresourceRange},
     sampler::Sampler,
     view::ImageView,
     view::ImageViewKind,
@@ -87,16 +92,16 @@ pub enum Descriptors<'a> {
     // UniformTexelBuffer(&'a BufferView),
     // StorageTexelBuffer(&'a BufferView),
     /// Uniform buffer regions.
-    UniformBuffer(&'a [BufferRegion]),
+    UniformBuffer(&'a [BufferRange]),
 
     /// Storage buffer regions.
-    StorageBuffer(&'a [BufferRegion]),
+    StorageBuffer(&'a [BufferRange]),
 
     /// Dynamic uniform buffer regions.
-    UniformBufferDynamic(&'a [BufferRegion]),
+    UniformBufferDynamic(&'a [BufferRange]),
 
     /// Dynamic storage buffer regions.
-    StorageBufferDynamic(&'a [BufferRegion]),
+    StorageBufferDynamic(&'a [BufferRange]),
 
     /// Input attachments.
     InputAttachment(&'a [ImageViewDescriptor]),
@@ -173,8 +178,8 @@ pub fn image_eq_view(image: &Image, view: &ImageView) -> bool {
         return false;
     }
 
-    if view_info.subresource
-        != ImageSubresourceRange::new(
+    if view_info.range
+        != SubresourceRange::new(
             image_info.format.aspect_flags(),
             0..image_info.levels,
             0..image_info.layers,

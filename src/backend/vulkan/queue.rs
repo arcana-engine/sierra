@@ -15,8 +15,8 @@ use {
         stage::PipelineStageFlags,
         OutOfMemory,
     },
+    bumpalo::Bump,
     erupt::{extensions::khr_swapchain::PresentInfoKHRBuilder, vk1_0},
-    smallvec::SmallVec,
     std::fmt::{self, Debug},
 };
 
@@ -67,7 +67,7 @@ impl Queue {
     }
 
     #[tracing::instrument]
-    pub fn create_encoder(&mut self) -> Result<Encoder<'static>, OutOfMemory> {
+    pub fn create_encoder<'a>(&mut self, bump: &'a Bump) -> Result<Encoder<'a>, OutOfMemory> {
         if self.pool == vk1_0::CommandPool::null() {
             self.pool = unsafe {
                 self.device.logical().create_command_pool(
@@ -97,25 +97,23 @@ impl Queue {
 
         let cbuf = CommandBuffer::new(buffers.remove(0), self.id, self.device.downgrade());
 
-        Ok(Encoder::new(cbuf, self.capabilities))
+        Ok(Encoder::new(cbuf, self.capabilities, bump))
     }
 
     #[tracing::instrument(skip(cbufs))]
     pub fn submit(
         &mut self,
         wait: &[(PipelineStageFlags, Semaphore)],
-        cbufs: impl IntoIterator<Item = CommandBuffer>,
+        cbufs: impl ExactSizeIterator<Item = CommandBuffer>,
         signal: &[Semaphore],
         fence: Option<&Fence>,
+        bump: &Bump,
     ) {
-        let cbufs: SmallVec<[_; 8]> = cbufs
-            .into_iter()
-            .map(|cbuf| {
-                assert_owner!(cbuf, self.device);
-                assert_eq!(self.id, cbuf.queue());
-                cbuf.handle()
-            })
-            .collect();
+        let cbufs = bump.alloc_slice_fill_iter(cbufs.map(|cbuf| {
+            assert_owner!(cbuf, self.device);
+            assert_eq!(self.id, cbuf.queue());
+            cbuf.handle()
+        }));
 
         for (_, semaphore) in wait {
             assert_owner!(semaphore, self.device);
@@ -130,12 +128,9 @@ impl Queue {
         }
 
         // FIXME: Check semaphore states.
-        let (wait_stages, wait_semaphores): (SmallVec<[_; 8]>, SmallVec<[_; 8]>) = wait
-            .iter()
-            .map(|(ps, sem)| (ps.to_erupt(), sem.handle()))
-            .unzip();
-
-        let signal_semaphores: SmallVec<[_; 8]> = signal.iter().map(|sem| sem.handle()).collect();
+        let wait_stages = bump.alloc_slice_fill_iter(wait.iter().map(|(ps, _)| ps.to_erupt()));
+        let wait_semaphores = bump.alloc_slice_fill_iter(wait.iter().map(|(_, sem)| sem.handle()));
+        let signal_semaphores = bump.alloc_slice_fill_iter(signal.iter().map(|sem| sem.handle()));
 
         unsafe {
             self.device
@@ -154,8 +149,25 @@ impl Queue {
     }
 
     #[tracing::instrument]
-    pub fn submit_one(&mut self, buffer: CommandBuffer, fence: Option<&Fence>) {
-        self.submit(&[], Some(buffer), &[], fence);
+    pub fn submit_one(&mut self, cbuf: CommandBuffer, fence: Option<&Fence>) {
+        assert_owner!(cbuf, self.device);
+        assert_eq!(self.id, cbuf.queue());
+        let cbuf = cbuf.handle();
+
+        unsafe {
+            self.device
+                .logical()
+                .queue_submit(
+                    self.handle,
+                    &[vk1_0::SubmitInfoBuilder::new()
+                        .wait_semaphores(&[])
+                        .wait_dst_stage_mask(&[])
+                        .signal_semaphores(&[])
+                        .command_buffers(std::slice::from_ref(&cbuf))],
+                    fence.map(|f| f.handle()),
+                )
+                .expect("TODO: Handle queue submit error")
+        };
     }
 
     #[tracing::instrument]

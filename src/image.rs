@@ -1,6 +1,12 @@
 pub use {
     self::Samples::*,
-    crate::{access::AccessFlags, backend::Image},
+    crate::{
+        access::AccessFlags,
+        backend::Image,
+        encode::Encoder,
+        queue::{Ownership, QueueId},
+        stage::PipelineStageFlags,
+    },
 };
 use {
     crate::{
@@ -51,7 +57,7 @@ impl ImageUsage {
     }
 }
 
-/// Image layout defines how texels are placed in memory.
+/// Image layout defines how texel are placed in memory.
 /// Operations can be used in one or more layouts.
 /// User is responsible to insert layout transition commands to ensure
 /// that the image is in valid layout for each operation.
@@ -90,6 +96,12 @@ pub enum Layout {
     /// Layout for swapchain images presentation.
     /// Should not be used if presentation feature is not enabled.
     Present,
+}
+
+impl Default for Layout {
+    fn default() -> Self {
+        Self::General
+    }
 }
 
 /// Extent of the image.
@@ -276,7 +288,7 @@ pub struct ImageInfo {
 /// Used to create `ImageView`s.
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
-pub struct ImageSubresourceRange {
+pub struct SubresourceRange {
     pub aspect: AspectFlags,
     pub first_level: u32,
     pub level_count: u32,
@@ -284,13 +296,13 @@ pub struct ImageSubresourceRange {
     pub layer_count: u32,
 }
 
-impl ImageSubresourceRange {
+impl SubresourceRange {
     pub fn new(aspect: AspectFlags, levels: Range<u32>, layers: Range<u32>) -> Self {
         assert!(levels.end >= levels.start);
 
         assert!(layers.end >= layers.start);
 
-        ImageSubresourceRange {
+        SubresourceRange {
             aspect,
             first_level: levels.start,
             level_count: levels.end - levels.start,
@@ -300,7 +312,7 @@ impl ImageSubresourceRange {
     }
 
     pub fn whole(info: &ImageInfo) -> Self {
-        ImageSubresourceRange {
+        SubresourceRange {
             aspect: info.format.aspect_flags(),
             first_level: 0,
             level_count: info.levels,
@@ -327,22 +339,22 @@ impl ImageSubresourceRange {
 }
 
 /// Subresorce layers of the image.
-/// Unlike `ImageSubresourceRange` it specifies only single mip-level.
+/// Unlike `SubresourceRange` it specifies only single mip-level.
 /// Used in image copy operations.
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
-pub struct ImageSubresourceLayers {
+pub struct SubresourceLayers {
     pub aspect: AspectFlags,
     pub level: u32,
     pub first_layer: u32,
     pub layer_count: u32,
 }
 
-impl ImageSubresourceLayers {
+impl SubresourceLayers {
     pub fn new(aspect: AspectFlags, level: u32, layers: Range<u32>) -> Self {
         assert!(layers.end >= layers.start);
 
-        ImageSubresourceLayers {
+        SubresourceLayers {
             aspect,
             level,
             first_layer: layers.start,
@@ -353,7 +365,7 @@ impl ImageSubresourceLayers {
     pub fn all_layers(info: &ImageInfo, level: u32) -> Self {
         assert!(level < info.levels);
 
-        ImageSubresourceLayers {
+        SubresourceLayers {
             aspect: info.format.aspect_flags(),
             level,
             first_layer: 0,
@@ -379,19 +391,19 @@ impl ImageSubresourceLayers {
 }
 
 /// Subresorce of the image.
-/// Unlike `ImageSubresourceRange` it specifies only single mip-level and single
+/// Unlike `SubresourceRange` it specifies only single mip-level and single
 /// array layer.
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
-pub struct ImageSubresource {
+pub struct Subresource {
     pub aspect: AspectFlags,
     pub level: u32,
     pub layer: u32,
 }
 
-impl ImageSubresource {
+impl Subresource {
     pub fn new(aspect: AspectFlags, level: u32, layer: u32) -> Self {
-        ImageSubresource {
+        Subresource {
             aspect,
             level,
             layer,
@@ -403,7 +415,7 @@ impl ImageSubresource {
 
         assert!(layer < info.layers);
 
-        ImageSubresource {
+        Subresource {
             aspect: info.format.aspect_flags(),
             level,
             layer,
@@ -430,57 +442,193 @@ impl ImageSubresource {
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct ImageBlit {
-    pub src_subresource: ImageSubresourceLayers,
+    pub src_subresource: SubresourceLayers,
     pub src_offsets: [Offset3d; 2],
-    pub dst_subresource: ImageSubresourceLayers,
+    pub dst_subresource: SubresourceLayers,
     pub dst_offsets: [Offset3d; 2],
 }
 
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
-pub struct ImageLayoutTransition<'a> {
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
+pub struct LayoutTransition<'a> {
     pub image: &'a Image,
-    pub old: Option<(AccessFlags, Layout)>,
-    pub new: (AccessFlags, Layout),
-    pub subresource: ImageSubresourceRange,
+    pub old_access: AccessFlags,
+    pub old_layout: Option<Layout>,
+    pub new_access: AccessFlags,
+    pub new_layout: Layout,
+    pub range: SubresourceRange,
 }
 
-impl<'a> ImageLayoutTransition<'a> {
-    pub fn transition_whole(image: &'a Image, range: Range<(AccessFlags, Layout)>) -> Self {
-        ImageLayoutTransition {
-            subresource: ImageSubresourceRange::whole(image.info()),
+impl<'a> LayoutTransition<'a> {
+    pub fn transition_whole(
+        image: &'a Image,
+        access: Range<AccessFlags>,
+        layout: Range<Layout>,
+    ) -> Self {
+        LayoutTransition {
+            range: SubresourceRange::whole(image.info()),
             image,
-            old: Some(range.start),
-            new: range.end,
+            old_access: access.start,
+            new_access: access.end,
+            old_layout: Some(layout.start),
+            new_layout: layout.end,
         }
     }
 
     pub fn initialize_whole(image: &'a Image, access: AccessFlags, layout: Layout) -> Self {
-        ImageLayoutTransition {
-            subresource: ImageSubresourceRange::whole(image.info()),
+        LayoutTransition {
+            range: SubresourceRange::whole(image.info()),
             image,
-            old: None,
-            new: (access, layout),
+            old_access: AccessFlags::empty(),
+            old_layout: None,
+            new_access: access,
+            new_layout: layout,
         }
     }
 }
 
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub struct ImageMemoryBarrier<'a> {
     pub image: &'a Image,
-    pub old: Option<(AccessFlags, Layout)>,
-    pub new: (AccessFlags, Layout),
-    pub family_transfer: Option<Range<u32>>,
-    pub subresource: ImageSubresourceRange,
+    pub old_access: AccessFlags,
+    pub old_layout: Option<Layout>,
+    pub new_access: AccessFlags,
+    pub new_layout: Layout,
+    pub family_transfer: Option<(u32, u32)>,
+    pub range: SubresourceRange,
 }
 
-impl<'a> From<ImageLayoutTransition<'a>> for ImageMemoryBarrier<'a> {
-    fn from(value: ImageLayoutTransition<'a>) -> Self {
+impl<'a> From<LayoutTransition<'a>> for ImageMemoryBarrier<'a> {
+    fn from(value: LayoutTransition<'a>) -> Self {
         ImageMemoryBarrier {
             image: value.image,
-            old: value.old,
-            new: value.new,
+            old_access: value.old_access,
+            old_layout: value.old_layout,
+            new_access: value.new_access,
+            new_layout: value.new_layout,
             family_transfer: None,
-            subresource: value.subresource,
+            range: value.range,
         }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct ImageSubresourceRange {
+    pub image: Image,
+    pub range: SubresourceRange,
+}
+
+/// Image region with access mask,
+/// specifying how it may be accessed "before".
+///
+/// Note that "before" is loosely defined,
+/// as whatever previous owners do.
+/// Which should be translated to "earlier GPU operations"
+/// but this crate doesn't attempt to enforce that.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct ImageSubresourceState {
+    pub subresource: ImageSubresourceRange,
+    pub access: AccessFlags,
+    pub stages: PipelineStageFlags,
+    pub layout: Option<Layout>,
+    pub family: Ownership,
+}
+
+impl ImageSubresourceState {
+    ///
+    pub fn access<'a>(
+        &'a mut self,
+        access: AccessFlags,
+        stages: PipelineStageFlags,
+        layout: Layout,
+        queue: QueueId,
+        encoder: &mut Encoder<'a>,
+    ) -> &'a Self {
+        match self.family {
+            Ownership::NotOwned => encoder.image_barriers(
+                self.stages,
+                stages,
+                &[ImageMemoryBarrier {
+                    image: &self.subresource.image,
+                    old_access: self.access,
+                    new_access: access,
+                    old_layout: self.layout,
+                    new_layout: layout,
+                    family_transfer: None,
+                    range: self.subresource.range,
+                }],
+            ),
+            Ownership::Owned { family } => {
+                assert_eq!(family, queue.family, "Wrong queue family owns the buffer");
+
+                encoder.image_barriers(
+                    self.stages,
+                    stages,
+                    &[ImageMemoryBarrier {
+                        image: &self.subresource.image,
+                        old_access: self.access,
+                        new_access: access,
+                        old_layout: self.layout,
+                        new_layout: layout,
+                        family_transfer: None,
+                        range: self.subresource.range,
+                    }],
+                )
+            }
+            Ownership::Transition { from, to } => {
+                assert_eq!(
+                    to, queue.family,
+                    "Image is being transitioned to wrong queue family"
+                );
+
+                encoder.image_barriers(
+                    self.stages,
+                    stages,
+                    &[ImageMemoryBarrier {
+                        image: &self.subresource.image,
+                        old_access: self.access,
+                        new_access: access,
+                        old_layout: self.layout,
+                        new_layout: layout,
+                        family_transfer: Some((from, to)),
+                        range: self.subresource.range,
+                    }],
+                )
+            }
+        }
+        self.stages = stages;
+        self.access = access;
+        self.layout = Some(layout);
+        self
+    }
+
+    ///
+    pub fn overwrite<'a>(
+        &'a mut self,
+        access: AccessFlags,
+        stages: PipelineStageFlags,
+        layout: Layout,
+        queue: QueueId,
+        encoder: &mut Encoder<'a>,
+    ) -> &'a ImageSubresourceRange {
+        encoder.image_barriers(
+            self.stages,
+            stages,
+            &[ImageMemoryBarrier {
+                image: &self.subresource.image,
+                old_access: AccessFlags::empty(),
+                new_access: access,
+                old_layout: None,
+                new_layout: layout,
+                family_transfer: None,
+                range: self.subresource.range,
+            }],
+        );
+        self.family = Ownership::Owned {
+            family: queue.family,
+        };
+        self.stages = stages;
+        self.access = access;
+        self.layout = Some(layout);
+        &self.subresource
     }
 }

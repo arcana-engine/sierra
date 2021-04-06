@@ -1,5 +1,5 @@
 pub use crate::backend::AccelerationStructure;
-use crate::{buffer::BufferRegion, format::Format, DeviceAddress, IndexType};
+use crate::{buffer::BufferRange, format::Format, DeviceAddress, IndexType};
 
 bitflags::bitflags! {
     /// Bits which can be set in `AccelerationStructureInfo` specifying additional parameters for acceleration structure builds.
@@ -37,7 +37,7 @@ pub struct AccelerationStructureInfo {
     ///
     /// Buffer must be created with `ACCELERATION_STRUCTURE_STORAGE` usage flag.
     /// required size can be queried using `Device::get_acceleration_structure_build_sizes`
-    pub region: BufferRegion,
+    pub region: BufferRange,
 }
 
 /// Contains information about various size requirements for acceleration structure.
@@ -159,13 +159,13 @@ bitflags::bitflags! {
 }
 
 /// Data provided to acceleration structure build operation.
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct AccelerationStructureBuildGeometryInfo<'a> {
     /// Source acceleration structure to copy from.
-    pub src: Option<AccelerationStructure>,
+    pub src: Option<&'a AccelerationStructure>,
 
     /// Destination acceleration structure to build into.
-    pub dst: AccelerationStructure,
+    pub dst: &'a AccelerationStructure,
 
     /// Flags to specify options for the acceleration structure building.
     pub flags: AccelerationStructureBuildFlags,

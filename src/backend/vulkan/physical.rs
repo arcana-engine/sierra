@@ -851,10 +851,7 @@ impl PhysicalDevice {
                                 queue,
                                 vk1_0::CommandPool::null(),
                                 device.clone(),
-                                QueueId {
-                                    family: family as usize,
-                                    index: index as usize,
-                                },
+                                QueueId { family, index },
                                 capabilities,
                             )
                         })

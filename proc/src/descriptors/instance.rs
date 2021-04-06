@@ -36,44 +36,122 @@ pub(super) fn generate(input: &Input) -> TokenStream {
             DescriptorType::Buffer(_) => {
                 let descriptor_field = quote::format_ident!("descriptor_{}", input.member);
                 Some(quote::quote!(
-                    pub #descriptor_field: ::std::option::Option<::sierra::BufferRegion>,
+                    pub #descriptor_field: ::std::option::Option<::sierra::BufferRange>,
                 ))
             }
         })
         .collect();
 
-    let mut binding = 0u32;
-
     let update_descriptor_statements: TokenStream = input
         .descriptors
         .iter()
         .filter_map(|input| {
+            let field = &input.member;
+
             let descriptor_field =
                 quote::format_ident!("descriptor_{}", input.member);
-            let is_fresh_field =
-                quote::format_ident!("is_fresh_{}", input.member);
-            let get_field_descriptor =
-                quote::format_ident!("get_{}_descriptor", input.member);
             let write_descriptor =
                 quote::format_ident!("write_{}_descriptor", input.member);
 
-            let stream = quote::quote!(
-                let #write_descriptor;
-
-                match &mut elem.#descriptor_field {
-                    Some(descriptor) if input.#is_fresh_field(descriptor) => { #write_descriptor = false }
-                    _ => {
-                        elem.#descriptor_field = Some(input.#get_field_descriptor(device)?);
-                        #write_descriptor = true;
-                    }
+            let stream = match &input.ty {
+                DescriptorType::CombinedImageSampler(attr) => {
+                    let sampler = &attr.sampler;
+                    quote::quote!(
+                        let #write_descriptor;
+                        match &elem.#descriptor_field {
+                            Some(::sierra::CombinedImageSampler { view, sampler, layout: ::sierra::Layout::ShaderReadOnlyOptimal }) => {
+                                if ::sierra::SampledImage::eq(&input.#field, view) && input.#sampler == *sampler {
+                                    #write_descriptor = false;
+                                } else {
+                                    let view = ::sierra::SampledImage::get_view(&input.#field, device)?;
+                                    elem.#descriptor_field = Some(::sierra::CombinedImageSampler {
+                                        view,
+                                        sampler: std::clone::Clone::clone(&input.#sampler),
+                                        layout: ::sierra::Layout::ShaderReadOnlyOptimal,
+                                    });
+                                    #write_descriptor = true;
+                                }
+                            }
+                            _ => {
+                                let view = ::sierra::SampledImage::get_view(&input.#field, device)?;
+                                elem.#descriptor_field = Some(::sierra::CombinedImageSampler {
+                                    view,
+                                    sampler: std::clone::Clone::clone(&input.#sampler),
+                                    layout: ::sierra::Layout::ShaderReadOnlyOptimal,
+                                });
+                                #write_descriptor = true;
+                            }
+                        }
+                    )
                 }
-            );
+                DescriptorType::AccelerationStructure(_) => quote::quote!(
+                    let #write_descriptor;
+                    match &elem.#descriptor_field {
+                        Some(accel) => {
+                            if accel == &input.#field {
+                                #write_descriptor = false;
+                            } else {
+                                elem.#descriptor_field = Some(::std::clone::Clone::clone(&input.#field));
+                                #write_descriptor = true;
+                            }
+                        }
+                        _ => {
+                            elem.#descriptor_field = Some(::std::clone::Clone::clone(&input.#field));
+                            #write_descriptor = true;
+                        }
+                    }
+                ),
+                DescriptorType::Buffer(buffer::Buffer {
+                    kind: buffer::Kind::Uniform,
+                    ..
+                }) => quote::quote!(
+                    let #write_descriptor;
+                    match &elem.#descriptor_field {
+                        Some(range) => {
+                            if ::sierra::UniformBuffer::eq(&input.#field, range) {
+                                #write_descriptor = false;
+                            } else {
+                                let range = ::sierra::UniformBuffer::get_range(&input.#field, device)?;
+                                elem.#descriptor_field = Some(range);
+                                #write_descriptor = true;
+                            }
+                        }
+                        _ => {
+                            let range = ::sierra::UniformBuffer::get_range(&input.#field, device)?;
+                            elem.#descriptor_field = Some(range);
+                            #write_descriptor = true;
+                        }
+                    }
+                ),
+                DescriptorType::Buffer(buffer::Buffer {
+                    kind: buffer::Kind::Storage,
+                    ..
+                }) => quote::quote!(
+                    let #write_descriptor;
+                    match &elem.#descriptor_field {
+                        Some(range) => {
+                            if ::sierra::StorageBuffer::eq(&input.#field, range) {
+                                #write_descriptor = false;
+                            } else {
+                                let range = ::sierra::StorageBuffer::get_range(&input.#field, device)?;
+                                elem.#descriptor_field = Some(range);
+                                #write_descriptor = true;
+                            }
+                        }
+                        _ => {
+                            let range = ::sierra::StorageBuffer::get_range(&input.#field, device)?;
+                            elem.#descriptor_field = Some(range);
+                            #write_descriptor = true;
+                        }
+                    }
+                ),
+            };
 
-            binding += 1;
             Some(stream)
         })
         .collect();
 
+    let mut binding = 0u32;
     let write_updated_descriptor_statements: TokenStream = input
         .descriptors
         .iter()
@@ -147,7 +225,7 @@ pub(super) fn generate(input: &Input) -> TokenStream {
     let uniforms_field = if input.uniforms.is_empty() {
         TokenStream::new()
     } else {
-        quote::quote!(pub uniforms_buffer: ::std::option::Option<(#uniforms_ident, ::sierra::BufferRegion)>,)
+        quote::quote!(pub uniforms_buffer: ::std::option::Option<(#uniforms_ident, ::sierra::BufferRange)>,)
     };
 
     let new_cycle_elem_uniforms_buffer = if input.uniforms.is_empty() {

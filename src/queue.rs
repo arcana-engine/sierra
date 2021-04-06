@@ -163,8 +163,8 @@ impl QueuesQuery for SingleQueueQuery {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct QueueId {
-    pub family: usize,
-    pub index: usize,
+    pub family: u32,
+    pub index: u32,
 }
 
 #[derive(Clone, Copy, Debug, thiserror::Error, PartialEq, Eq)]
@@ -185,4 +185,11 @@ pub enum PresentError {
 pub enum PresentOk {
     Success,
     Suboptimal,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Ownership {
+    NotOwned,
+    Owned { family: u32 },
+    Transition { from: u32, to: u32 },
 }

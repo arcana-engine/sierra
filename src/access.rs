@@ -109,8 +109,22 @@ bitflags::bitflags! {
 }
 
 impl AccessFlags {
-    pub fn is_readonly(self) -> bool {
-        !self.intersects(
+    pub fn is_read(self) -> bool {
+        self.intersects(
+            Self::SHADER_READ
+                | Self::COLOR_ATTACHMENT_READ
+                | Self::DEPTH_STENCIL_ATTACHMENT_READ
+                | Self::TRANSFER_READ
+                | Self::HOST_READ
+                | Self::MEMORY_READ
+                // | Self::TRANSFORM_FEEDBACK_READ
+                // | Self::TRANSFORM_FEEDBACK_COUNTER_READ
+                | Self::ACCELERATION_STRUCTURE_READ,
+        )
+    }
+
+    pub fn is_write(self) -> bool {
+        self.intersects(
             Self::SHADER_WRITE
                 | Self::COLOR_ATTACHMENT_WRITE
                 | Self::DEPTH_STENCIL_ATTACHMENT_WRITE

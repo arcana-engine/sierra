@@ -1,19 +1,12 @@
 pub use crate::backend::RenderPass;
-use {
-    crate::{
-        format::Format,
-        image::{Layout, Samples},
-        stage::PipelineStageFlags,
-        Device, Extent2d,
-    },
-    smallvec::SmallVec,
+use crate::{
+    encode::{Encoder, RenderPassEncoder},
+    format::Format,
+    framebuffer::FramebufferError,
+    image::{Layout, Samples},
+    stage::PipelineStageFlags,
+    Device, OutOfMemory,
 };
-
-/// Upper limit for smallvec array size for attachments.
-pub const RENDERPASS_SMALLVEC_ATTACHMENTS: usize = 8;
-
-/// Upper limit for smallvec array size for subpasses.
-pub const SMALLVEC_SUBPASSES: usize = 4;
 
 /// Defines render pass, its attachments and one implicit subpass.
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
@@ -22,19 +15,19 @@ pub struct RenderPassInfo {
     /// Describes attachments used in the render pass.
     #[cfg_attr(
         feature = "serde-1",
-        serde(skip_serializing_if = "SmallVec::is_empty", default)
+        serde(skip_serializing_if = "Vec::is_empty", default)
     )]
-    pub attachments: SmallVec<[AttachmentInfo; RENDERPASS_SMALLVEC_ATTACHMENTS]>,
+    pub attachments: Vec<AttachmentInfo>,
     #[cfg_attr(
         feature = "serde-1",
-        serde(skip_serializing_if = "SmallVec::is_empty", default)
+        serde(skip_serializing_if = "Vec::is_empty", default)
     )]
-    pub subpasses: SmallVec<[Subpass; SMALLVEC_SUBPASSES]>,
+    pub subpasses: Vec<Subpass>,
     #[cfg_attr(
         feature = "serde-1",
-        serde(skip_serializing_if = "SmallVec::is_empty", default)
+        serde(skip_serializing_if = "Vec::is_empty", default)
     )]
-    pub dependencies: SmallVec<[SubpassDependency; SMALLVEC_SUBPASSES]>,
+    pub dependencies: Vec<SubpassDependency>,
 }
 
 /// Describes one attachment of a render pass.
@@ -48,21 +41,36 @@ pub struct AttachmentInfo {
         serde(skip_serializing_if = "is_default", default)
     )]
     pub samples: Samples,
-    pub load_op: AttachmentLoadOp,
-    pub store_op: AttachmentStoreOp,
+
+    #[cfg_attr(
+        feature = "serde-1",
+        serde(skip_serializing_if = "is_default", default)
+    )]
+    pub load_op: LoadOp,
+
+    #[cfg_attr(
+        feature = "serde-1",
+        serde(skip_serializing_if = "is_default", default)
+    )]
+    pub store_op: StoreOp,
 
     #[cfg_attr(
         feature = "serde-1",
         serde(skip_serializing_if = "Option::is_none", default)
     )]
     pub initial_layout: Option<Layout>,
+
+    #[cfg_attr(
+        feature = "serde-1",
+        serde(skip_serializing_if = "is_default", default)
+    )]
     pub final_layout: Layout,
 }
 
 /// Specifies how render pass treats attachment content at the beginning.
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
-pub enum AttachmentLoadOp {
+pub enum LoadOp {
     /// Render pass will load this attachment content before first subpass that
     /// access this attachment starts.
     Load,
@@ -83,9 +91,15 @@ pub enum AttachmentLoadOp {
     DontCare,
 }
 
+impl Default for LoadOp {
+    fn default() -> Self {
+        Self::DontCare
+    }
+}
+
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
-pub enum AttachmentStoreOp {
+pub enum StoreOp {
     /// Render pass will store this attachment content after last subpass that
     /// access this attachment finishes.
     Store,
@@ -99,6 +113,12 @@ pub enum AttachmentStoreOp {
     DontCare,
 }
 
+impl Default for StoreOp {
+    fn default() -> Self {
+        Self::DontCare
+    }
+}
+
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct Subpass {
@@ -108,15 +128,15 @@ pub struct Subpass {
         feature = "serde-1",
         serde(skip_serializing_if = "SmallVec::is_empty", default)
     )]
-    pub colors: SmallVec<[usize; RENDERPASS_SMALLVEC_ATTACHMENTS]>,
+    pub colors: Vec<(u32, Layout)>,
 
-    /// Index of an attachment that is used as depth attachmetn in this
+    /// Index of an attachment that is used as depth attachment in this
     /// subpass.
     #[cfg_attr(
         feature = "serde-1",
         serde(skip_serializing_if = "Option::is_none", default)
     )]
-    pub depth: Option<usize>,
+    pub depth: Option<(u32, Layout)>,
 }
 
 /// Defines memory dependency between two subpasses
@@ -133,7 +153,7 @@ pub struct SubpassDependency {
         feature = "serde-1",
         serde(skip_serializing_if = "Option::is_none", default)
     )]
-    pub src: Option<usize>,
+    pub src: Option<u32>,
 
     /// Index of the second subpass in dependency.
     /// `None` for defining dependency between subpass and commands after
@@ -144,7 +164,7 @@ pub struct SubpassDependency {
         feature = "serde-1",
         serde(skip_serializing_if = "Option::is_none", default)
     )]
-    pub dst: Option<usize>,
+    pub dst: Option<u32>,
 
     /// Stages of the first subpass that will be synchronized
     /// with stages for second subpass specified in `dst_stages`.
@@ -162,7 +182,77 @@ pub enum ClearValue {
     DepthStencil(f32, u32),
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ClearColor(f32, f32, f32, f32);
+
+impl From<ClearColor> for ClearValue {
+    fn from(ClearColor(r, g, b, a): ClearColor) -> Self {
+        ClearValue::Color(r, g, b, a)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ClearDepth(f32);
+
+impl From<ClearDepth> for ClearValue {
+    fn from(ClearDepth(d): ClearDepth) -> Self {
+        ClearValue::DepthStencil(d, 0)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ClearStencil(u32);
+
+impl From<ClearStencil> for ClearValue {
+    fn from(ClearStencil(s): ClearStencil) -> Self {
+        ClearValue::DepthStencil(0.0, s)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ClearDepthStencil(f32, u32);
+
+impl From<ClearDepthStencil> for ClearValue {
+    fn from(ClearDepthStencil(d, s): ClearDepthStencil) -> Self {
+        ClearValue::DepthStencil(d, s)
+    }
+}
+
 #[cfg(feature = "serde-1")]
 fn is_default<T: Default + Eq>(value: &T) -> bool {
     *value == T::default()
+}
+
+#[derive(Clone, Copy, Debug, thiserror::Error, PartialEq, Eq)]
+pub enum CreateRenderPassError {
+    #[error(transparent)]
+    OutOfMemory {
+        #[from]
+        source: OutOfMemory,
+    },
+
+    #[error(
+        "Subpass {subpass} attachment index {attachment} for color attachment {index} is out of bounds"
+    )]
+    ColorAttachmentReferenceOutOfBound {
+        subpass: usize,
+        index: usize,
+        attachment: u32,
+    },
+
+    #[error(
+        "Subpass {subpass} attachment index {attachment} for depth attachment is out of bounds"
+    )]
+    DepthAttachmentReferenceOutOfBound { subpass: usize, attachment: u32 },
+}
+
+pub trait RenderPassInstance {
+    type Input;
+
+    fn begin_render_pass<'a, 'b>(
+        &'a mut self,
+        input: &Self::Input,
+        device: &Device,
+        encoder: &'b mut Encoder<'a>,
+    ) -> Result<RenderPassEncoder<'b, 'a>, FramebufferError>;
 }

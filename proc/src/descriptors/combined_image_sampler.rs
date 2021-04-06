@@ -1,15 +1,13 @@
-use crate::{find_unique, validate_member};
+use crate::{get_unique, validate_member};
 
 pub struct CombinedImageSampler {
-    pub separate_sampler: Option<syn::Member>,
+    pub sampler: syn::Member,
 }
 
 impl CombinedImageSampler {
     pub fn validate(&self, item_struct: &syn::ItemStruct) -> syn::Result<()> {
-        match &self.separate_sampler {
-            None => Ok(()),
-            Some(member) => validate_member(member, item_struct),
-        }
+        validate_member(&self.sampler, item_struct)?;
+        Ok(())
     }
 }
 
@@ -41,13 +39,13 @@ pub(super) fn parse_combined_image_sampler_attr(
         }
     })?;
 
-    let separate_sampler = find_unique(
+    let sampler = get_unique(
         args.iter().filter_map(|arg| match arg {
             AttributeArgument::SeparateSampler { member } => Some(member.clone()),
         }),
         attr,
-        "Expected at most one `sampler` argument",
+        "Argument with sampler member must be specified",
     )?;
 
-    Ok(Some(CombinedImageSampler { separate_sampler }))
+    Ok(Some(CombinedImageSampler { sampler }))
 }

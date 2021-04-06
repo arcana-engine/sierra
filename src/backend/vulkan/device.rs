@@ -17,9 +17,9 @@ use {
             AccelerationStructureBuildSizesInfo, AccelerationStructureGeometryInfo,
             AccelerationStructureInfo, AccelerationStructureLevel,
         },
-        align_up, arith_eq, arith_ne, assert_object,
+        align_up, arith_eq, arith_le, arith_ne, assert_object,
         buffer::{
-            Buffer, BufferInfo, BufferRegion, BufferUsage, MappableBuffer, StridedBufferRegion,
+            Buffer, BufferInfo, BufferRange, BufferUsage, MappableBuffer, StridedBufferRange,
         },
         descriptor::{
             CopyDescriptorSet, DescriptorSet, DescriptorSetInfo, DescriptorSetLayout,
@@ -37,7 +37,7 @@ use {
             RayTracingPipelineInfo, RayTracingShaderGroupInfo, ShaderBindingTable,
             ShaderBindingTableInfo, State,
         },
-        render_pass::{RenderPass, RenderPassInfo},
+        render_pass::{CreateRenderPassError, RenderPass, RenderPassInfo},
         sampler::{Sampler, SamplerInfo},
         semaphore::Semaphore,
         shader::{
@@ -534,21 +534,21 @@ impl Device {
     /// Creates framebuffer for specified render pass from views.
     #[tracing::instrument]
     pub fn create_framebuffer(&self, info: FramebufferInfo) -> Result<Framebuffer, OutOfMemory> {
-        for view in &info.views {
+        for view in &info.attachments {
             assert_owner!(view, self);
         }
 
         assert_owner!(info.render_pass, self);
 
         assert!(
-            info.views
+            info.attachments
                 .iter()
                 .all(|view| view.info().view_kind == ImageViewKind::D2),
             "All image views for Framebuffer must have `view_kind == ImageViewKind::D2`",
         );
 
         assert!(
-            info.views
+            info.attachments
                 .iter()
                 .all(|view| view.info().image.info().extent.into_2d() >= info.extent),
             "All image views for Framebuffer must be at least as large as framebuffer extent",
@@ -557,7 +557,7 @@ impl Device {
         let render_pass = info.render_pass.handle();
 
         let attachments = info
-            .views
+            .attachments
             .iter()
             .map(|view| view.handle())
             .collect::<SmallVec<[_; 16]>>();
@@ -1183,11 +1183,11 @@ impl Device {
                     .view_type(info.view_kind.to_erupt())
                     .subresource_range(
                         vk1_0::ImageSubresourceRangeBuilder::new()
-                            .aspect_mask(info.subresource.aspect.to_erupt())
-                            .base_mip_level(info.subresource.first_level)
-                            .level_count(info.subresource.level_count)
-                            .base_array_layer(info.subresource.first_layer)
-                            .layer_count(info.subresource.layer_count)
+                            .aspect_mask(info.range.aspect.to_erupt())
+                            .base_mip_level(info.range.first_level)
+                            .level_count(info.range.level_count)
+                            .base_array_layer(info.range.first_layer)
+                            .layer_count(info.range.layer_count)
                             .build(),
                     ),
                 None,
@@ -1271,9 +1271,9 @@ impl Device {
                         s.colors
                             .iter()
                             .enumerate()
-                            .map(|(ci, &c)| -> Result<_, CreateRenderPassError> {
+                            .map(|(ci, &(c, cl))| -> Result<_, CreateRenderPassError> {
                                 Ok(vk1_0::AttachmentReferenceBuilder::new()
-                                .attachment(if c < info.attachments.len() {
+                                .attachment(if arith_le(c, info.attachments.len()) {
                                     Some(c)
                                 } else {
                                     None
@@ -1286,18 +1286,18 @@ impl Device {
                                         attachment: c,
                                     }
                                 })?)
-                                .layout(vk1_0::ImageLayout::GENERAL)
+                                .layout(cl.to_erupt())
                             )
                             })
                             .collect::<Result<SmallVec<[_; 16]>, _>>()?,
                     );
 
                     let depth_offset = subpass_attachments.len();
-                    if let Some(d) = s.depth {
+                    if let Some((d, dl)) = s.depth {
                         subpass_attachments.push(
                             vk1_0::AttachmentReferenceBuilder::new()
                                 .attachment(
-                                    if d < info.attachments.len() {
+                                    if arith_le(d, info.attachments.len()) {
                                         Some(d)
                                     } else {
                                         None
@@ -1310,7 +1310,7 @@ impl Device {
                                         }
                                     })?,
                                 )
-                                .layout(vk1_0::ImageLayout::GENERAL),
+                                .layout(dl.to_erupt()),
                         );
                     }
                     Ok((color_offset, depth_offset))
@@ -2471,8 +2471,8 @@ impl Device {
 
         tracing::debug!("ShaderBindingTable created");
         Ok(ShaderBindingTable {
-            raygen: raygen_handlers.map(|range| StridedBufferRegion {
-                region: BufferRegion {
+            raygen: raygen_handlers.map(|range| StridedBufferRange {
+                range: BufferRange {
                     buffer: buffer.clone(),
                     offset: range.start,
                     size: range.end - range.start,
@@ -2480,8 +2480,8 @@ impl Device {
                 stride: group_stride,
             }),
 
-            miss: miss_handlers.map(|range| StridedBufferRegion {
-                region: BufferRegion {
+            miss: miss_handlers.map(|range| StridedBufferRange {
+                range: BufferRange {
                     buffer: buffer.clone(),
                     offset: range.start,
                     size: range.end - range.start,
@@ -2489,8 +2489,8 @@ impl Device {
                 stride: group_stride,
             }),
 
-            hit: hit_handlers.map(|range| StridedBufferRegion {
-                region: BufferRegion {
+            hit: hit_handlers.map(|range| StridedBufferRange {
+                range: BufferRange {
                     buffer: buffer.clone(),
                     offset: range.start,
                     size: range.end - range.start,
@@ -2498,8 +2498,8 @@ impl Device {
                 stride: group_stride,
             }),
 
-            callable: callable_handlers.map(|range| StridedBufferRegion {
-                region: BufferRegion {
+            callable: callable_handlers.map(|range| StridedBufferRange {
+                range: BufferRange {
                     buffer: buffer.clone(),
                     offset: range.start,
                     size: range.end - range.start,
@@ -2562,29 +2562,6 @@ impl Device {
         }
         .map_err(Into::into)
     }
-}
-
-#[derive(Clone, Copy, Debug, thiserror::Error, PartialEq, Eq)]
-pub enum CreateRenderPassError {
-    #[error(transparent)]
-    OutOfMemory {
-        #[from]
-        source: OutOfMemory,
-    },
-
-    #[error(
-        "Subpass {subpass} attachment index {attachment} for color attachment {index} is out of bounds"
-    )]
-    ColorAttachmentReferenceOutOfBound {
-        subpass: usize,
-        index: usize,
-        attachment: usize,
-    },
-
-    #[error(
-        "Subpass {subpass} attachment index {attachment} for depth attachment is out of bounds"
-    )]
-    DepthAttachmentReferenceOutOfBound { subpass: usize, attachment: usize },
 }
 
 #[allow(dead_code)]

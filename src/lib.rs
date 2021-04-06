@@ -12,7 +12,7 @@
 #![warn(missing_copy_implementations)]
 
 use std::{
-    cmp::{Ord, Ordering, PartialOrd},
+    cmp::{min, Ord, Ordering},
     convert::{TryFrom as _, TryInto as _},
     error::Error,
     fmt::Debug,
@@ -95,6 +95,21 @@ impl Extent2d {
     pub fn aspect_ratio(&self) -> f32 {
         self.width as f32 / self.height as f32
     }
+
+    pub fn into_3d(self) -> Extent3d {
+        Extent3d {
+            width: self.width,
+            height: self.height,
+            depth: 1,
+        }
+    }
+
+    pub fn min(&self, rhs: &Self) -> Self {
+        Extent2d {
+            width: min(self.width, rhs.width),
+            height: min(self.height, rhs.height),
+        }
+    }
 }
 
 impl PartialOrd for Extent2d {
@@ -104,16 +119,6 @@ impl PartialOrd for Extent2d {
         let height = Ord::cmp(&self.height, &other.height);
 
         merge_ordering(width, height)
-    }
-}
-
-impl Extent2d {
-    pub fn into_3d(self) -> Extent3d {
-        Extent3d {
-            width: self.width,
-            height: self.height,
-            depth: 1,
-        }
     }
 }
 
@@ -146,6 +151,14 @@ impl Extent3d {
         Extent2d {
             width: self.width,
             height: self.height,
+        }
+    }
+
+    pub fn min(&self, rhs: &Self) -> Self {
+        Extent3d {
+            width: min(self.width, rhs.width),
+            height: min(self.height, rhs.height),
+            depth: min(self.depth, rhs.depth),
         }
     }
 }
