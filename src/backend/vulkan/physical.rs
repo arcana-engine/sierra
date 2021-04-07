@@ -367,7 +367,7 @@ impl PhysicalDevice {
     ///
     /// Note. `QueuesQuery` may be implemented by user, this trait is not
     /// sealed.
-    #[tracing::instrument(skip(queues))]
+    #[tracing::instrument(skip(self, queues))]
     pub fn create_device<Q>(
         self,
         features: &[Feature],

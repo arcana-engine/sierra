@@ -2,7 +2,7 @@ pub use crate::backend::Surface;
 use {
     crate::{assert_error, format::Format, image::ImageUsage, Extent2d, OutOfMemory},
     raw_window_handle::RawWindowHandle,
-    std::{error::Error, fmt::Debug, ops::RangeInclusive, sync::Arc},
+    std::{error::Error, fmt::Debug, sync::Arc},
 };
 
 #[derive(Clone, Copy, Debug, thiserror::Error, PartialEq, Eq)]
@@ -36,6 +36,12 @@ pub enum SurfaceError {
 
     #[error("Initialization failed")]
     InitializationFailed,
+
+    #[error("Too many images acquired")]
+    TooManyAcquired,
+
+    #[error("Swapchain not configured")]
+    NotConfigured,
 }
 
 #[allow(dead_code)]

@@ -1,5 +1,5 @@
 use super::{
-    convert::{from_erupt, FromErupt as _, ToErupt as _},
+    convert::ToErupt as _,
     device::{Device, WeakDevice},
     physical::surface_capabilities,
     surface::{surface_error_from_erupt, Surface},
@@ -100,6 +100,7 @@ struct SwapchainInner {
     format: Format,
     extent: Extent2d,
     usage: ImageUsage,
+    mode: PresentMode,
 }
 
 #[derive(Debug)]
@@ -307,13 +308,14 @@ impl Swapchain {
             extent: caps.current_extent,
             format,
             usage,
+            mode,
         });
 
         tracing::debug!("Swapchain configured");
         Ok(())
     }
 
-    pub fn acquire_image(&mut self) -> Result<Option<SwapchainImage>, SurfaceError> {
+    pub fn acquire_image(&mut self) -> Result<SwapchainImage, SurfaceError> {
         let device = self
             .device
             .upgrade()
@@ -324,94 +326,76 @@ impl Swapchain {
             "Should be enabled given that there is a Swapchain"
         );
 
-        if let Some(inner) = self.inner.as_mut() {
-            if inner.acquired_counter.load(Acquire)
-                >= (inner.images.len() as u32 - self.surface_capabilities.min_image_count)
-            {
-                tracing::error!("Acquire would block. Make sure to present acquire images");
-                return Ok(None);
+        loop {
+            if let Some(inner) = self.inner.as_mut() {
+                if inner.acquired_counter.load(Acquire)
+                    >= (inner.images.len() as u32 - self.surface_capabilities.min_image_count)
+                {
+                    return Err(SurfaceError::TooManyAcquired);
+                }
+
+                // FIXME: Use fences to know that acquire semaphore is unused.
+                let wait = self.free_semaphore.clone();
+
+                let result = unsafe {
+                    device.logical().acquire_next_image_khr(
+                        inner.handle,
+                        !0, /* wait indefinitely. This is OK as we never try to
+                             * acquire more images than there is in swapchain. */
+                        Some(wait.handle()),
+                        None,
+                        None,
+                    )
+                }
+                .result();
+
+                let index = match result {
+                    Ok(index) => index,
+                    Err(vk1_0::Result::ERROR_OUT_OF_HOST_MEMORY) => out_of_host_memory(),
+                    Err(vk1_0::Result::ERROR_OUT_OF_DEVICE_MEMORY) => {
+                        return Err(SurfaceError::OutOfMemory {
+                            source: OutOfMemory,
+                        });
+                    }
+                    Err(vk1_0::Result::ERROR_SURFACE_LOST_KHR) => {
+                        return Err(SurfaceError::SurfaceLost);
+                    }
+                    Err(vk1_0::Result::ERROR_OUT_OF_DATE_KHR) => {
+                        let usage = inner.usage;
+                        let format = inner.format;
+                        let mode = inner.mode;
+
+                        self.configure(usage, format, mode)?;
+                        continue;
+                    }
+                    Err(result) => unexpected_result(result),
+                };
+
+                let image_and_semaphores = &mut inner.images[index as usize];
+
+                std::mem::swap(&mut image_and_semaphores.acquire, &mut self.free_semaphore);
+
+                let signal = image_and_semaphores.release.clone();
+
+                let swapchain_image = SwapchainImage {
+                    info: SwapchainImageInfo {
+                        image: image_and_semaphores.image.clone(),
+                        wait,
+                        signal,
+                    },
+                    owner: self.device.clone(),
+                    handle: inner.handle,
+                    supported_families: self.surface_capabilities.supported_families.clone(),
+                    acquired_counter: { inner.acquired_counter.clone() },
+                    index,
+                };
+
+                inner.acquired_counter.fetch_add(1, Acquire);
+
+                return Ok(swapchain_image);
+            } else {
+                return Err(SurfaceError::NotConfigured);
             }
-
-            // FIXME: Use fences to know that acquire semaphore is unused.
-            let wait = self.free_semaphore.clone();
-
-            let result = unsafe {
-                device.logical().acquire_next_image_khr(
-                    inner.handle,
-                    !0, /* wait indefinitely. This is OK as we never try to
-                         * acquire more images than there is in swapchain. */
-                    Some(wait.handle()),
-                    None,
-                    None,
-                )
-            }
-            .result();
-
-            let index = match result {
-                Ok(index) => index,
-                Err(vk1_0::Result::ERROR_OUT_OF_HOST_MEMORY) => out_of_host_memory(),
-                Err(vk1_0::Result::ERROR_OUT_OF_DEVICE_MEMORY) => {
-                    return Err(SurfaceError::OutOfMemory {
-                        source: OutOfMemory,
-                    });
-                }
-                Err(vk1_0::Result::ERROR_SURFACE_LOST_KHR) => {
-                    return Err(SurfaceError::SurfaceLost);
-                }
-                Err(vk1_0::Result::ERROR_OUT_OF_DATE_KHR) => {
-                    return Ok(None);
-                }
-                Err(result) => unexpected_result(result),
-            };
-
-            let image_and_semaphores = &mut inner.images[index as usize];
-
-            std::mem::swap(&mut image_and_semaphores.acquire, &mut self.free_semaphore);
-
-            let signal = image_and_semaphores.release.clone();
-
-            let swapchain_image = SwapchainImage {
-                info: SwapchainImageInfo {
-                    image: image_and_semaphores.image.clone(),
-                    wait,
-                    signal,
-                },
-                owner: self.device.clone(),
-                handle: inner.handle,
-                supported_families: self.surface_capabilities.supported_families.clone(),
-                acquired_counter: { inner.acquired_counter.clone() },
-                index,
-            };
-
-            inner.acquired_counter.fetch_add(1, Acquire);
-
-            Ok(Some(swapchain_image))
-        } else {
-            Ok(None)
         }
     }
-}
-
-impl Swapchain {
-    // /// Destroys retired swapchains that are no longer used
-    // ///
-    // /// # Safety
-    // ///
-    // /// `swapchain_ext` and `logical` should belong to `self.device`.
-    // /// FIXME: Wait for commands to finish too.
-    // usnafe fn cleanup(&mut self, swapchain_ext: &SwapchainExt, logical:
-    // &LogicalDevice) {     let to_free = self
-    //         .retired
-    //         .iter()
-    //         .take_while(|inner| inner.acquired == 0)
-    //         .count();
-    //     self.retired.drain(0..to_free).for_each(|inner| {
-    //         inner
-    //             .images
-    //             .into_iter()
-    //             .for_each(|(_, s)| logical.destroy_semaphore(s, None));
-    //         swapchain_ext.destroy_swapchain(inner.handle, None);
-    //     });
-    //     self.retired_offset += to_free as u64;
-    // }
 }
