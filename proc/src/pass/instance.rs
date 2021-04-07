@@ -18,16 +18,24 @@ pub(super) fn generate(input: &Input) -> TokenStream {
 
             let initial_layout = initial_layout(&a.load_op);
             let check_final_layout = final_layout(&a.store_op).map(|final_layout| {
-                quote::quote!(else if a.final_layout != #final_layout { render_pass_compatible = false; } )
+                quote::quote!(else if a.final_layout != ::sierra::Layout::from(#final_layout) {
+                    tracing::debug!("Final layout is incompatible. Old {:?}, new {:?}", a.final_layout, #final_layout);
+                    render_pass_compatible = false;
+                } )
             });
 
             quote::quote!(
                 let a = render_pass.info().attachments[#index];
-                if ::sierra::Attachment::format(&input.#member) != a.format {
+                if a.format != ::sierra::Attachment::format(&input.#member) {
+                    tracing::debug!("Format is incompatible. Old {:?}, new {:?}", a.format, ::sierra::Attachment::format(&input.#member));
                     render_pass_compatible = false;
                 } else if let Some(samples) = ::sierra::Attachment::samples(&input.#member) {
-                    render_pass_compatible &= samples == a.samples;
-                } else if a.initial_layout == #initial_layout {
+                    if a.samples != samples {
+                        tracing::debug!("Samples count is incompatible. Old {:?}, new {:?}", a.samples, ::sierra::Attachment::samples(&input.#member));
+                        render_pass_compatible = false;
+                    }
+                } else if a.initial_layout != ::std::option::Option::map(#initial_layout, ::sierra::Layout::from) {
+                    tracing::debug!("Initial layout is incompatible. Old {:?}, new {:?}", a.initial_layout, ::std::option::Option::map(#initial_layout, ::sierra::Layout::from));
                     render_pass_compatible = false;
                 } #check_final_layout
             )
@@ -193,10 +201,10 @@ pub(super) fn generate(input: &Input) -> TokenStream {
         .iter()
         .filter_map(|a| match &a.load_op {
             LoadOp::Clear(ClearValue::Member(member)) => {
-                Some(quote::quote!(::std::convert::Into::into(input.#member),))
+                Some(quote::quote!(::sierra::ClearValue::from(input.#member),))
             }
             LoadOp::Clear(ClearValue::Expr(expr)) => {
-                Some(quote::quote!(::std::convert::Into::into(#expr),))
+                Some(quote::quote!(::sierra::ClearValue::from(#expr),))
             }
             _ => None,
         })
@@ -226,6 +234,8 @@ pub(super) fn generate(input: &Input) -> TokenStream {
                 }
 
                 if !render_pass_compatible {
+                    tracing::debug!("Render pass is not compatible with cached instance");
+
                     self.render_pass = None;
 
                     let mut attachments = ::std::vec::Vec::with_capacity(#attachment_count);
@@ -252,6 +262,8 @@ pub(super) fn generate(input: &Input) -> TokenStream {
                         true
                     }) {
                         Some(fb) => {
+                            tracing::trace!("Found framebuffer with compatible attachments");
+
                             ::sierra::FramebufferInfo {
                                 render_pass: ::std::clone::Clone::clone(render_pass),
                                 attachments: ::std::clone::Clone::clone(&fb.info().attachments),
@@ -259,6 +271,8 @@ pub(super) fn generate(input: &Input) -> TokenStream {
                             }
                         }
                         None => {
+                            tracing::debug!("Framebuffer with compatible attachments not found");
+
                             let mut fb_extent = ::sierra::Extent2d { width: !0, height: !0 };
                             #find_fb_extent
 
@@ -287,10 +301,14 @@ pub(super) fn generate(input: &Input) -> TokenStream {
                         true
                     }) {
                         Some(fb_index) => {
+                            tracing::trace!("Found framebuffer with compatible attachments");
+
                             let fb = self.framebuffers.remove(fb_index);
                             self.framebuffers.push(fb);
                         },
                         None => {
+                            tracing::debug!("Framebuffer with compatible attachments not found");
+
                             let mut fb_extent = ::sierra::Extent2d { width: !0, height: !0 };
                             #find_fb_extent
 
@@ -335,7 +353,7 @@ fn initial_layout(load_op: &LoadOp) -> TokenStream {
         LoadOp::Clear(_) => quote::quote!(::std::option::Option::None),
         LoadOp::DontCare => quote::quote!(::std::option::Option::None),
         LoadOp::Load(Layout::Expr(expr)) => {
-            quote::quote!(::std::option::Option::Some(::std::convert::Into::into(#expr)))
+            quote::quote!(::std::option::Option::Some(#expr))
         }
         LoadOp::Load(Layout::Member(layout)) => {
             quote::quote!(::std::option::Option::Some(self.#layout))
@@ -346,9 +364,7 @@ fn initial_layout(load_op: &LoadOp) -> TokenStream {
 fn final_layout(store_op: &StoreOp) -> Option<TokenStream> {
     match store_op {
         StoreOp::DontCare => None,
-        StoreOp::Store(Layout::Expr(expr)) => {
-            Some(quote::quote!(::std::convert::Into::into(#expr)))
-        }
+        StoreOp::Store(Layout::Expr(expr)) => Some(quote::quote!(#expr)),
         StoreOp::Store(Layout::Member(layout)) => Some(quote::quote!(self.#layout)),
     }
 }
