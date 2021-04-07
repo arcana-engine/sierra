@@ -58,11 +58,16 @@ impl Surface {
         }
     }
 
+    pub(crate) fn mark_unused(&self) {
+        self.inner.used.fetch_or(false, Ordering::SeqCst);
+    }
+
     pub fn info(&self) -> &SurfaceInfo {
         &self.inner.info
     }
 }
 
+#[track_caller]
 pub(crate) fn surface_error_from_erupt(err: vk1_0::Result) -> SurfaceError {
     match err {
         vk1_0::Result::ERROR_OUT_OF_HOST_MEMORY => out_of_host_memory(),

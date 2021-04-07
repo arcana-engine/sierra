@@ -7,19 +7,11 @@
 //! straightforward manner in single function call `instance.update(&input)`,\
 //! and then bind descriptor set to encoder.
 
-/// Dummy structure
-#[sierra::shader_repr]
-pub struct InstanceInfo {
-    pub transform: sierra::mat4,
-    pub pos: sierra::vec3,
-    pub fits_with_no_pad: f32,
-}
-
-/// Another dummy structure
-#[sierra::shader_repr]
-pub struct ComplexInfo {
-    pub instance: InstanceInfo,
-}
+use {
+    bumpalo::{collections::Vec as BVec, Bump},
+    sierra::RenderPassInstance as _,
+    tracing_subscriber::layer::SubscriberExt as _,
+};
 
 /// Descriptor set
 #[sierra::descriptors]
@@ -31,36 +23,24 @@ pub struct Globals {
     #[uniform]
     #[stages(Vertex)]
     pub camera_proj: sierra::mat4,
-
-    pub s: sierra::Sampler,
-    #[combined_image_sampler(s)]
-    #[stages(Fragment)]
-    pub shadows: sierra::Image,
 }
 
 #[sierra::descriptors]
 pub struct Object {
+    #[sampler]
     pub s: sierra::Sampler,
 
-    #[combined_image_sampler(s)]
+    #[sampled_image]
     #[stages(Fragment)]
     pub albedo: sierra::Image,
 
-    #[combined_image_sampler(s)]
-    #[stages(Fragment)]
-    pub metalness_normals: sierra::Image,
-
     #[uniform]
     #[stages(Vertex)]
-    pub complex: ComplexInfo,
+    pub transform: sierra::mat4,
 
     #[uniform]
     #[stages(Fragment)]
     pub rgb: sierra::vec3,
-
-    #[uniform]
-    #[stages(Fragment)]
-    pub x: f32,
 }
 
 /// Pipeline definition
@@ -81,8 +61,111 @@ pub struct Main {
 
     bg: sierra::ClearColor,
 
-    #[attachment(clear(const sierra::ClearDepth(0.0)))]
+    #[attachment(clear(const sierra::ClearDepth(1.0)))]
     depth: sierra::Format,
+}
+
+fn main() -> eyre::Result<()> {
+    color_eyre::install()?;
+
+    tracing::subscriber::set_global_default(
+        tracing_subscriber::fmt()
+            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+            .pretty()
+            .finish()
+            .with(tracing_error::ErrorLayer::default()),
+    )?;
+
+    let event_loop = winit::event_loop::EventLoop::new();
+    let window = winit::window::Window::new(&event_loop)?;
+
+    let graphics = sierra::Graphics::get_or_init()?;
+    let mut surface = graphics.create_surface(&window)?;
+
+    let physical = graphics
+        .devices()?
+        .into_iter()
+        .max_by_key(|d| d.info().kind)
+        .ok_or_else(|| eyre::eyre!("Failed to find physical device"))?;
+
+    let (device, mut queue) = physical.create_device(
+        &[sierra::Feature::SurfacePresentation],
+        sierra::SingleQueueQuery::GRAPHICS,
+    )?;
+
+    let shader_module = device.create_shader_module(sierra::ShaderModuleInfo {
+        code: std::include_bytes!("main.wgsl").to_vec().into_boxed_slice(),
+        language: sierra::ShaderLanguage::WGSL,
+    })?;
+
+    let mut swapchain = device.create_swapchain(&mut surface)?;
+
+    let mut main = Main::instance();
+    let pipeline_layout = Pipeline::layout(&device)?;
+    let mut globals = pipeline_layout.globals.instance();
+
+    // let mut graphisc_pipeline = None;
+
+    let bump = bumpalo::Bump::new();
+
+    event_loop.run(move |event, target, flow| {
+        *flow = winit::event_loop::ControlFlow::Poll;
+
+        match event {
+            winit::event::Event::WindowEvent {
+                event: winit::event::WindowEvent::CloseRequested,
+                ..
+            } => *flow = winit::event_loop::ControlFlow::Exit,
+
+            winit::event::Event::RedrawRequested(_) => {
+                let result = (|| -> eyre::Result<()> {
+                    let image = loop {
+                        // Note. Hide this loop inside `acquire_image`?
+                        if let Some(image) = swapchain.acquire_image()? {
+                            break image;
+                        }
+
+                        swapchain.configure(
+                            sierra::ImageUsage::COLOR_ATTACHMENT,
+                            sierra::Format::BGRA8Srgb,
+                            sierra::PresentMode::Fifo,
+                        )?;
+                    };
+
+                    let mut encoder = queue.create_encoder(&bump)?;
+                    let mut render_pass_encoder = main.begin_render_pass(
+                        &Main {
+                            target: image.info().image.clone(),
+                            bg: sierra::ClearColor(0.3, 0.1, 0.8, 1.0),
+                            depth: sierra::Format::D32Sfloat,
+                        },
+                        &device,
+                        &mut encoder,
+                    )?;
+                    drop(render_pass_encoder);
+                    queue.submit(
+                        &[(
+                            sierra::PipelineStageFlags::TOP_OF_PIPE,
+                            image.info().wait.clone(),
+                        )],
+                        Some(encoder.finish()),
+                        &[image.info().signal.clone()],
+                        None,
+                        &bump,
+                    );
+
+                    queue.present(image)?;
+
+                    Ok(())
+                })();
+
+                if let Err(err) = result {
+                    Err(err).unwrap()
+                }
+            }
+            _ => {}
+        }
+    })
 }
 
 pub fn example(

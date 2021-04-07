@@ -21,12 +21,13 @@ use {
             // khr_pipeline_library::KHR_PIPELINE_LIBRARY_EXTENSION_NAME,
             // khr_push_descriptor::KHR_PUSH_DESCRIPTOR_EXTENSION_NAME,
             khr_ray_tracing_pipeline::{self as vkrt, KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME},
+            khr_surface as vks,
             khr_swapchain::KHR_SWAPCHAIN_EXTENSION_NAME,
         },
         vk1_0, vk1_1, vk1_2, DeviceLoader, ExtendableFrom as _, LoaderError,
     },
     smallvec::SmallVec,
-    std::{collections::HashMap, convert::TryInto as _, ffi::CStr},
+    std::{collections::HashMap, convert::TryInto as _, ffi::CStr, sync::Arc},
 };
 
 #[derive(Clone, Debug)]
@@ -347,86 +348,9 @@ impl PhysicalDevice {
     pub fn surface_capabilities(
         &self,
         surface: &Surface,
-    ) -> Result<Option<SurfaceCapabilities>, SurfaceError> {
-        let surface = surface.handle();
+    ) -> Result<SurfaceCapabilities, SurfaceError> {
         let instance = &self.graphics().instance;
-
-        assert!(
-            instance.enabled().khr_surface,
-            "Should be enabled given that there is a Surface"
-        );
-        let families =
-            unsafe { instance.get_physical_device_queue_family_properties(self.physical, None) };
-
-        let families = (0..families.len())
-            .filter_map(|f| {
-                let supported = unsafe {
-                    instance.get_physical_device_surface_support_khr(
-                        self.physical,
-                        f.try_into().unwrap(),
-                        surface,
-                        None,
-                    )
-                }
-                .result()
-                .map_err(|err| match err {
-                    vk1_0::Result::ERROR_OUT_OF_HOST_MEMORY => out_of_host_memory(),
-                    vk1_0::Result::ERROR_OUT_OF_DEVICE_MEMORY => SurfaceError::OutOfMemory {
-                        source: OutOfMemory,
-                    },
-                    vk1_0::Result::ERROR_SURFACE_LOST_KHR => SurfaceError::SurfaceLost,
-                    _ => unreachable!(),
-                });
-
-                match supported {
-                    Ok(true) => Some(Ok(f)),
-                    Ok(false) => None,
-                    Err(err) => Some(Err(err)),
-                }
-            })
-            .collect::<Result<Vec<_>, SurfaceError>>()?;
-
-        if families.is_empty() {
-            return Ok(None);
-        }
-
-        let present_modes = unsafe {
-            instance.get_physical_device_surface_present_modes_khr(self.physical, surface, None)
-        }
-        .result()
-        .map_err(surface_error_from_erupt)?;
-
-        let present_modes = present_modes
-            .into_iter()
-            .filter_map(from_erupt)
-            .collect::<Vec<_>>();
-
-        let caps = unsafe {
-            instance.get_physical_device_surface_capabilities_khr(self.physical, surface, None)
-        }
-        .result()
-        .map_err(surface_error_from_erupt)?;
-
-        let formats = unsafe {
-            instance.get_physical_device_surface_formats_khr(self.physical, surface, None)
-        }
-        .result()
-        .map_err(surface_error_from_erupt)?;
-
-        let formats = formats
-            .iter()
-            .filter_map(|sf| from_erupt(sf.format))
-            .collect::<Vec<_>>();
-
-        Ok(Some(SurfaceCapabilities {
-            families,
-            image_count: caps.min_image_count..=caps.max_image_count,
-            current_extent: from_erupt(caps.current_extent),
-            image_extent: from_erupt(caps.min_image_extent)..=from_erupt(caps.max_image_extent),
-            supported_usage: from_erupt(caps.supported_usage_flags),
-            present_modes,
-            formats,
-        }))
+        surface_capabilities(instance, self.physical, surface.handle())
     }
 
     /// Create graphics API device.
@@ -916,4 +840,79 @@ impl RequestedFeatures {
 #[allow(dead_code)]
 fn check() {
     assert_object::<PhysicalDevice>();
+}
+
+pub fn surface_capabilities(
+    instance: &erupt::InstanceLoader,
+    physical: vk1_0::PhysicalDevice,
+    surface: vks::SurfaceKHR,
+) -> Result<SurfaceCapabilities, SurfaceError> {
+    assert!(
+        instance.enabled().khr_surface,
+        "Should be enabled given that there is a Surface"
+    );
+
+    let families = unsafe { instance.get_physical_device_queue_family_properties(physical, None) };
+
+    let supported_families = (0..families.len())
+        .map(|f| {
+            let supported = unsafe {
+                instance.get_physical_device_surface_support_khr(
+                    physical,
+                    f.try_into().unwrap(),
+                    surface,
+                    None,
+                )
+            }
+            .result()
+            .map_err(|err| match err {
+                vk1_0::Result::ERROR_OUT_OF_HOST_MEMORY => out_of_host_memory(),
+                vk1_0::Result::ERROR_OUT_OF_DEVICE_MEMORY => SurfaceError::OutOfMemory {
+                    source: OutOfMemory,
+                },
+                vk1_0::Result::ERROR_SURFACE_LOST_KHR => SurfaceError::SurfaceLost,
+                _ => unreachable!(),
+            })?;
+            Ok(supported)
+        })
+        .collect::<Result<Arc<[_]>, SurfaceError>>()?;
+
+    let present_modes =
+        unsafe { instance.get_physical_device_surface_present_modes_khr(physical, surface, None) }
+            .result()
+            .map_err(surface_error_from_erupt)?;
+
+    let present_modes = present_modes
+        .into_iter()
+        .filter_map(from_erupt)
+        .collect::<Vec<_>>();
+
+    let caps =
+        unsafe { instance.get_physical_device_surface_capabilities_khr(physical, surface, None) }
+            .result()
+            .map_err(surface_error_from_erupt)?;
+
+    let formats =
+        unsafe { instance.get_physical_device_surface_formats_khr(physical, surface, None) }
+            .result()
+            .map_err(surface_error_from_erupt)?;
+
+    let formats = formats
+        .iter()
+        .filter_map(|sf| from_erupt(sf.format))
+        .collect::<Vec<_>>();
+
+    Ok(SurfaceCapabilities {
+        supported_families,
+        min_image_count: caps.min_image_count,
+        max_image_count: caps.max_image_count,
+        current_extent: from_erupt(caps.current_extent),
+        current_transform: from_erupt(caps.current_transform.bitmask()),
+        min_image_extent: from_erupt(caps.min_image_extent),
+        max_image_extent: from_erupt(caps.max_image_extent),
+        supported_usage: from_erupt(caps.supported_usage_flags),
+        supported_composite_alpha: from_erupt(caps.supported_composite_alpha),
+        present_modes,
+        formats,
+    })
 }

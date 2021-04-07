@@ -1,6 +1,7 @@
 use super::{
     convert::{from_erupt, FromErupt as _, ToErupt as _},
     device::{Device, WeakDevice},
+    physical::surface_capabilities,
     surface::{surface_error_from_erupt, Surface},
     unexpected_result,
 };
@@ -9,7 +10,7 @@ use crate::{
     image::{Image, ImageInfo, ImageUsage, Samples},
     out_of_host_memory,
     semaphore::Semaphore,
-    surface::{PresentMode, SurfaceError},
+    surface::{PresentMode, SurfaceCapabilities, SurfaceError},
     Extent2d, OutOfMemory,
 };
 use erupt::{
@@ -22,7 +23,7 @@ use erupt::{
 use std::{
     convert::TryInto as _,
     sync::{
-        atomic::{AtomicU64, AtomicUsize, Ordering::*},
+        atomic::{AtomicU32, AtomicU64, Ordering::*},
         Arc,
     },
 };
@@ -35,7 +36,7 @@ pub struct SwapchainImage {
     owner: WeakDevice,
     handle: SwapchainKHR,
     supported_families: Arc<[bool]>,
-    counter: Arc<AtomicUsize>,
+    acquired_counter: Arc<AtomicU32>,
     index: u32,
 }
 
@@ -59,11 +60,9 @@ impl SwapchainImage {
     pub(super) fn handle(&self) -> SwapchainKHR {
         self.handle
     }
-}
 
-impl Drop for SwapchainImage {
-    fn drop(&mut self) {
-        self.counter.fetch_sub(1, Release);
+    pub(super) fn presented(self) {
+        self.acquired_counter.fetch_sub(1, Release);
     }
 }
 
@@ -97,7 +96,7 @@ struct SwapchainInner {
     handle: vksw::SwapchainKHR,
     index: usize,
     images: Vec<SwapchainImageAndSemaphores>,
-    counter: Arc<AtomicUsize>,
+    acquired_counter: Arc<AtomicU32>,
     format: Format,
     extent: Extent2d,
     usage: ImageUsage,
@@ -111,13 +110,11 @@ pub struct Swapchain {
     free_semaphore: Semaphore,
     device: WeakDevice,
     surface: Surface,
-    supported_families: Arc<[bool]>,
+    surface_capabilities: SurfaceCapabilities,
 }
 
 impl Swapchain {
     pub(crate) fn new(surface: &Surface, device: &Device) -> Result<Self, SurfaceError> {
-        let handle = surface.handle();
-
         debug_assert!(
             device.graphics().instance.enabled().khr_surface,
             "Should be enabled given that there is a Surface"
@@ -129,42 +126,25 @@ impl Swapchain {
         );
 
         let instance = &device.graphics().instance;
+        let surface_capabilities =
+            surface_capabilities(instance, device.physical(), surface.handle())?;
 
-        let supported_families = (0..device.properties().family.len() as u32)
-            .map(|family| unsafe {
-                instance
-                    .get_physical_device_surface_support_khr(
-                        device.physical(),
-                        family,
-                        handle,
-                        None,
-                    )
-                    .result()
-                    .map_err(|err| match err {
-                        vk1_0::Result::ERROR_OUT_OF_HOST_MEMORY => out_of_host_memory(),
-                        vk1_0::Result::ERROR_OUT_OF_DEVICE_MEMORY => SurfaceError::OutOfMemory {
-                            source: OutOfMemory,
-                        },
-                        vk1_0::Result::ERROR_SURFACE_LOST_KHR => SurfaceError::SurfaceLost,
-                        _ => unreachable!(),
-                    })
-            })
-            .collect::<Result<Vec<_>, _>>()?;
+        if surface_capabilities.supported_families.is_empty() {
+            return Err(SurfaceError::NotSupported);
+        }
+
+        let free_semaphore = device.clone().create_semaphore()?;
 
         surface.mark_used()?;
-
         tracing::debug!("Swapchain created");
         Ok(Swapchain {
             surface: surface.clone(),
-            free_semaphore: device
-                .clone()
-                .create_semaphore()
-                .map_err(|err| SurfaceError::OutOfMemory { source: err })?,
+            free_semaphore,
             inner: None,
             retired: Vec::new(),
             retired_offset: 0,
             device: device.downgrade(),
-            supported_families: supported_families.into(),
+            surface_capabilities,
         })
     }
 }
@@ -192,23 +172,14 @@ impl Swapchain {
             device.logical().enabled().khr_swapchain,
             "Should be enabled given that there is a Swapchain"
         );
+
         let instance = &device.graphics().instance;
         let logical = &device.logical();
 
-        let caps = unsafe {
-            instance.get_physical_device_surface_capabilities_khr(device.physical(), surface, None)
-        }
-        .result()
-        .map_err(|err| match err {
-            vk1_0::Result::ERROR_OUT_OF_HOST_MEMORY => out_of_host_memory(),
-            vk1_0::Result::ERROR_OUT_OF_DEVICE_MEMORY => SurfaceError::OutOfMemory {
-                source: OutOfMemory,
-            },
-            vk1_0::Result::ERROR_SURFACE_LOST_KHR => SurfaceError::SurfaceLost,
-            _ => unexpected_result(err),
-        })?;
+        self.surface_capabilities = surface_capabilities(instance, device.physical(), surface)?;
+        let caps = &self.surface_capabilities;
 
-        if !ImageUsage::from_erupt(caps.supported_usage_flags).contains(usage) {
+        if !caps.supported_usage.contains(usage) {
             return Err(SurfaceError::UsageNotSupported { usage });
         }
 
@@ -226,7 +197,7 @@ impl Swapchain {
             .ok_or_else(|| SurfaceError::FormatUnsupported { format })?;
 
         let composite_alpha = {
-            let raw = caps.supported_composite_alpha.bits();
+            let raw = caps.supported_composite_alpha.to_erupt().bits();
 
             if raw == 0 {
                 tracing::warn!("Vulkan implementation must support at least one composite alpha mode, but this one reports none. Picking OPAQUE and hope for the best");
@@ -265,11 +236,13 @@ impl Swapchain {
                     .min_image_count(3.min(caps.max_image_count).max(caps.min_image_count))
                     .image_format(sf.format)
                     .image_color_space(sf.color_space)
-                    .image_extent(caps.current_extent)
+                    .image_extent(caps.current_extent.to_erupt())
                     .image_array_layers(1)
                     .image_usage(usage.to_erupt())
                     .image_sharing_mode(vk1_0::SharingMode::EXCLUSIVE)
-                    .pre_transform(caps.current_transform)
+                    .pre_transform(vks::SurfaceTransformFlagBitsKHR(
+                        caps.current_transform.to_erupt().bits(),
+                    ))
                     .composite_alpha(vks::CompositeAlphaFlagBitsKHR(composite_alpha.bits()))
                     .present_mode(erupt_mode)
                     .old_swapchain(old_swapchain),
@@ -315,7 +288,7 @@ impl Swapchain {
                 .map(|(i, (a, r))| SwapchainImageAndSemaphores {
                     image: Image::new_swapchain(
                         ImageInfo {
-                            extent: Extent2d::from_erupt(caps.current_extent).into(),
+                            extent: caps.current_extent.into(),
                             format,
                             levels: 1,
                             layers: 1,
@@ -330,8 +303,8 @@ impl Swapchain {
                     release: r,
                 })
                 .collect(),
-            counter: Arc::new(AtomicUsize::new(0)),
-            extent: from_erupt(caps.current_extent),
+            acquired_counter: Arc::new(AtomicU32::new(0)),
+            extent: caps.current_extent,
             format,
             usage,
         });
@@ -352,19 +325,21 @@ impl Swapchain {
         );
 
         if let Some(inner) = self.inner.as_mut() {
-            if inner.counter.load(Acquire) >= inner.images.len() {
-                tracing::error!("Acquire would block");
+            if inner.acquired_counter.load(Acquire)
+                >= (inner.images.len() as u32 - self.surface_capabilities.min_image_count)
+            {
+                tracing::error!("Acquire would block. Make sure to present acquire images");
                 return Ok(None);
             }
 
-            // FIXME: Use fences to know that acqure semaphore is unused.
+            // FIXME: Use fences to know that acquire semaphore is unused.
             let wait = self.free_semaphore.clone();
 
             let result = unsafe {
                 device.logical().acquire_next_image_khr(
                     inner.handle,
                     !0, /* wait indefinitely. This is OK as we never try to
-                         * acquire more images than there is in swaphain. */
+                         * acquire more images than there is in swapchain. */
                     Some(wait.handle()),
                     None,
                     None,
@@ -391,13 +366,11 @@ impl Swapchain {
 
             let image_and_semaphores = &mut inner.images[index as usize];
 
-            inner.counter.fetch_add(1, Acquire);
-
             std::mem::swap(&mut image_and_semaphores.acquire, &mut self.free_semaphore);
 
             let signal = image_and_semaphores.release.clone();
 
-            Ok(Some(SwapchainImage {
+            let swapchain_image = SwapchainImage {
                 info: SwapchainImageInfo {
                     image: image_and_semaphores.image.clone(),
                     wait,
@@ -405,10 +378,14 @@ impl Swapchain {
                 },
                 owner: self.device.clone(),
                 handle: inner.handle,
-                supported_families: self.supported_families.clone(),
-                counter: inner.counter.clone(),
+                supported_families: self.surface_capabilities.supported_families.clone(),
+                acquired_counter: { inner.acquired_counter.clone() },
                 index,
-            }))
+            };
+
+            inner.acquired_counter.fetch_add(1, Acquire);
+
+            Ok(Some(swapchain_image))
         } else {
             Ok(None)
         }

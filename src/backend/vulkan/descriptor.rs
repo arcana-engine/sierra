@@ -7,7 +7,7 @@ use {
     },
 };
 
-const DESCRIPTOR_TYPES_COUNT: usize = 12;
+const DESCRIPTOR_TYPES_COUNT: usize = 10;
 
 fn descriptor_type_from_index(index: usize) -> vk1_0::DescriptorType {
     debug_assert!(index < DESCRIPTOR_TYPES_COUNT);
@@ -33,42 +33,32 @@ fn descriptor_type_from_index(index: usize) -> vk1_0::DescriptorType {
 
             vk1_0::DescriptorType::STORAGE_IMAGE
         }
-        // 4 => {
-        //     debug_assert_eq!(DescriptorType::UniformTexelBuffer as usize, index);
-
-        //     vk1_0::DescriptorType::UNIFORM_TEXEL_BUFFER
-        // }
-        // 5 => {
-        //     debug_assert_eq!(DescriptorType::StorageTexelBuffer as usize, index);
-
-        //     vk1_0::DescriptorType::STORAGE_TEXEL_BUFFER
-        // }
-        6 => {
+        4 => {
             debug_assert_eq!(DescriptorType::UniformBuffer as usize, index);
 
             vk1_0::DescriptorType::UNIFORM_BUFFER
         }
-        7 => {
+        5 => {
             debug_assert_eq!(DescriptorType::StorageBuffer as usize, index);
 
             vk1_0::DescriptorType::STORAGE_BUFFER
         }
-        8 => {
+        6 => {
             debug_assert_eq!(DescriptorType::UniformBufferDynamic as usize, index);
 
             vk1_0::DescriptorType::UNIFORM_BUFFER_DYNAMIC
         }
-        9 => {
+        7 => {
             debug_assert_eq!(DescriptorType::StorageBufferDynamic as usize, index);
 
             vk1_0::DescriptorType::STORAGE_BUFFER_DYNAMIC
         }
-        10 => {
+        8 => {
             debug_assert_eq!(DescriptorType::InputAttachment as usize, index);
 
             vk1_0::DescriptorType::INPUT_ATTACHMENT
         }
-        11 => {
+        9 => {
             debug_assert_eq!(DescriptorType::AccelerationStructure as usize, index);
 
             vk1_0::DescriptorType::ACCELERATION_STRUCTURE_KHR

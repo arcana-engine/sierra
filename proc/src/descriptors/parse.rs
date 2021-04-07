@@ -3,6 +3,8 @@ use {
         acceleration_structure::{parse_acceleration_structure_attr, AccelerationStructure},
         buffer::{parse_buffer_attr, Buffer},
         combined_image_sampler::{parse_combined_image_sampler_attr, CombinedImageSampler},
+        sampled_image::{parse_sampled_image_attr, SampledImage},
+        sampler::{parse_sampler_attr, Sampler},
         uniform::parse_uniform_attr,
     },
     crate::{find_unique_attribute, stage::Stage, take_attributes},
@@ -25,9 +27,11 @@ pub struct Descriptor {
 impl Descriptor {
     fn validate(&self, item_struct: &syn::ItemStruct) -> syn::Result<()> {
         match &self.ty {
+            DescriptorType::Sampler(args) => args.validate(item_struct),
+            DescriptorType::SampledImage(args) => args.validate(item_struct),
             DescriptorType::CombinedImageSampler(args) => args.validate(item_struct),
-            DescriptorType::AccelerationStructure(args) => args.validate(item_struct),
             DescriptorType::Buffer(args) => args.validate(item_struct),
+            DescriptorType::AccelerationStructure(args) => args.validate(item_struct),
         }
     }
 }
@@ -46,13 +50,20 @@ impl Uniform {
 }
 
 pub enum DescriptorType {
+    Sampler(Sampler),
+    SampledImage(SampledImage),
     CombinedImageSampler(CombinedImageSampler),
-    AccelerationStructure(AccelerationStructure),
     Buffer(Buffer),
+    AccelerationStructure(AccelerationStructure),
 }
 
 pub fn parse(attr: proc_macro::TokenStream, item: proc_macro::TokenStream) -> syn::Result<Input> {
-    assert!(attr.is_empty());
+    if !attr.is_empty() {
+        return Err(syn::Error::new_spanned(
+            proc_macro2::TokenStream::from(attr),
+            "#[descriptors] attribute does not accept arguments",
+        ));
+    }
 
     let mut item_struct = syn::parse::<syn::ItemStruct>(item)?;
 
@@ -92,9 +103,11 @@ pub fn parse(attr: proc_macro::TokenStream, item: proc_macro::TokenStream) -> sy
 }
 
 enum FieldAttribute {
+    Sampler(Sampler),
+    SampledImage(SampledImage),
     CombinedImageSampler(CombinedImageSampler),
-    AccelerationStructure(AccelerationStructure),
     Buffer(Buffer),
+    AccelerationStructure(AccelerationStructure),
     Uniform,
 }
 
@@ -154,8 +167,13 @@ fn parse_input_field(field: &mut syn::Field, field_index: u32) -> syn::Result<Op
             };
 
             Ok(Some(match ty {
-                FieldAttribute::Uniform => Field::Uniform(Uniform {
-                    ty: field.ty.clone(),
+                FieldAttribute::Sampler(value) => Field::Descriptor(Descriptor {
+                    ty: DescriptorType::Sampler(value),
+                    stages,
+                    member,
+                }),
+                FieldAttribute::SampledImage(value) => Field::Descriptor(Descriptor {
+                    ty: DescriptorType::SampledImage(value),
                     stages,
                     member,
                 }),
@@ -164,13 +182,18 @@ fn parse_input_field(field: &mut syn::Field, field_index: u32) -> syn::Result<Op
                     stages,
                     member,
                 }),
+                FieldAttribute::Buffer(value) => Field::Descriptor(Descriptor {
+                    ty: DescriptorType::Buffer(value),
+                    stages,
+                    member,
+                }),
                 FieldAttribute::AccelerationStructure(value) => Field::Descriptor(Descriptor {
                     ty: DescriptorType::AccelerationStructure(value),
                     stages,
                     member,
                 }),
-                FieldAttribute::Buffer(value) => Field::Descriptor(Descriptor {
-                    ty: DescriptorType::Buffer(value),
+                FieldAttribute::Uniform => Field::Uniform(Uniform {
+                    ty: field.ty.clone(),
                     stages,
                     member,
                 }),
@@ -181,11 +204,13 @@ fn parse_input_field(field: &mut syn::Field, field_index: u32) -> syn::Result<Op
 }
 
 fn parse_input_field_attr(attr: &syn::Attribute) -> syn::Result<Option<FieldAttribute>> {
+    on_first_ok!(parse_sampler_attr(attr)?.map(FieldAttribute::Sampler));
+    on_first_ok!(parse_sampled_image_attr(attr)?.map(FieldAttribute::SampledImage));
     on_first_ok!(parse_combined_image_sampler_attr(attr)?.map(FieldAttribute::CombinedImageSampler));
+    on_first_ok!(parse_buffer_attr(attr)?.map(FieldAttribute::Buffer));
     on_first_ok!(
         parse_acceleration_structure_attr(attr)?.map(FieldAttribute::AccelerationStructure)
     );
-    on_first_ok!(parse_buffer_attr(attr)?.map(FieldAttribute::Buffer));
     on_first_ok!(parse_uniform_attr(attr)?.map(|_| FieldAttribute::Uniform));
     Ok(None)
 }

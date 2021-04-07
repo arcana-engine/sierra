@@ -89,112 +89,6 @@ pub struct GraphicsPipelineInfo {
     pub subpass: u32,
 }
 
-/// Builder for `GraphicsPipelineInfo`.
-/// Used in `graphics_pipeline_info` macro.
-#[doc(hidden)]
-#[allow(missing_debug_implementations)]
-pub struct GraphicsPipelineInfoBuilder {
-    pub vertex_bindings: Vec<VertexInputBinding>,
-    pub vertex_attributes: Vec<VertexInputAttribute>,
-    pub primitive_topology: PrimitiveTopology,
-    pub primitive_restart_enable: bool,
-    pub rasterizer: Option<Rasterizer>,
-    pub subpass: u32,
-}
-
-#[doc(hidden)]
-impl GraphicsPipelineInfoBuilder {
-    pub fn new() -> Self {
-        GraphicsPipelineInfoBuilder {
-            vertex_bindings: Vec::new(),
-            vertex_attributes: Vec::new(),
-            primitive_topology: PrimitiveTopology::TriangleList,
-            primitive_restart_enable: false,
-            rasterizer: None,
-            subpass: 0,
-        }
-    }
-}
-
-/// Convenient macro to build `GraphicsPipelineInfo`.
-/// Allows to skip fields when their default values are sufficient.
-/// The only required fields are:
-/// * `vertex_shader`
-/// * `layout`
-/// * `render_pass`
-/// Note that default `primitive_topology` is `TriangleList`.
-///
-/// # Example
-///
-/// ```ignore
-/// graphics_pipeline_info! {
-///     vertex_shader: Shader::new(vertex_shader.clone()),
-///     layout: pipeline_layout.clone(),
-///     render_pass: render_pass.clone(),
-///     rasterizer: Rasterizer::simple(
-///         Shader::new(fragment_shader.clone()),
-///         false,
-///     ),
-/// }
-/// ```
-#[macro_export]
-macro_rules! graphics_pipeline_info {
-    ($($field:ident : $value:expr),* $(,)?) => {
-        graphics_pipeline_info!(@UNFOLD builder { let mut builder = GraphicsPipelineInfoBuilder::new(); } { $($field: $value),* } {})
-    };
-
-    (@UNFOLD $builder:ident { $($stmts:stmt)* } { vertex_bindings: $vertex_bindings:expr $(, $field:ident : $value:expr)* } { $($rfield:ident : $rvalue:expr),* }) => {
-        graphics_pipeline_info!(@UNFOLD $builder { $($stmts)* $builder.vertex_bindings = $vertex_bindings.into(); } { $($field: $value),* } {$($rfield:$rvalue),*})
-    };
-
-    (@UNFOLD $builder:ident { $($stmts:stmt)* } { vertex_attributes: $vertex_attributes:expr $(, $field:ident : $value:expr)* } { $($rfield:ident : $rvalue:expr),* }) => {
-        graphics_pipeline_info!(@UNFOLD $builder { $($stmts)* $builder.vertex_attributes = $vertex_attributes.into(); } { $($field: $value),* } {$($rfield:$rvalue),*})
-    };
-
-    (@UNFOLD $builder:ident { $($stmts:stmt)* } { primitive_topology: $primitive_topology:expr $(, $field:ident : $value:expr)* } { $($rfield:ident : $rvalue:expr),* }) => {
-        graphics_pipeline_info!(@UNFOLD $builder { $($stmts)* $builder.primitive_topology = $primitive_topology.into(); } { $($field: $value),* } {$($rfield:$rvalue),*})
-    };
-
-    (@UNFOLD $builder:ident { $($stmts:stmt)* } { primitive_restart_enable: $primitive_restart_enable:expr $(, $field:ident : $value:expr)* } { $($rfield:ident : $rvalue:expr),* }) => {
-        graphics_pipeline_info!(@UNFOLD $builder { $($stmts)* $builder.primitive_restart_enable = $primitive_restart_enable.into(); } { $($field: $value),* } {$($rfield:$rvalue),*})
-    };
-
-    (@UNFOLD $builder:ident { $($stmts:stmt)* } { rasterizer: $rasterizer:expr $(, $field:ident : $value:expr)* } { $($rfield:ident : $rvalue:expr),* }) => {
-        graphics_pipeline_info!(@UNFOLD $builder { $($stmts)* $builder.rasterizer = $rasterizer.into(); } { $($field: $value),* } {$($rfield:$rvalue),*})
-    };
-
-    (@UNFOLD $builder:ident { $($stmts:stmt)* } { subpass: $subpass:expr $(, $field:ident : $value:expr)* } { $($rfield:ident : $rvalue:expr),* }) => {
-        graphics_pipeline_info!(@UNFOLD $builder { $($stmts)* $builder.subpass = $subpass.into(); } { $($field: $value),* } {$($rfield:$rvalue),*})
-    };
-
-    (@UNFOLD $builder:ident { $($stmts:stmt)* } { layout: $layout:expr $(, $field:ident : $value:expr)* } { $($rfield:ident : $rvalue:expr),* }) => {
-        graphics_pipeline_info!(@UNFOLD $builder { $($stmts)* } { $($field: $value),* } { layout: $layout $(,$rfield:$rvalue)*})
-    };
-
-    (@UNFOLD $builder:ident { $($stmts:stmt)* } { render_pass: $render_pass:expr $(, $field:ident : $value:expr)* } { $($rfield:ident : $rvalue:expr),* }) => {
-        graphics_pipeline_info!(@UNFOLD $builder { $($stmts)* } { $($field: $value),* } { render_pass: $render_pass $(, $rfield:$rvalue)*})
-    };
-
-    (@UNFOLD $builder:ident { $($stmts:stmt)* } { vertex_shader: $vertex_shader:expr $(, $field:ident : $value:expr)* } { $($rfield:ident : $rvalue:expr),* }) => {
-        graphics_pipeline_info!(@UNFOLD $builder { $($stmts)* } { $($field: $value),* } { vertex_shader: $vertex_shader $(,$rfield:$rvalue)*})
-    };
-
-    (@UNFOLD $builder:ident { $($stmts:stmt)* } {} { $($rfield:ident : $rvalue:expr),* }) => {
-        {
-            $($stmts)*
-            GraphicsPipelineInfo {
-                vertex_bindings: $builder.vertex_bindings,
-                vertex_attributes: $builder.vertex_attributes,
-                primitive_topology: $builder.primitive_topology,
-                primitive_restart_enable: $builder.primitive_restart_enable,
-                rasterizer: $builder.rasterizer,
-                subpass: $builder.subpass,
-                $($rfield: $rvalue,)*
-            }
-        }
-    };
-}
-
 /// Vertex buffer binding bahavior.
 /// Controls what subrange corresponds for vertex X of instance Y.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
@@ -366,17 +260,14 @@ pub struct Rasterizer {
     pub color_blend: ColorBlend,
 }
 
-// if depth {
-//     Some(DepthTest {
-//         compare: CompareOp::Less,
-//         write: true,
-//     })
-// } else {
-//     None
-// }
-#[doc(hiddent)]
+impl Default for Rasterizer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Rasterizer {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Rasterizer {
             viewport: Dynamic,
             scissor: Dynamic,
@@ -399,95 +290,16 @@ impl Rasterizer {
                 }),
                 write_mask: ComponentMask::RGBA,
                 constants: Static {
-                    value: [0.0.into(), 0.0.into(), 0.0.into(), 0.0.into()],
+                    value: [
+                        OrderedFloat(0.0),
+                        OrderedFloat(0.0),
+                        OrderedFloat(0.0),
+                        OrderedFloat(0.0),
+                    ],
                 },
             },
         }
     }
-}
-
-/// Convenient macro to build `Rasterizer`.
-/// Allows to skip fields when their default values are sufficient.
-///
-/// # Example
-///
-/// ```ignore
-/// rasterizer! {
-///     fragment_shader: Shader::new(fragment_shader.clone()),
-/// }
-/// ```
-#[macro_export]
-macro_rules! rasterizer {
-    ($($field:ident : $value:expr),* $(,)?) => {
-        rasterizer!(@UNFOLD builder { let mut builder = Rasterizer::new(); } { $($field: $value),* })
-    };
-
-    (@UNFOLD $builder:ident { $($stmts:stmt)* } { viewport: $viewport:expr $(, $field:ident : $value:expr)* }) => {
-        rasterizer!(@UNFOLD $builder { $($stmts)* $builder.viewport = $viewport.into(); } { $($field: $value),* })
-    };
-
-    (@UNFOLD $builder:ident { $($stmts:stmt)* } { scissor: $scissor:expr $(, $field:ident : $value:expr)* }) => {
-        rasterizer!(@UNFOLD $builder { $($stmts)* $builder.scissor = $scissor.into(); } { $($field: $value),* })
-    };
-
-    (@UNFOLD $builder:ident { $($stmts:stmt)* } { depth_clamp: $depth_clamp:expr $(, $field:ident : $value:expr)* }) => {
-        rasterizer!(@UNFOLD $builder { $($stmts)* $builder.depth_clamp = $depth_clamp.into(); } { $($field: $value),* })
-    };
-
-    (@UNFOLD $builder:ident { $($stmts:stmt)* } { front_face: $front_face:expr $(, $field:ident : $value:expr)* }) => {
-        rasterizer!(@UNFOLD $builder { $($stmts)* $builder.front_face = $front_face.into(); } { $($field: $value),* })
-    };
-
-    (@UNFOLD $builder:ident { $($stmts:stmt)* } { culling: $culling:expr $(, $field:ident : $value:expr)* }) => {
-        rasterizer!(@UNFOLD $builder { $($stmts)* $builder.culling = $culling.into(); } { $($field: $value),* })
-    };
-
-    (@UNFOLD $builder:ident { $($stmts:stmt)* } { polygon_mode: $polygon_mode:expr $(, $field:ident : $value:expr)* }) => {
-        rasterizer!(@UNFOLD $builder { $($stmts)* $builder.polygon_mode = $polygon_mode.into(); } { $($field: $value),* })
-    };
-
-    (@UNFOLD $builder:ident { $($stmts:stmt)* } { depth_test: $depth_test:expr $(, $field:ident : $value:expr)* }) => {
-        rasterizer!(@UNFOLD $builder { $($stmts)* $builder.depth_test = $depth_test.into(); } { $($field: $value),* })
-    };
-
-    (@UNFOLD $builder:ident { $($stmts:stmt)* } { depth: $depth:expr $(, $field:ident : $value:expr)* }) => {
-        rasterizer!(@UNFOLD $builder { $($stmts)* $builder.depth_test = if $depth { Some(DepthTest { compare: CompareOp::Less, write: true, }) } else { None }; } { $($field: $value),* })
-    };
-
-    (@UNFOLD $builder:ident { $($stmts:stmt)* } { stencil_tests: $stencil_tests:expr $(, $field:ident : $value:expr)* }) => {
-        rasterizer!(@UNFOLD $builder { $($stmts)* $builder.stencil_tests = $stencil_tests.into(); } { $($field: $value),* })
-    };
-
-    (@UNFOLD $builder:ident { $($stmts:stmt)* } { depth_bounds: $depth_bounds:expr $(, $field:ident : $value:expr)* }) => {
-        rasterizer!(@UNFOLD $builder { $($stmts)* $builder.depth_bounds = $depth_bounds.into(); } { $($field: $value),* })
-    };
-
-    (@UNFOLD $builder:ident { $($stmts:stmt)* } { fragment_shader: $fragment_shader:expr $(, $field:ident : $value:expr)* }) => {
-        rasterizer!(@UNFOLD $builder { $($stmts)* $builder.fragment_shader = $fragment_shader.into(); } { $($field: $value),* })
-    };
-
-    (@UNFOLD $builder:ident { $($stmts:stmt)* } { color_blend: $color_blend:expr $(, $field:ident : $value:expr)* }) => {
-        rasterizer!(@UNFOLD $builder { $($stmts)* $builder.color_blend = $color_blend.into(); } { $($field: $value),* })
-    };
-
-    (@UNFOLD $builder:ident { $($stmts:stmt)* } {}) => {
-        {
-            $($stmts)*
-            Rasterizer {
-                viewport: $builder.viewport,
-                scissor: $builder.scissor,
-                depth_clamp: $builder.depth_clamp,
-                front_face: $builder.front_face,
-                culling: $builder.culling,
-                polygon_mode: $builder.polygon_mode,
-                depth_test: $builder.depth_test,
-                stencil_tests: $builder.stencil_tests,
-                depth_bounds: $builder.depth_bounds,
-                fragment_shader: $builder.fragment_shader,
-                color_blend: $builder.color_blend,
-            }
-        }
-    };
 }
 
 /// Polygon front face definition.

@@ -13,3 +13,9 @@ description = "Demonstrates sierra's code generation abilities"
 sierra = { version = "0.1.0", path = ".." }
 sierra-proc = { version = "0.1.0", path = "../proc", features = ["verbose-docs"] }
 bumpalo = "3.6"
+eyre = "0.6"
+color-eyre = "0.5"
+tracing = "0.1"
+tracing-error = "0.1"
+tracing-subscriber = "0.2"
+winit = "0.24"

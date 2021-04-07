@@ -110,11 +110,14 @@ pub(super) fn generate(input: &Input) -> TokenStream {
 
 fn generate_layout_binding(descriptor: &Descriptor, binding: u32) -> TokenStream {
     let ty = match descriptor.ty {
+        DescriptorType::Sampler(_) => {
+            quote::format_ident!("Sampler")
+        }
+        DescriptorType::SampledImage(_) => {
+            quote::format_ident!("SampledImage")
+        }
         DescriptorType::CombinedImageSampler(_) => {
             quote::format_ident!("CombinedImageSampler")
-        }
-        DescriptorType::AccelerationStructure(_) => {
-            quote::format_ident!("AccelerationStructure")
         }
         DescriptorType::Buffer(buffer::Buffer {
             kind: buffer::Kind::Uniform,
@@ -127,6 +130,9 @@ fn generate_layout_binding(descriptor: &Descriptor, binding: u32) -> TokenStream
             ..
         }) => {
             quote::format_ident!("StorageBuffer")
+        }
+        DescriptorType::AccelerationStructure(_) => {
+            quote::format_ident!("AccelerationStructure")
         }
     };
 

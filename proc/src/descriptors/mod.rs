@@ -5,6 +5,8 @@ mod input;
 mod instance;
 mod layout;
 mod parse;
+mod sampled_image;
+mod sampler;
 mod uniform;
 
 pub fn descriptors(

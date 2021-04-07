@@ -2,6 +2,7 @@ pub use crate::backend::ShaderModule;
 use {
     crate::{assert_error, OutOfMemory},
     std::{
+        borrow::Cow,
         convert::TryFrom,
         fmt::{self, Debug, Display},
     },
@@ -86,10 +87,13 @@ impl From<ShaderStage> for ShaderStageFlags {
 #[non_exhaustive]
 pub enum ShaderLanguage {
     /// OpengGL Shading Language.
-    GLSL,
+    GLSL { stage: ShaderStage },
 
     /// High Level Shading Language.
     HLSL,
+
+    /// WebGPU Shading Language.
+    WGSL,
 
     /// Standard Portable Intermediate Representation - V.
     SPIRV,
@@ -98,8 +102,9 @@ pub enum ShaderLanguage {
 impl Display for ShaderLanguage {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::GLSL => fmt.write_str("GLSL"),
+            Self::GLSL { stage } => write!(fmt, "GLSL ({})", stage),
             Self::HLSL => fmt.write_str("HLSL"),
+            Self::WGSL => fmt.write_str("WGSL"),
             Self::SPIRV => fmt.write_str("SPIRV"),
         }
     }
@@ -136,10 +141,10 @@ impl Debug for ShaderModuleInfo {
 
 impl ShaderModuleInfo {
     /// Creates GLSL shader module info.
-    pub fn glsl(bytes: impl Into<Box<[u8]>>) -> Self {
+    pub fn glsl(bytes: impl Into<Box<[u8]>>, stage: ShaderStage) -> Self {
         ShaderModuleInfo {
             code: bytes.into(),
-            language: ShaderLanguage::GLSL,
+            language: ShaderLanguage::GLSL { stage },
         }
     }
 
@@ -196,15 +201,17 @@ impl From<Spirv> for ShaderModuleInfo {
 // produce unique key for shaders and use for comparison.
 pub struct Glsl {
     code: Box<str>,
+    stage: ShaderStage,
 }
 
 impl Glsl {
     /// Wraps string that must contain valid GLSL shader code.
     ///
     /// FIXME: Actually check validity.
-    pub fn new(string: impl Into<Box<str>>) -> Self {
+    pub fn new(string: impl Into<Box<str>>, stage: ShaderStage) -> Self {
         Glsl {
             code: string.into(),
+            stage,
         }
     }
 }
@@ -213,7 +220,9 @@ impl From<Glsl> for ShaderModuleInfo {
     fn from(shader: Glsl) -> Self {
         ShaderModuleInfo {
             code: shader.code.into(),
-            language: ShaderLanguage::GLSL,
+            language: ShaderLanguage::GLSL {
+                stage: shader.stage,
+            },
         }
     }
 }
@@ -255,7 +264,7 @@ pub struct Shader {
     pub module: ShaderModule,
 
     /// Name of entry point.
-    pub entry: Box<str>,
+    pub entry: Cow<'static, str>,
 
     /// Stage of this shader.
     pub stage: ShaderStage,
@@ -266,7 +275,7 @@ impl Shader {
     pub fn with_main(module: ShaderModule, stage: ShaderStage) -> Self {
         Shader {
             module,
-            entry: "main".into(),
+            entry: Cow::Borrowed("main"),
             stage,
         }
     }
@@ -297,7 +306,7 @@ pub enum InvalidShader {
     WrongMagic { found: u32 },
 }
 
-#[derive(Clone, Copy, Debug, thiserror::Error, PartialEq, Eq)]
+#[derive(Debug, thiserror::Error)]
 pub enum CreateShaderModuleError {
     #[error(transparent)]
     OutOfMemoryError {
@@ -313,6 +322,35 @@ pub enum CreateShaderModuleError {
 
     #[error("Shader language {language:?} is unsupported")]
     UnsupportedShaderLanguage { language: ShaderLanguage },
+
+    #[error("Source code it not utf-8")]
+    SourceNotUtf8 {
+        #[from]
+        source: std::str::Utf8Error,
+    },
+
+    #[error("Failed to parse GLSL shader")]
+    NagaGlslParseError {
+        #[from]
+        source: naga::front::glsl::ParseError,
+    },
+
+    #[error("Failed to parse WGSL shader")]
+    NagaWgslParseError {
+        source: Box<dyn std::error::Error + Send + Sync>,
+    },
+
+    #[error("Failed to generate SPIR-V shader code")]
+    NagaSpvWriteError {
+        #[from]
+        source: naga::back::spv::Error,
+    },
+
+    #[error("Failed to validated shader module")]
+    NagaValidationError {
+        #[from]
+        source: naga::valid::ValidationError,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, thiserror::Error)]
@@ -326,11 +364,11 @@ pub struct WrongShaderStage {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct VertexShader {
     module: ShaderModule,
-    entry: Box<str>,
+    entry: Cow<'static, str>,
 }
 
 impl VertexShader {
-    pub fn new(module: ShaderModule, entry: impl Into<Box<str>>) -> Self {
+    pub fn new(module: ShaderModule, entry: impl Into<Cow<'static, str>>) -> Self {
         VertexShader {
             module,
             entry: entry.into(),
@@ -340,7 +378,7 @@ impl VertexShader {
     pub fn with_main(module: ShaderModule) -> Self {
         VertexShader {
             module,
-            entry: "main".into(),
+            entry: Cow::Borrowed("main"),
         }
     }
 
@@ -384,11 +422,11 @@ impl From<VertexShader> for Shader {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct TessellationControlShader {
     module: ShaderModule,
-    entry: Box<str>,
+    entry: Cow<'static, str>,
 }
 
 impl TessellationControlShader {
-    pub fn new(module: ShaderModule, entry: impl Into<Box<str>>) -> Self {
+    pub fn new(module: ShaderModule, entry: impl Into<Cow<'static, str>>) -> Self {
         TessellationControlShader {
             module,
             entry: entry.into(),
@@ -398,7 +436,7 @@ impl TessellationControlShader {
     pub fn with_main(module: ShaderModule) -> Self {
         TessellationControlShader {
             module,
-            entry: "main".into(),
+            entry: Cow::Borrowed("main"),
         }
     }
 
@@ -442,11 +480,11 @@ impl From<TessellationControlShader> for Shader {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct TessellationEvaluationShader {
     module: ShaderModule,
-    entry: Box<str>,
+    entry: Cow<'static, str>,
 }
 
 impl TessellationEvaluationShader {
-    pub fn new(module: ShaderModule, entry: impl Into<Box<str>>) -> Self {
+    pub fn new(module: ShaderModule, entry: impl Into<Cow<'static, str>>) -> Self {
         TessellationEvaluationShader {
             module,
             entry: entry.into(),
@@ -456,7 +494,7 @@ impl TessellationEvaluationShader {
     pub fn with_main(module: ShaderModule) -> Self {
         TessellationEvaluationShader {
             module,
-            entry: "main".into(),
+            entry: Cow::Borrowed("main"),
         }
     }
 
@@ -500,11 +538,11 @@ impl From<TessellationEvaluationShader> for Shader {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct GeometryShader {
     module: ShaderModule,
-    entry: Box<str>,
+    entry: Cow<'static, str>,
 }
 
 impl GeometryShader {
-    pub fn new(module: ShaderModule, entry: impl Into<Box<str>>) -> Self {
+    pub fn new(module: ShaderModule, entry: impl Into<Cow<'static, str>>) -> Self {
         GeometryShader {
             module,
             entry: entry.into(),
@@ -514,7 +552,7 @@ impl GeometryShader {
     pub fn with_main(module: ShaderModule) -> Self {
         GeometryShader {
             module,
-            entry: "main".into(),
+            entry: Cow::Borrowed("main"),
         }
     }
 
@@ -558,11 +596,11 @@ impl From<GeometryShader> for Shader {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct FragmentShader {
     module: ShaderModule,
-    entry: Box<str>,
+    entry: Cow<'static, str>,
 }
 
 impl FragmentShader {
-    pub fn new(module: ShaderModule, entry: impl Into<Box<str>>) -> Self {
+    pub fn new(module: ShaderModule, entry: impl Into<Cow<'static, str>>) -> Self {
         FragmentShader {
             module,
             entry: entry.into(),
@@ -572,7 +610,7 @@ impl FragmentShader {
     pub fn with_main(module: ShaderModule) -> Self {
         FragmentShader {
             module,
-            entry: "main".into(),
+            entry: Cow::Borrowed("main"),
         }
     }
 
@@ -616,11 +654,11 @@ impl From<FragmentShader> for Shader {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ComputeShader {
     module: ShaderModule,
-    entry: Box<str>,
+    entry: Cow<'static, str>,
 }
 
 impl ComputeShader {
-    pub fn new(module: ShaderModule, entry: impl Into<Box<str>>) -> Self {
+    pub fn new(module: ShaderModule, entry: impl Into<Cow<'static, str>>) -> Self {
         ComputeShader {
             module,
             entry: entry.into(),
@@ -630,7 +668,7 @@ impl ComputeShader {
     pub fn with_main(module: ShaderModule) -> Self {
         ComputeShader {
             module,
-            entry: "main".into(),
+            entry: Cow::Borrowed("main"),
         }
     }
 
@@ -674,11 +712,11 @@ impl From<ComputeShader> for Shader {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct RaygenShader {
     module: ShaderModule,
-    entry: Box<str>,
+    entry: Cow<'static, str>,
 }
 
 impl RaygenShader {
-    pub fn new(module: ShaderModule, entry: impl Into<Box<str>>) -> Self {
+    pub fn new(module: ShaderModule, entry: impl Into<Cow<'static, str>>) -> Self {
         RaygenShader {
             module,
             entry: entry.into(),
@@ -688,7 +726,7 @@ impl RaygenShader {
     pub fn with_main(module: ShaderModule) -> Self {
         RaygenShader {
             module,
-            entry: "main".into(),
+            entry: Cow::Borrowed("main"),
         }
     }
 
@@ -732,11 +770,11 @@ impl From<RaygenShader> for Shader {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct AnyHitShader {
     module: ShaderModule,
-    entry: Box<str>,
+    entry: Cow<'static, str>,
 }
 
 impl AnyHitShader {
-    pub fn new(module: ShaderModule, entry: impl Into<Box<str>>) -> Self {
+    pub fn new(module: ShaderModule, entry: impl Into<Cow<'static, str>>) -> Self {
         AnyHitShader {
             module,
             entry: entry.into(),
@@ -746,7 +784,7 @@ impl AnyHitShader {
     pub fn with_main(module: ShaderModule) -> Self {
         AnyHitShader {
             module,
-            entry: "main".into(),
+            entry: Cow::Borrowed("main"),
         }
     }
 
@@ -790,11 +828,11 @@ impl From<AnyHitShader> for Shader {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ClosestHitShader {
     module: ShaderModule,
-    entry: Box<str>,
+    entry: Cow<'static, str>,
 }
 
 impl ClosestHitShader {
-    pub fn new(module: ShaderModule, entry: impl Into<Box<str>>) -> Self {
+    pub fn new(module: ShaderModule, entry: impl Into<Cow<'static, str>>) -> Self {
         ClosestHitShader {
             module,
             entry: entry.into(),
@@ -804,7 +842,7 @@ impl ClosestHitShader {
     pub fn with_main(module: ShaderModule) -> Self {
         ClosestHitShader {
             module,
-            entry: "main".into(),
+            entry: Cow::Borrowed("main"),
         }
     }
 
@@ -848,11 +886,11 @@ impl From<ClosestHitShader> for Shader {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct MissShader {
     module: ShaderModule,
-    entry: Box<str>,
+    entry: Cow<'static, str>,
 }
 
 impl MissShader {
-    pub fn new(module: ShaderModule, entry: impl Into<Box<str>>) -> Self {
+    pub fn new(module: ShaderModule, entry: impl Into<Cow<'static, str>>) -> Self {
         MissShader {
             module,
             entry: entry.into(),
@@ -862,7 +900,7 @@ impl MissShader {
     pub fn with_main(module: ShaderModule) -> Self {
         MissShader {
             module,
-            entry: "main".into(),
+            entry: Cow::Borrowed("main"),
         }
     }
 
@@ -906,11 +944,11 @@ impl From<MissShader> for Shader {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct IntersectionShader {
     module: ShaderModule,
-    entry: Box<str>,
+    entry: Cow<'static, str>,
 }
 
 impl IntersectionShader {
-    pub fn new(module: ShaderModule, entry: impl Into<Box<str>>) -> Self {
+    pub fn new(module: ShaderModule, entry: impl Into<Cow<'static, str>>) -> Self {
         IntersectionShader {
             module,
             entry: entry.into(),
@@ -920,7 +958,7 @@ impl IntersectionShader {
     pub fn with_main(module: ShaderModule) -> Self {
         IntersectionShader {
             module,
-            entry: "main".into(),
+            entry: Cow::Borrowed("main"),
         }
     }
 

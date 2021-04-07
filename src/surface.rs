@@ -2,7 +2,7 @@ pub use crate::backend::Surface;
 use {
     crate::{assert_error, format::Format, image::ImageUsage, Extent2d, OutOfMemory},
     raw_window_handle::RawWindowHandle,
-    std::{error::Error, fmt::Debug, ops::RangeInclusive},
+    std::{error::Error, fmt::Debug, ops::RangeInclusive, sync::Arc},
 };
 
 #[derive(Clone, Copy, Debug, thiserror::Error, PartialEq, Eq)]
@@ -13,7 +13,7 @@ pub enum SurfaceError {
         source: OutOfMemory,
     },
 
-    #[error("Surfaces are not supported")]
+    #[error("Surface is not supported")]
     NotSupported,
 
     #[error("Image usage {{{usage:?}}} is not supported for surface images")]
@@ -124,16 +124,43 @@ pub enum PresentMode {
     FifoRelaxed,
 }
 
+bitflags::bitflags! {
+    pub struct CompositeAlphaFlags: u32 {
+        const OPAQUE = 0x1;
+        const PRE_MULTIPLIED = 0x2;
+        const POST_MULTIPLIED = 0x4;
+        const INHERIT = 0x8;
+    }
+}
+
+bitflags::bitflags! {
+    pub struct SurfaceTransformFlags: u32 {
+        const IDENTITY = 0x001;
+        const ROTATE_90 = 0x002;
+        const ROTATE_180 = 0x004;
+        const ROTATE_270 = 0x008;
+        const HORIZONTAL_MIRROR = 0x010;
+        const HORIZONTAL_MIRROR_ROTATE_90 = 0x020;
+        const HORIZONTAL_MIRROR_ROTATE_180 = 0x040;
+        const HORIZONTAL_MIRROR_ROTATE_270 = 0x080;
+        const INHERIT = 0x100;
+    }
+}
+
 #[derive(Debug)]
 #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct SurfaceCapabilities {
-    pub families: Vec<usize>,
-    pub image_count: RangeInclusive<u32>,
+    pub supported_families: Arc<[bool]>,
+    pub min_image_count: u32,
+    pub max_image_count: u32,
     pub current_extent: Extent2d,
-    pub image_extent: RangeInclusive<Extent2d>,
+    pub current_transform: SurfaceTransformFlags,
+    pub min_image_extent: Extent2d,
+    pub max_image_extent: Extent2d,
     pub supported_usage: ImageUsage,
     pub present_modes: Vec<PresentMode>,
     pub formats: Vec<Format>,
+    pub supported_composite_alpha: CompositeAlphaFlags,
 }
 
 #[derive(Clone, Copy, Debug)]

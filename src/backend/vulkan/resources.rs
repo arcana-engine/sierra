@@ -40,6 +40,9 @@ struct BufferInner {
     memory_block: UnsafeCell<MemoryBlock<vk1_0::DeviceMemory>>,
 }
 
+/// Handle for GPU buffer object.
+/// GPU buffer is an object representing contiguous array of bytes
+/// accessible by GPU operations.
 #[derive(Clone)]
 #[repr(transparent)]
 pub struct Buffer {
@@ -116,6 +119,17 @@ impl Buffer {
     }
 }
 
+/// Handle to GPU buffer object.
+///
+/// Variation of `Buffer` which is not shared
+/// and thus can be mapped onto host memory.
+///
+/// Mapping of shared buffer is forbidden due to requirement
+/// of GPU driver to map any memory object at most once.
+/// This allows accessing mapped memory safely without causing data races.
+///
+/// If buffer sharing is required and mapping is not,
+/// [`MappedBuffer`] can be converted into [`Buffer`] with no cost.
 pub struct MappableBuffer {
     buffer: Buffer,
     memory_usage: MemoryUsage,
@@ -248,6 +262,9 @@ impl ImageFlavor {
     }
 }
 
+/// Handle to GPU image object.
+///
+/// Images represent a one, two or three dimensional arrays of texel.
 #[derive(Clone)]
 pub struct Image {
     info: ImageInfo,
@@ -372,6 +389,11 @@ impl Image {
     // }
 }
 
+/// Handle to GPU image view object.
+///
+/// A slice view into an [`Image`].
+/// [`ImageView`] can encompass whole [`Image`]
+/// or only part of [`Image`]s layers, levels and aspects.
 #[derive(Clone)]
 pub struct ImageView {
     info: ImageViewInfo,
@@ -440,6 +462,18 @@ impl ImageView {
     }
 }
 
+/// Handle to GPU fence object.
+///
+/// Fence is object used for coarse grained GPU-CPU synchronization.
+/// It should be used to wait for GPU operations to finish before
+/// mutating or destroying resources on CPU.
+///
+/// This includes overwriting mappable buffer content and updating
+/// descriptor sets.
+/// (Mappable images can be added in future).
+///
+/// Prefer using semaphores and pipeline barriers to synchronize
+/// operations on GPU with each other.
 #[derive(Clone)]
 pub struct Fence {
     handle: vk1_0::Fence,
@@ -496,6 +530,12 @@ impl Fence {
     }
 }
 
+/// Handle for GPU semaphore object.
+///
+/// Semaphores are used to synchronize operations on different GPU queues
+/// as well as operations on GPU queue with presentation engine.
+///
+/// Avoid using semaphores to synchronize operations on the same queue.
 #[derive(Clone)]
 pub struct Semaphore {
     handle: vk1_0::Semaphore,
@@ -552,11 +592,11 @@ impl Semaphore {
     }
 }
 
-/// Render pass represents collection of attachments,
-/// subpasses, and dependencies between subpasses,
-/// and describes how they are used over the course of the subpasses.
+/// Handle to GPU render pass object.
 ///
-/// This value is handle to a render pass resource.
+/// Render pass defines collection of abstract attachments,
+/// subpasses, and dependencies between subpasses,
+/// and describes how attachments are used over the course of subpasses.
 #[derive(Clone)]
 pub struct RenderPass {
     info: RenderPassInfo,
@@ -761,7 +801,13 @@ impl Framebuffer {
     }
 }
 
-/// Resource that describes layout for descriptor sets.
+/// Handle fot GPU shader module object.
+///
+/// Shader module is pre-compiled shader program,
+/// optionally with multiple entry points for different shaders.
+///
+/// Used for pipelines creation:
+/// [`GraphicsPipeline`], [`ComputePipeline`] and [`RayTracingPipeline`].
 #[derive(Clone)]
 pub struct ShaderModule {
     info: ShaderModuleInfo,
@@ -829,7 +875,13 @@ impl ShaderModule {
     }
 }
 
-/// Resource that describes layout for descriptor sets.
+/// Handle for GPU descriptor set layout object.
+///
+/// Describes descriptor bindings and their types.
+/// Used for [`PipelineLayout`] creation and [`DescriptorSet`] allocation.
+///
+/// Descriptor set bound at index N must be allocated with same
+/// descriptor set layout that was specified at index N for bound [`PipelineLayout`].
 #[derive(Clone)]
 pub struct DescriptorSetLayout {
     info: DescriptorSetLayoutInfo,
@@ -976,7 +1028,10 @@ impl DescriptorSet {
     }
 }
 
-/// Resource that describes layout of a pipeline.
+/// Handle for GPU pipeline layout object.
+///
+/// Pipeline layout defines all descriptor set layouts and push constants
+/// used by a pipeline.
 #[derive(Clone)]
 pub struct PipelineLayout {
     info: PipelineLayoutInfo,

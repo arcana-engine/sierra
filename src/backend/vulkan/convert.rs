@@ -1,16 +1,19 @@
 use crate::{
     out_of_host_memory, AccelerationStructureBuildFlags, AccelerationStructureLevel, AccessFlags,
     AspectFlags, BlendFactor, BlendOp, BorderColor, BufferCopy, BufferImageCopy, BufferUsage,
-    CompareOp, ComponentMask, Culling, DescriptorBindingFlags, DescriptorSetLayoutFlags,
-    DescriptorType, DeviceAddress, Extent2d, Extent3d, Filter, Format, FrontFace, GeometryFlags,
-    ImageBlit, ImageCopy, ImageExtent, ImageUsage, ImageViewKind, IndexType, Layout, LoadOp,
-    LogicOp, MemoryUsage, MipmapMode, Offset2d, Offset3d, OutOfMemory, PipelineStageFlags,
-    PolygonMode, PresentMode, PrimitiveTopology, QueueCapabilityFlags, Rect2d, SamplerAddressMode,
-    Samples, ShaderStage, ShaderStageFlags, StencilOp, StoreOp, Subresource, SubresourceLayers,
-    SubresourceRange, VertexInputRate, Viewport,
+    CompareOp, ComponentMask, CompositeAlphaFlags, Culling, DescriptorBindingFlags,
+    DescriptorSetLayoutFlags, DescriptorType, DeviceAddress, Extent2d, Extent3d, Filter, Format,
+    FrontFace, GeometryFlags, ImageBlit, ImageCopy, ImageExtent, ImageUsage, ImageViewKind,
+    IndexType, Layout, LoadOp, LogicOp, MemoryUsage, MipmapMode, Offset2d, Offset3d, OutOfMemory,
+    PipelineStageFlags, PolygonMode, PresentMode, PrimitiveTopology, QueueCapabilityFlags, Rect2d,
+    SamplerAddressMode, Samples, ShaderStage, ShaderStageFlags, StencilOp, StoreOp, Subresource,
+    SubresourceLayers, SubresourceRange, SurfaceTransformFlags, VertexInputRate, Viewport,
 };
 use erupt::{
-    extensions::{khr_acceleration_structure as vkacc, khr_surface::PresentModeKHR},
+    extensions::{
+        khr_acceleration_structure as vkacc,
+        khr_surface::{CompositeAlphaFlagsKHR, PresentModeKHR, SurfaceTransformFlagsKHR},
+    },
     vk1_0, vk1_2,
 };
 use std::num::NonZeroU64;
@@ -590,6 +593,8 @@ impl ToErupt<PresentModeKHR> for PresentMode {
         }
     }
 }
+
+#[track_caller]
 
 pub(crate) fn oom_error_from_erupt(err: vk1_0::Result) -> OutOfMemory {
     match err {
@@ -1430,6 +1435,112 @@ impl ToErupt<vk1_0::AccessFlags> for AccessFlags {
             result |= vk1_0::AccessFlags::FRAGMENT_SHADING_RATE_ATTACHMENT_READ_KHR;
         }
 
+        result
+    }
+}
+
+impl FromErupt<CompositeAlphaFlagsKHR> for CompositeAlphaFlags {
+    fn from_erupt(value: CompositeAlphaFlagsKHR) -> Self {
+        let mut result = CompositeAlphaFlags::empty();
+        if value.contains(CompositeAlphaFlagsKHR::OPAQUE_KHR) {
+            result |= CompositeAlphaFlags::OPAQUE;
+        }
+        if value.contains(CompositeAlphaFlagsKHR::PRE_MULTIPLIED_KHR) {
+            result |= CompositeAlphaFlags::PRE_MULTIPLIED;
+        }
+        if value.contains(CompositeAlphaFlagsKHR::POST_MULTIPLIED_KHR) {
+            result |= CompositeAlphaFlags::POST_MULTIPLIED;
+        }
+        if value.contains(CompositeAlphaFlagsKHR::INHERIT_KHR) {
+            result |= CompositeAlphaFlags::INHERIT;
+        }
+        result
+    }
+}
+
+impl ToErupt<CompositeAlphaFlagsKHR> for CompositeAlphaFlags {
+    fn to_erupt(self) -> CompositeAlphaFlagsKHR {
+        let mut result = CompositeAlphaFlagsKHR::empty();
+        if self.contains(CompositeAlphaFlags::OPAQUE) {
+            result |= CompositeAlphaFlagsKHR::OPAQUE_KHR;
+        }
+        if self.contains(CompositeAlphaFlags::PRE_MULTIPLIED) {
+            result |= CompositeAlphaFlagsKHR::PRE_MULTIPLIED_KHR;
+        }
+        if self.contains(CompositeAlphaFlags::POST_MULTIPLIED) {
+            result |= CompositeAlphaFlagsKHR::POST_MULTIPLIED_KHR;
+        }
+        if self.contains(CompositeAlphaFlags::INHERIT) {
+            result |= CompositeAlphaFlagsKHR::INHERIT_KHR;
+        }
+        result
+    }
+}
+
+impl FromErupt<SurfaceTransformFlagsKHR> for SurfaceTransformFlags {
+    fn from_erupt(value: SurfaceTransformFlagsKHR) -> Self {
+        let mut result = SurfaceTransformFlags::empty();
+        if value.contains(SurfaceTransformFlagsKHR::IDENTITY_KHR) {
+            result |= SurfaceTransformFlags::IDENTITY;
+        }
+        if value.contains(SurfaceTransformFlagsKHR::ROTATE_90_KHR) {
+            result |= SurfaceTransformFlags::ROTATE_90;
+        }
+        if value.contains(SurfaceTransformFlagsKHR::ROTATE_180_KHR) {
+            result |= SurfaceTransformFlags::ROTATE_180;
+        }
+        if value.contains(SurfaceTransformFlagsKHR::ROTATE_270_KHR) {
+            result |= SurfaceTransformFlags::ROTATE_270;
+        }
+        if value.contains(SurfaceTransformFlagsKHR::HORIZONTAL_MIRROR_KHR) {
+            result |= SurfaceTransformFlags::HORIZONTAL_MIRROR;
+        }
+        if value.contains(SurfaceTransformFlagsKHR::HORIZONTAL_MIRROR_ROTATE_90_KHR) {
+            result |= SurfaceTransformFlags::HORIZONTAL_MIRROR_ROTATE_90;
+        }
+        if value.contains(SurfaceTransformFlagsKHR::HORIZONTAL_MIRROR_ROTATE_180_KHR) {
+            result |= SurfaceTransformFlags::HORIZONTAL_MIRROR_ROTATE_180;
+        }
+        if value.contains(SurfaceTransformFlagsKHR::HORIZONTAL_MIRROR_ROTATE_270_KHR) {
+            result |= SurfaceTransformFlags::HORIZONTAL_MIRROR_ROTATE_270;
+        }
+        if value.contains(SurfaceTransformFlagsKHR::INHERIT_KHR) {
+            result |= SurfaceTransformFlags::INHERIT;
+        }
+        result
+    }
+}
+
+impl ToErupt<SurfaceTransformFlagsKHR> for SurfaceTransformFlags {
+    fn to_erupt(self) -> SurfaceTransformFlagsKHR {
+        let mut result = SurfaceTransformFlagsKHR::empty();
+        if self.contains(SurfaceTransformFlags::IDENTITY) {
+            result |= SurfaceTransformFlagsKHR::IDENTITY_KHR;
+        }
+        if self.contains(SurfaceTransformFlags::ROTATE_90) {
+            result |= SurfaceTransformFlagsKHR::ROTATE_90_KHR;
+        }
+        if self.contains(SurfaceTransformFlags::ROTATE_180) {
+            result |= SurfaceTransformFlagsKHR::ROTATE_180_KHR;
+        }
+        if self.contains(SurfaceTransformFlags::ROTATE_270) {
+            result |= SurfaceTransformFlagsKHR::ROTATE_270_KHR;
+        }
+        if self.contains(SurfaceTransformFlags::HORIZONTAL_MIRROR) {
+            result |= SurfaceTransformFlagsKHR::HORIZONTAL_MIRROR_KHR;
+        }
+        if self.contains(SurfaceTransformFlags::HORIZONTAL_MIRROR_ROTATE_90) {
+            result |= SurfaceTransformFlagsKHR::HORIZONTAL_MIRROR_ROTATE_90_KHR;
+        }
+        if self.contains(SurfaceTransformFlags::HORIZONTAL_MIRROR_ROTATE_180) {
+            result |= SurfaceTransformFlagsKHR::HORIZONTAL_MIRROR_ROTATE_180_KHR;
+        }
+        if self.contains(SurfaceTransformFlags::HORIZONTAL_MIRROR_ROTATE_270) {
+            result |= SurfaceTransformFlagsKHR::HORIZONTAL_MIRROR_ROTATE_270_KHR;
+        }
+        if self.contains(SurfaceTransformFlags::INHERIT) {
+            result |= SurfaceTransformFlagsKHR::INHERIT_KHR;
+        }
         result
     }
 }

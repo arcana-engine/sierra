@@ -139,7 +139,12 @@ impl SubpassAttribute {
 }
 
 pub fn parse(attr: proc_macro::TokenStream, item: proc_macro::TokenStream) -> syn::Result<Input> {
-    assert!(attr.is_empty());
+    if !attr.is_empty() {
+        return Err(syn::Error::new_spanned(
+            proc_macro2::TokenStream::from(attr),
+            "#[pass] attribute does not accept arguments",
+        ));
+    }
 
     let mut item_struct = syn::parse::<syn::ItemStruct>(item)?;
 

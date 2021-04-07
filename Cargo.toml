@@ -30,14 +30,19 @@ tracing = "0.1"
 ordered-float = "2.0"
 bytemuck = "1.4"
 erupt = { version = "0.17", optional = true, features = ["loading"] }
-gpu-alloc-erupt = { version = "0.3", optional = true }
-gpu-alloc = { version = "0.4.1", optional = true, features = ["freelist"] }
+#gpu-alloc-erupt = { version = "0.3", optional = true }
+#gpu-alloc = { version = "0.4.1", optional = true, features = ["freelist"] }
+
+gpu-alloc-erupt = { version = "0.3", optional = true, path = "../gpu-alloc/erupt" }
+gpu-alloc = { version = "0.4.1", optional = true, features = ["freelist"], path = "../gpu-alloc/gpu-alloc" }
+
 slab = "0.4"
 libloading = "0.7"
 lazy_static = "1.4"
 bumpalo = { version = "3.4", features = ["collections", "boxed"] }
 parking_lot = "0.11"
 once_cell = "1.5"
+naga = { version = "0.3.1", features = ["glsl-in", "wgsl-in", "spv-out"], git = "https://github.com/gfx-rs/naga.git" }
 
 [workspace]
-members = ["proc-demo"]
+members = ["demo"]

@@ -21,22 +21,34 @@ pub(super) fn generate(input: &Input) -> TokenStream {
         .descriptors
         .iter()
         .filter_map(|input| match &input.ty {
+            DescriptorType::Sampler(_) => {
+                let descriptor_field = quote::format_ident!("descriptor_{}", input.member);
+                Some(quote::quote!(
+                    pub #descriptor_field: ::std::option::Option<::sierra::Sampler>,
+                ))
+            }
+            DescriptorType::SampledImage(_) => {
+                let descriptor_field = quote::format_ident!("descriptor_{}", input.member);
+                Some(quote::quote!(
+                    pub #descriptor_field: ::std::option::Option<::sierra::ImageViewDescriptor>,
+                ))
+            }
             DescriptorType::CombinedImageSampler(_) => {
                 let descriptor_field = quote::format_ident!("descriptor_{}", input.member);
                 Some(quote::quote!(
                     pub #descriptor_field: ::std::option::Option<::sierra::CombinedImageSampler>,
                 ))
             }
-            DescriptorType::AccelerationStructure(_) => {
-                let descriptor_field = quote::format_ident!("descriptor_{}", input.member);
-                Some(quote::quote!(
-                    pub #descriptor_field: ::std::option::Option<::sierra::AccelerationStructure>,
-                ))
-            }
             DescriptorType::Buffer(_) => {
                 let descriptor_field = quote::format_ident!("descriptor_{}", input.member);
                 Some(quote::quote!(
                     pub #descriptor_field: ::std::option::Option<::sierra::BufferRange>,
+                ))
+            }
+            DescriptorType::AccelerationStructure(_) => {
+                let descriptor_field = quote::format_ident!("descriptor_{}", input.member);
+                Some(quote::quote!(
+                    pub #descriptor_field: ::std::option::Option<::sierra::AccelerationStructure>,
                 ))
             }
         })
@@ -54,6 +66,52 @@ pub(super) fn generate(input: &Input) -> TokenStream {
                 quote::format_ident!("write_{}_descriptor", input.member);
 
             let stream = match &input.ty {
+                DescriptorType::Sampler(_attr) => {
+                    quote::quote!(
+                        let #write_descriptor;
+                        match &elem.#descriptor_field {
+                            Some(sampler) => {
+                                if input.#field == *sampler {
+                                    #write_descriptor = false;
+                                } else {
+                                    elem.#descriptor_field = Some(std::clone::Clone::clone(&input.#field));
+                                    #write_descriptor = true;
+                                }
+                            }
+                            _ => {
+                                elem.#descriptor_field = Some(std::clone::Clone::clone(&input.#field));
+                                #write_descriptor = true;
+                            }
+                        }
+                    )
+                }
+                DescriptorType::SampledImage(_attr) => {
+                    quote::quote!(
+                        let #write_descriptor;
+                        match &elem.#descriptor_field {
+                            Some(::sierra::ImageViewDescriptor { view, layout: ::sierra::Layout::ShaderReadOnlyOptimal }) => {
+                                if ::sierra::SampledImage::eq(&input.#field, view) {
+                                    #write_descriptor = false;
+                                } else {
+                                    let view = ::sierra::SampledImage::get_view(&input.#field, device)?;
+                                    elem.#descriptor_field = Some(::sierra::ImageViewDescriptor {
+                                        view,
+                                        layout: ::sierra::Layout::ShaderReadOnlyOptimal,
+                                    });
+                                    #write_descriptor = true;
+                                }
+                            }
+                            _ => {
+                                let view = ::sierra::SampledImage::get_view(&input.#field, device)?;
+                                elem.#descriptor_field = Some(::sierra::ImageViewDescriptor {
+                                    view,
+                                    layout: ::sierra::Layout::ShaderReadOnlyOptimal,
+                                });
+                                #write_descriptor = true;
+                            }
+                        }
+                    )
+                }
                 DescriptorType::CombinedImageSampler(attr) => {
                     let sampler = &attr.sampler;
                     quote::quote!(
@@ -84,23 +142,6 @@ pub(super) fn generate(input: &Input) -> TokenStream {
                         }
                     )
                 }
-                DescriptorType::AccelerationStructure(_) => quote::quote!(
-                    let #write_descriptor;
-                    match &elem.#descriptor_field {
-                        Some(accel) => {
-                            if accel == &input.#field {
-                                #write_descriptor = false;
-                            } else {
-                                elem.#descriptor_field = Some(::std::clone::Clone::clone(&input.#field));
-                                #write_descriptor = true;
-                            }
-                        }
-                        _ => {
-                            elem.#descriptor_field = Some(::std::clone::Clone::clone(&input.#field));
-                            #write_descriptor = true;
-                        }
-                    }
-                ),
                 DescriptorType::Buffer(buffer::Buffer {
                     kind: buffer::Kind::Uniform,
                     ..
@@ -145,6 +186,23 @@ pub(super) fn generate(input: &Input) -> TokenStream {
                         }
                     }
                 ),
+                DescriptorType::AccelerationStructure(_) => quote::quote!(
+                    let #write_descriptor;
+                    match &elem.#descriptor_field {
+                        Some(accel) => {
+                            if accel == &input.#field {
+                                #write_descriptor = false;
+                            } else {
+                                elem.#descriptor_field = Some(::std::clone::Clone::clone(&input.#field));
+                                #write_descriptor = true;
+                            }
+                        }
+                        _ => {
+                            elem.#descriptor_field = Some(::std::clone::Clone::clone(&input.#field));
+                            #write_descriptor = true;
+                        }
+                    }
+                ),
             };
 
             Some(stream)
@@ -157,6 +215,12 @@ pub(super) fn generate(input: &Input) -> TokenStream {
         .iter()
         .filter_map(|input| {
             let descriptors = match input.ty {
+                DescriptorType::Sampler(_) => Some(quote::quote!(::sierra::Descriptors::Sampler(
+                    std::slice::from_ref(descriptor)
+                ))),
+                DescriptorType::SampledImage(_) => Some(quote::quote!(
+                    ::sierra::Descriptors::SampledImage(std::slice::from_ref(descriptor))
+                )),
                 DescriptorType::CombinedImageSampler(_) => Some(quote::quote!(
                     ::sierra::Descriptors::CombinedImageSampler(std::slice::from_ref(descriptor))
                 )),

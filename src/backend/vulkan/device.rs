@@ -64,11 +64,13 @@ use {
     slab::Slab,
     smallvec::SmallVec,
     std::{
+        collections::HashMap,
         convert::{TryFrom as _, TryInto as _},
         ffi::CString,
         fmt::{self, Debug},
         mem::{size_of_val, MaybeUninit},
         ops::Range,
+        str::from_utf8,
         sync::{Arc, Weak},
     },
 };
@@ -1417,8 +1419,66 @@ impl Device {
         &self,
         info: ShaderModuleInfo,
     ) -> Result<ShaderModule, CreateShaderModuleError> {
+        let spv;
+
         let code = match info.language {
             ShaderLanguage::SPIRV => &*info.code,
+            ShaderLanguage::GLSL { stage } => {
+                let stage = match stage {
+                    ShaderStage::Vertex => naga::ShaderStage::Vertex,
+                    ShaderStage::Fragment => naga::ShaderStage::Fragment,
+                    ShaderStage::Compute => naga::ShaderStage::Compute,
+                    _ => {
+                        return Err(CreateShaderModuleError::UnsupportedShaderLanguage {
+                            language: info.language,
+                        })
+                    }
+                };
+
+                let code = from_utf8(&info.code)?;
+
+                let module = naga::front::glsl::parse_str(
+                    code,
+                    &naga::front::glsl::Options {
+                        entry_points: {
+                            let mut map = HashMap::default();
+                            map.insert("main".to_owned(), stage);
+                            map
+                        },
+                        defines: Default::default(),
+                    },
+                )?;
+
+                let info = naga::valid::Validator::new(naga::valid::ValidationFlags::all())
+                    .validate(&module)?;
+
+                spv = naga::back::spv::write_vec(
+                    &module,
+                    &info,
+                    &naga::back::spv::Options::default(),
+                )?;
+
+                bytemuck::cast_slice(&spv)
+            }
+
+            ShaderLanguage::WGSL => {
+                let code = from_utf8(&info.code)?;
+                let module = naga::front::wgsl::parse_str(code).map_err(|err| {
+                    CreateShaderModuleError::NagaWgslParseError {
+                        source: Box::from(err.emit_to_string()),
+                    }
+                })?;
+                let info = naga::valid::Validator::new(naga::valid::ValidationFlags::all())
+                    .validate(&module)?;
+
+                spv = naga::back::spv::write_vec(
+                    &module,
+                    &info,
+                    &naga::back::spv::Options::default(),
+                )?;
+
+                bytemuck::cast_slice(&spv)
+            }
             _ => {
                 return Err(CreateShaderModuleError::UnsupportedShaderLanguage {
                     language: info.language,

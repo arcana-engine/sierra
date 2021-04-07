@@ -11,6 +11,7 @@ macro_rules! on_first_ok {
 }
 
 mod descriptors;
+mod graphics_pipeline;
 mod pass;
 mod pipeline;
 mod repr;
@@ -46,6 +47,11 @@ pub fn pass(
     item: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
     pass::pass(attr, item).into()
+}
+
+#[proc_macro]
+pub fn graphics_pipeline(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    graphics_pipeline::graphics_pipeline(item).into()
 }
 
 fn take_attributes<T>(

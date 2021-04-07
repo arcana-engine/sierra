@@ -8,26 +8,34 @@ pub struct Input {
     pub item_struct: syn::ItemStruct,
 }
 
-pub fn parse(attr: proc_macro::TokenStream, item: proc_macro::TokenStream) -> Input {
-    assert!(attr.is_empty());
+pub fn parse(attr: proc_macro::TokenStream, item: proc_macro::TokenStream) -> syn::Result<Input> {
+    if !attr.is_empty() {
+        return Err(syn::Error::new_spanned(
+            proc_macro2::TokenStream::from(attr),
+            "#[shader_repr] attribute does not accept arguments",
+        ));
+    }
 
-    let mut item_struct = syn::parse::<syn::ItemStruct>(item)
-        .expect("`#[shader_struct]` can be applied only to structs");
+    let item_struct = syn::parse::<syn::ItemStruct>(item)?;
 
-    let fields: Vec<_> = item_struct
+    let fields = item_struct
         .fields
-        .iter_mut()
-        .map(|field| Field {
-            ty: field.ty.clone(),
-            ident: field
+        .iter()
+        .map(|field| {
+            let ident = field
                 .ident
                 .clone()
-                .expect("Tuple structs are not supported"),
-        })
-        .collect();
+                .ok_or_else(|| syn::Error::new_spanned(field, "Tuple structs are not supported"))?;
 
-    Input {
+            Ok(Field {
+                ty: field.ty.clone(),
+                ident,
+            })
+        })
+        .collect::<Result<Vec<_>, syn::Error>>()?;
+
+    Ok(Input {
         fields,
         item_struct,
-    }
+    })
 }

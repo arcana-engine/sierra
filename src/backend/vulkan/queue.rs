@@ -104,12 +104,12 @@ impl Queue {
     pub fn submit(
         &mut self,
         wait: &[(PipelineStageFlags, Semaphore)],
-        cbufs: impl ExactSizeIterator<Item = CommandBuffer>,
+        cbufs: impl IntoIterator<IntoIter = impl ExactSizeIterator<Item = CommandBuffer>>,
         signal: &[Semaphore],
         fence: Option<&Fence>,
         bump: &Bump,
     ) {
-        let cbufs = bump.alloc_slice_fill_iter(cbufs.map(|cbuf| {
+        let cbufs = bump.alloc_slice_fill_iter(cbufs.into_iter().map(|cbuf| {
             assert_owner!(cbuf, self.device);
             assert_eq!(self.id, cbuf.queue());
             cbuf.handle()
@@ -196,6 +196,8 @@ impl Queue {
                     .image_indices(&[image.index()]),
             )
         };
+
+        image.presented();
 
         match result.raw {
             vk1_0::Result::SUCCESS => Ok(PresentOk::Success),
