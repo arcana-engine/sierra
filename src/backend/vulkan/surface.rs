@@ -75,6 +75,8 @@ pub(crate) fn surface_error_from_erupt(err: vk1_0::Result) -> SurfaceError {
             source: OutOfMemory,
         },
         vk1_0::Result::ERROR_SURFACE_LOST_KHR => SurfaceError::SurfaceLost,
+        vk1_0::Result::ERROR_NATIVE_WINDOW_IN_USE_KHR => SurfaceError::WindowIsInUse,
+        vk1_0::Result::ERROR_INITIALIZATION_FAILED => SurfaceError::InitializationFailed,
         _ => unexpected_result(err),
     }
 }

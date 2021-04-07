@@ -30,6 +30,12 @@ pub enum SurfaceError {
 
     #[error("Surface is already used")]
     AlreadyUsed,
+
+    #[error("Native window is in use")]
+    WindowIsInUse,
+
+    #[error("Initialization failed")]
+    InitializationFailed,
 }
 
 #[allow(dead_code)]
