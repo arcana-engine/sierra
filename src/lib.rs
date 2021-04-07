@@ -77,6 +77,10 @@ pub use sierra_proc::{descriptors, graphics_pipeline, pass, pipeline, shader_rep
 #[doc(hidden)]
 pub use bumpalo;
 
+/// Re-exporting OrderedFloat for code-gen.
+#[doc(hidden)]
+pub use ordered_float::OrderedFloat;
+
 /// Image size is defined to `u32` which is standard for graphics API of today.
 pub type ImageSize = u32;
 
@@ -211,22 +215,6 @@ impl Offset3d {
             y: extent.height.try_into()?,
             z: extent.depth.try_into()?,
         })
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
-pub struct Rect2d {
-    pub offset: Offset2d,
-    pub extent: Extent2d,
-}
-
-impl From<Extent2d> for Rect2d {
-    fn from(extent: Extent2d) -> Self {
-        Rect2d {
-            offset: Offset2d::ZERO,
-            extent,
-        }
     }
 }
 

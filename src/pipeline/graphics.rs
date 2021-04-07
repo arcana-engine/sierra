@@ -5,7 +5,7 @@ use {
         render_pass::RenderPass,
         sampler::CompareOp,
         shader::{FragmentShader, VertexShader},
-        Rect2d,
+        Extent2d, Extent3d, Offset2d,
     },
     ordered_float::OrderedFloat,
 };
@@ -210,6 +210,84 @@ pub struct Viewport {
 
     /// Viewport bounds along Z (depth) axis.
     pub z: Bounds,
+}
+
+impl From<Extent2d> for Viewport {
+    fn from(extent: Extent2d) -> Self {
+        Viewport {
+            x: Bounds {
+                offset: OrderedFloat(0.0),
+                size: OrderedFloat(extent.width as f32),
+            },
+            y: Bounds {
+                offset: OrderedFloat(0.0),
+                size: OrderedFloat(extent.height as f32),
+            },
+            z: Bounds {
+                offset: OrderedFloat(0.0),
+                size: OrderedFloat(1.0),
+            },
+        }
+    }
+}
+
+impl From<Extent3d> for Viewport {
+    fn from(extent: Extent3d) -> Self {
+        Viewport {
+            x: Bounds {
+                offset: OrderedFloat(0.0),
+                size: OrderedFloat(extent.width as f32),
+            },
+            y: Bounds {
+                offset: OrderedFloat(0.0),
+                size: OrderedFloat(extent.height as f32),
+            },
+            z: Bounds {
+                offset: OrderedFloat(0.0),
+                size: OrderedFloat(extent.depth as f32),
+            },
+        }
+    }
+}
+
+impl From<Extent2d> for State<Viewport> {
+    fn from(extent: Extent2d) -> Self {
+        State::Static {
+            value: extent.into(),
+        }
+    }
+}
+
+impl From<Extent3d> for State<Viewport> {
+    fn from(extent: Extent3d) -> Self {
+        State::Static {
+            value: extent.into(),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
+pub struct Rect2d {
+    pub offset: Offset2d,
+    pub extent: Extent2d,
+}
+
+impl From<Extent2d> for Rect2d {
+    fn from(extent: Extent2d) -> Self {
+        Rect2d {
+            offset: Offset2d::ZERO,
+            extent,
+        }
+    }
+}
+
+impl From<Extent2d> for State<Rect2d> {
+    fn from(extent: Extent2d) -> Self {
+        State::Static {
+            value: extent.into(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
