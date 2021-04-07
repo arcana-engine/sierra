@@ -815,30 +815,34 @@ impl Device {
                 } => {
                     builder = builder.logic_op_enable(false).attachments({
                         bump.alloc_slice_fill_iter(
-                            (0..info.render_pass.info().attachments.len()).map(|_| {
-                                if let Some(blending) = blending {
-                                    vk1_0::PipelineColorBlendAttachmentStateBuilder::new()
-                                        .blend_enable(true)
-                                        .src_color_blend_factor(
-                                            blending.color_src_factor.to_erupt(),
-                                        )
-                                        .dst_color_blend_factor(
-                                            blending.color_dst_factor.to_erupt(),
-                                        )
-                                        .color_blend_op(blending.color_op.to_erupt())
-                                        .src_alpha_blend_factor(
-                                            blending.alpha_src_factor.to_erupt(),
-                                        )
-                                        .dst_alpha_blend_factor(
-                                            blending.alpha_dst_factor.to_erupt(),
-                                        )
-                                        .alpha_blend_op(blending.alpha_op.to_erupt())
-                                } else {
-                                    vk1_0::PipelineColorBlendAttachmentStateBuilder::new()
-                                        .blend_enable(false)
-                                }
-                                .color_write_mask(write_mask.to_erupt())
-                            }),
+                            (0..info.render_pass.info().subpasses
+                                [usize::try_from(info.subpass).unwrap()]
+                            .colors
+                            .len())
+                                .map(|_| {
+                                    if let Some(blending) = blending {
+                                        vk1_0::PipelineColorBlendAttachmentStateBuilder::new()
+                                            .blend_enable(true)
+                                            .src_color_blend_factor(
+                                                blending.color_src_factor.to_erupt(),
+                                            )
+                                            .dst_color_blend_factor(
+                                                blending.color_dst_factor.to_erupt(),
+                                            )
+                                            .color_blend_op(blending.color_op.to_erupt())
+                                            .src_alpha_blend_factor(
+                                                blending.alpha_src_factor.to_erupt(),
+                                            )
+                                            .dst_alpha_blend_factor(
+                                                blending.alpha_dst_factor.to_erupt(),
+                                            )
+                                            .alpha_blend_op(blending.alpha_op.to_erupt())
+                                    } else {
+                                        vk1_0::PipelineColorBlendAttachmentStateBuilder::new()
+                                            .blend_enable(false)
+                                    }
+                                    .color_write_mask(write_mask.to_erupt())
+                                }),
                         )
                     });
 
