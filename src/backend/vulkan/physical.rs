@@ -503,7 +503,6 @@ impl PhysicalDevice {
         device_create_info = device_create_info.queue_create_infos(&device_queue_create_infos);
 
         // Collect requested features.
-        let mut features = vk1_0::PhysicalDeviceFeaturesBuilder::new();
         let mut features2 = vk1_1::PhysicalDeviceFeatures2Builder::new();
         let mut features11 = vk1_2::PhysicalDeviceVulkan11FeaturesBuilder::new();
         let mut features12 = vk1_2::PhysicalDeviceVulkan12FeaturesBuilder::new();
@@ -703,7 +702,9 @@ impl PhysicalDevice {
                     .shader_sampled_image_array_dynamic_indexing,
                 0
             );
-            features.shader_sampled_image_array_dynamic_indexing = 1;
+            features2
+                .features
+                .shader_sampled_image_array_dynamic_indexing = 1;
         }
         if requested_features.take(Feature::ShaderStorageImageNonUniformIndexing) {
             assert!(requested_features.check(Feature::ShaderStorageImageDynamicIndexing));
@@ -723,7 +724,9 @@ impl PhysicalDevice {
                     .shader_storage_image_array_dynamic_indexing,
                 0
             );
-            features.shader_storage_image_array_dynamic_indexing = 1;
+            features2
+                .features
+                .shader_storage_image_array_dynamic_indexing = 1;
         }
         if requested_features.take(Feature::ShaderUniformBufferNonUniformIndexing) {
             assert!(requested_features.check(Feature::ShaderUniformBufferDynamicIndexing));
@@ -743,7 +746,9 @@ impl PhysicalDevice {
                     .shader_uniform_buffer_array_dynamic_indexing,
                 0
             );
-            features.shader_uniform_buffer_array_dynamic_indexing = 1;
+            features2
+                .features
+                .shader_uniform_buffer_array_dynamic_indexing = 1;
         }
         if requested_features.take(Feature::ShaderStorageBufferNonUniformIndexing) {
             assert!(requested_features.check(Feature::ShaderStorageBufferDynamicIndexing));
@@ -763,7 +768,9 @@ impl PhysicalDevice {
                     .shader_storage_buffer_array_dynamic_indexing,
                 0
             );
-            features.shader_storage_buffer_array_dynamic_indexing = 1;
+            features2
+                .features
+                .shader_storage_buffer_array_dynamic_indexing = 1;
         }
 
         device_create_info = device_create_info.enabled_extension_names(&enable_exts);
@@ -771,7 +778,7 @@ impl PhysicalDevice {
         let version = self.graphics().version;
 
         if version < vk1_0::make_version(1, 1, 0) {
-            device_create_info = device_create_info.enabled_features(&features);
+            device_create_info = device_create_info.enabled_features(&features2.features);
             assert!(!include_features11);
             assert!(!include_features12);
             assert!(!include_features_rt);
@@ -828,7 +835,13 @@ impl PhysicalDevice {
             logical,
             self.physical,
             self.properties,
-            self.features,
+            Features {
+                v10: features2.features,
+                v11: features11.build(),
+                v12: features12.build(),
+                acc: features_acc.build(),
+                rt: features_rt.build(),
+            },
             version,
         );
 
