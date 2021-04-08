@@ -315,7 +315,7 @@ impl Swapchain {
         Ok(())
     }
 
-    pub fn acquire_image(&mut self) -> Result<SwapchainImage, SurfaceError> {
+    pub fn acquire_image(&mut self, optimal: bool) -> Result<SwapchainImage, SurfaceError> {
         let device = self
             .device
             .upgrade()
@@ -346,21 +346,30 @@ impl Swapchain {
                         None,
                         None,
                     )
-                }
-                .result();
+                };
 
-                let index = match result {
-                    Ok(index) => index,
-                    Err(vk1_0::Result::ERROR_OUT_OF_HOST_MEMORY) => out_of_host_memory(),
-                    Err(vk1_0::Result::ERROR_OUT_OF_DEVICE_MEMORY) => {
+                match result.raw {
+                    vk1_0::Result::SUCCESS => {}
+                    vk1_0::Result::ERROR_OUT_OF_HOST_MEMORY => out_of_host_memory(),
+                    vk1_0::Result::ERROR_OUT_OF_DEVICE_MEMORY => {
                         return Err(SurfaceError::OutOfMemory {
                             source: OutOfMemory,
                         });
                     }
-                    Err(vk1_0::Result::ERROR_SURFACE_LOST_KHR) => {
+                    vk1_0::Result::ERROR_SURFACE_LOST_KHR => {
                         return Err(SurfaceError::SurfaceLost);
                     }
-                    Err(vk1_0::Result::ERROR_OUT_OF_DATE_KHR) => {
+                    vk1_0::Result::SUBOPTIMAL_KHR => {
+                        if optimal {
+                            let usage = inner.usage;
+                            let format = inner.format;
+                            let mode = inner.mode;
+
+                            self.configure(usage, format, mode)?;
+                            continue;
+                        }
+                    }
+                    vk1_0::Result::ERROR_OUT_OF_DATE_KHR => {
                         let usage = inner.usage;
                         let format = inner.format;
                         let mode = inner.mode;
@@ -368,9 +377,10 @@ impl Swapchain {
                         self.configure(usage, format, mode)?;
                         continue;
                     }
-                    Err(result) => unexpected_result(result),
-                };
+                    raw => unexpected_result(raw),
+                }
 
+                let index = result.unwrap();
                 let image_and_semaphores = &mut inner.images[index as usize];
 
                 std::mem::swap(&mut image_and_semaphores.acquire, &mut self.free_semaphore);
