@@ -5,7 +5,7 @@ use {
         render_pass::RenderPass,
         sampler::CompareOp,
         shader::{FragmentShader, VertexShader},
-        Extent2d, Extent3d, Offset2d,
+        Device, Extent2d, Extent3d, Offset2d, OutOfMemory,
     },
     ordered_float::OrderedFloat,
 };
@@ -769,5 +769,104 @@ bitflags::bitflags! {
         const A = 0b1000;
         const RGB = 0b0111;
         const RGBA = 0b1111;
+    }
+}
+
+#[derive(Debug)]
+pub struct GraphicsPipelineDesc {
+    pub vertex_shader: VertexShader,
+    pub layout: PipelineLayout,
+    pub vertex_bindings: Vec<VertexInputBinding>,
+    pub vertex_attributes: Vec<VertexInputAttribute>,
+    pub primitive_topology: PrimitiveTopology,
+    pub primitive_restart_enable: bool,
+    pub rasterizer: Option<Rasterizer>,
+}
+
+#[derive(Debug)]
+pub struct DynamicGraphicsPipeline {
+    graphics_pipeline: Option<GraphicsPipeline>,
+    pub desc: GraphicsPipelineDesc,
+}
+
+impl DynamicGraphicsPipeline {
+    pub fn new(desc: GraphicsPipelineDesc) -> Self {
+        DynamicGraphicsPipeline {
+            desc,
+            graphics_pipeline: None,
+        }
+    }
+
+    pub fn get(
+        &mut self,
+        render_pass: &RenderPass,
+        subpass: u32,
+        device: &Device,
+    ) -> Result<&GraphicsPipeline, OutOfMemory> {
+        match &mut self.graphics_pipeline {
+            Some(graphics_pipeline) => {
+                let mut compatible = true;
+                let info = graphics_pipeline.info();
+
+                if info.render_pass != *render_pass {
+                    compatible = false;
+                }
+                if info.subpass != subpass {
+                    compatible = false;
+                }
+                if info.vertex_shader != self.desc.vertex_shader {
+                    compatible = false;
+                }
+                if info.primitive_topology != self.desc.primitive_topology {
+                    compatible = false;
+                }
+                if info.primitive_restart_enable != self.desc.primitive_restart_enable {
+                    compatible = false;
+                }
+                if info.layout != self.desc.layout {
+                    compatible = false;
+                }
+                if info.rasterizer != self.desc.rasterizer {
+                    compatible = false;
+                }
+                if info.vertex_bindings != self.desc.vertex_bindings {
+                    compatible = false;
+                }
+                if info.vertex_attributes != self.desc.vertex_attributes {
+                    compatible = false;
+                }
+
+                if !compatible {
+                    *graphics_pipeline = device.create_graphics_pipeline(desc_to_info(
+                        &self.desc,
+                        render_pass,
+                        subpass,
+                    ))?;
+                }
+
+                Ok(graphics_pipeline)
+            }
+            graphics_pipeline => Ok(graphics_pipeline.get_or_insert(
+                device.create_graphics_pipeline(desc_to_info(&self.desc, render_pass, subpass))?,
+            )),
+        }
+    }
+}
+
+fn desc_to_info(
+    desc: &GraphicsPipelineDesc,
+    render_pass: &RenderPass,
+    subpass: u32,
+) -> GraphicsPipelineInfo {
+    GraphicsPipelineInfo {
+        vertex_bindings: desc.vertex_bindings.clone(),
+        vertex_attributes: desc.vertex_attributes.clone(),
+        primitive_topology: desc.primitive_topology,
+        primitive_restart_enable: desc.primitive_restart_enable,
+        vertex_shader: desc.vertex_shader.clone(),
+        rasterizer: desc.rasterizer.clone(),
+        layout: desc.layout.clone(),
+        render_pass: render_pass.clone(),
+        subpass,
     }
 }

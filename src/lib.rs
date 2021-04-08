@@ -71,7 +71,7 @@ pub use self::{
     view::*,
 };
 
-pub use sierra_proc::{descriptors, graphics_pipeline, pass, pipeline, shader_repr};
+pub use sierra_proc::{descriptors, graphics_pipeline_desc, pass, pipeline, shader_repr};
 
 /// Re-exporting bumpalo for code-gen.
 #[doc(hidden)]

@@ -50,8 +50,8 @@ pub fn pass(
 }
 
 #[proc_macro]
-pub fn graphics_pipeline(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    graphics_pipeline::graphics_pipeline(item).into()
+pub fn graphics_pipeline_desc(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    graphics_pipeline::graphics_pipeline_desc(item).into()
 }
 
 fn take_attributes<T>(
