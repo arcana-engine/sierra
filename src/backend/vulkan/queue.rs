@@ -171,7 +171,7 @@ impl Queue {
     }
 
     #[tracing::instrument]
-    pub fn present(&mut self, image: SwapchainImage) -> Result<PresentOk, PresentError> {
+    pub fn present(&mut self, image: SwapchainImage) -> Result<PresentOk, OutOfMemory> {
         assert_owner!(image, self.device);
 
         // FIXME: Check semaphore states.
@@ -202,12 +202,10 @@ impl Queue {
         match result.raw {
             vk1_0::Result::SUCCESS => Ok(PresentOk::Success),
             vk1_0::Result::SUBOPTIMAL_KHR => Ok(PresentOk::Suboptimal),
-            vk1_0::Result::ERROR_OUT_OF_DATE_KHR => Err(PresentError::OutOfDate),
-            vk1_0::Result::ERROR_SURFACE_LOST_KHR => Err(PresentError::SurfaceLost),
+            vk1_0::Result::ERROR_OUT_OF_DATE_KHR => Ok(PresentOk::OutOfDate),
+            vk1_0::Result::ERROR_SURFACE_LOST_KHR => Ok(PresentOk::SurfaceLost),
             // vk1_0::Result::ERROR_FULL_SCREEN_EXCLUSIVE_MODE_LOST_EXT => {}
-            result => Err(PresentError::OutOfMemory {
-                source: queue_error(result),
-            }),
+            result => Err(queue_error(result)),
         }
     }
 

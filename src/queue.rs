@@ -185,6 +185,8 @@ pub enum PresentError {
 pub enum PresentOk {
     Success,
     Suboptimal,
+    OutOfDate,
+    SurfaceLost,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
