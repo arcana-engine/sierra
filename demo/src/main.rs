@@ -1,5 +1,3 @@
-use {sierra::RenderPassInstance as _, tracing_subscriber::layer::SubscriberExt as _};
-
 #[sierra::pipeline]
 pub struct Pipeline;
 
@@ -12,6 +10,7 @@ pub struct Main {
 }
 
 fn main() -> eyre::Result<()> {
+    let bump = bumpalo::Bump::new();
     let event_loop = winit::event_loop::EventLoop::new();
     let window = winit::window::Window::new(&event_loop)?;
 
@@ -31,18 +30,20 @@ fn main() -> eyre::Result<()> {
 
     let shader_module = device.create_shader_module(sierra::ShaderModuleInfo {
         code: br#"
-            [[stage(vertex)]]
-            fn vs_main([[builtin(vertex_index)]] in_vertex_index: u32) -> [[builtin(position)]] vec4<f32> {
-                const x = f32(i32(in_vertex_index) - 1);
-                const y = f32(i32(in_vertex_index & 1u) * 2 - 1);
-                return vec4<f32>(x, y, 0.0, 1.0);
-            }
+[[stage(vertex)]]
+fn vs_main([[builtin(vertex_index)]] in_vertex_index: u32) -> [[builtin(position)]] vec4<f32> {
+    const x = f32(i32(in_vertex_index) - 1);
+    const y = f32(i32(in_vertex_index & 1u) * 2 - 1);
+    return vec4<f32>(x, y, 0.0, 1.0);
+}
 
-            [[stage(fragment)]]
-            fn fs_main() -> [[location(0)]] vec4<f32> {
-                return vec4<f32>(1.0, 0.0, 0.0, 1.0);
-            }
-        "#.to_vec().into_boxed_slice(),
+[[stage(fragment)]]
+fn fs_main() -> [[location(0)]] vec4<f32> {
+    return vec4<f32>(1.0, 0.0, 0.0, 1.0);
+}
+        "#
+        .to_vec()
+        .into_boxed_slice(),
         language: sierra::ShaderLanguage::WGSL,
     })?;
 
@@ -55,9 +56,13 @@ fn main() -> eyre::Result<()> {
 
     let mut main = Main::instance();
     let pipeline_layout = Pipeline::layout(&device)?;
-    let mut graphisc_pipeline = None::<sierra::GraphicsPipeline>;
 
-    let bump = bumpalo::Bump::new();
+    let mut graphisc_pipeline =
+        sierra::DynamicGraphicsPipeline::new(sierra::graphics_pipeline_desc!(
+            layout: pipeline_layout.raw().clone(),
+            vertex_shader: sierra::VertexShader::new(shader_module.clone(), "vs_main"),
+            fragment_shader: Some(sierra::FragmentShader::new(shader_module.clone(), "fs_main")),
+        ));
 
     event_loop.run(move |event, target, flow| {
         *flow = winit::event_loop::ControlFlow::Poll;
@@ -68,62 +73,40 @@ fn main() -> eyre::Result<()> {
                 ..
             } => *flow = winit::event_loop::ControlFlow::Exit,
 
-            winit::event::Event::RedrawRequested(_) => {
-                let result = (|| -> eyre::Result<()> {
-                    let image = swapchain.acquire_image()?;
-                    let gp;
+            winit::event::Event::RedrawRequested(_) => (|| -> eyre::Result<()> {
+                let image = swapchain.acquire_image(false)?;
 
-                    let mut encoder = queue.create_encoder(&bump)?;
-                    let mut render_pass_encoder = main.begin_render_pass(
-                        &Main {
-                            target: image.info().image.clone(),
-                            bg: sierra::ClearColor(0.3, 0.1, 0.8, 1.0),
-                        },
-                        &device,
-                        &mut encoder,
-                    )?;
+                let mut encoder = queue.create_encoder(&bump)?;
+                let mut render_pass_encoder = encoder.with_render_pass(
+                    &mut main,
+                    &Main {
+                        target: image.info().image.clone(),
+                        bg: sierra::ClearColor(0.3, 0.1, 0.8, 1.0),
+                    },
+                    &device,
+                )?;
 
-                    gp = match &graphisc_pipeline {
-                        Some(gp) if gp.info().render_pass == *render_pass_encoder.render_pass() => {
-                            gp.clone()
-                        }
-                        _ => {
-                            graphisc_pipeline = None;
-                            let extent = render_pass_encoder.framebuffer().info().extent;
-                            let gp =
-                                device.create_graphics_pipeline(sierra::graphics_pipeline!(
-                                    vertex_shader: sierra::VertexShader::new(shader_module.clone(), "vs_main"),
-                                    render_pass: render_pass_encoder.render_pass().clone(),
-                                    layout: pipeline_layout.raw().clone(),
-                                    viewport: extent.into(),
-                                    scissor: extent.into(),
-                                    fragment_shader: Some(sierra::FragmentShader::new(shader_module.clone(), "fs_main")),
-                                ))?;
-
-                            graphisc_pipeline.get_or_insert(gp).clone()
-                        }
-                    };
-                    render_pass_encoder.bind_graphics_pipeline(&gp);
-                    render_pass_encoder.draw(0..3, 0..1);
-                    drop(render_pass_encoder);
-                    queue.submit(
-                        &[(
-                            sierra::PipelineStageFlags::TOP_OF_PIPE,
-                            image.info().wait.clone(),
-                        )],
-                        Some(encoder.finish()),
-                        &[image.info().signal.clone()],
-                        None,
-                        &bump,
-                    );
-                    queue.present(image)?;
-                    Ok(())
-                })();
-
-                if let Err(err) = result {
-                    Err(err).unwrap()
-                }
-            }
+                let extent = render_pass_encoder.framebuffer().info().extent;
+                let gp = graphisc_pipeline.get(render_pass_encoder.render_pass(), 0, &device)?;
+                render_pass_encoder.bind_graphics_pipeline(gp);
+                render_pass_encoder.set_viewport(extent.into());
+                render_pass_encoder.set_scissor(extent.into());
+                render_pass_encoder.draw(0..3, 0..1);
+                drop(render_pass_encoder);
+                queue.submit(
+                    &[(
+                        sierra::PipelineStageFlags::TOP_OF_PIPE,
+                        image.info().wait.clone(),
+                    )],
+                    Some(encoder.finish()),
+                    &[image.info().signal.clone()],
+                    None,
+                    &bump,
+                );
+                queue.present(image)?;
+                Ok(())
+            })()
+            .unwrap(),
             _ => {}
         }
     })
