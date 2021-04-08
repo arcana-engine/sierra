@@ -5,13 +5,13 @@ use {
         access::AccessFlags,
         arith_le,
         buffer::{Buffer, BufferMemoryBarrier},
-        descriptor::DescriptorSet,
+        descriptor::{DescriptorSet, UpdatedPipelineDescriptors},
         framebuffer::{Framebuffer, FramebufferError},
         image::{Image, ImageBlit, ImageMemoryBarrier, Layout, SubresourceLayers},
         memory::MemoryBarrier,
         pipeline::{
             ComputePipeline, GraphicsPipeline, PipelineLayout, RayTracingPipeline,
-            ShaderBindingTable, Viewport,
+            ShaderBindingTable, TypedPipelineLayout, Viewport,
         },
         queue::QueueCapabilityFlags,
         render_pass::{ClearValue, RenderPass, RenderPassInstance},
@@ -271,6 +271,16 @@ impl<'a> EncoderCommon<'a> {
         });
     }
 
+    pub fn bind_graphics_descriptors<P>(
+        &mut self,
+        layout: &'a P,
+        descriptors: &'a impl UpdatedPipelineDescriptors<P>,
+    ) where
+        P: TypedPipelineLayout,
+    {
+        layout.bind_graphics(descriptors, self);
+    }
+
     pub fn bind_compute_descriptor_sets(
         &mut self,
         layout: &'a PipelineLayout,
@@ -288,6 +298,16 @@ impl<'a> EncoderCommon<'a> {
         });
     }
 
+    pub fn bind_compute_descriptors<P>(
+        &mut self,
+        layout: &'a P,
+        descriptors: &'a impl UpdatedPipelineDescriptors<P>,
+    ) where
+        P: TypedPipelineLayout,
+    {
+        layout.bind_compute(descriptors, self);
+    }
+
     pub fn bind_ray_tracing_descriptor_sets(
         &mut self,
         layout: &'a PipelineLayout,
@@ -303,6 +323,16 @@ impl<'a> EncoderCommon<'a> {
             sets: self.bump.alloc_slice_copy(sets),
             dynamic_offsets,
         });
+    }
+
+    pub fn bind_ray_tracing_descriptors<P>(
+        &mut self,
+        layout: &'a P,
+        descriptors: &'a impl UpdatedPipelineDescriptors<P>,
+    ) where
+        P: TypedPipelineLayout,
+    {
+        layout.bind_ray_tracing(descriptors, self);
     }
 
     pub fn push_constants<T>(
