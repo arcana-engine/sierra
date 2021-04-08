@@ -57,7 +57,7 @@ fn fs_main() -> [[location(0)]] vec4<f32> {
     let mut main = Main::instance();
     let pipeline_layout = Pipeline::layout(&device)?;
 
-    let mut graphisc_pipeline =
+    let mut graphics_pipeline =
         sierra::DynamicGraphicsPipeline::new(sierra::graphics_pipeline_desc!(
             layout: pipeline_layout.raw().clone(),
             vertex_shader: sierra::VertexShader::new(shader_module.clone(), "vs_main"),
@@ -86,11 +86,8 @@ fn fs_main() -> [[location(0)]] vec4<f32> {
                     &device,
                 )?;
 
-                let extent = render_pass_encoder.framebuffer().info().extent;
-                let gp = graphisc_pipeline.get(render_pass_encoder.render_pass(), 0, &device)?;
-                render_pass_encoder.bind_graphics_pipeline(gp);
-                render_pass_encoder.set_viewport(extent.into());
-                render_pass_encoder.set_scissor(extent.into());
+                render_pass_encoder
+                    .bind_dynamic_graphics_pipeline(&mut graphics_pipeline, &device)?;
                 render_pass_encoder.draw(0..3, 0..1);
                 drop(render_pass_encoder);
                 queue.submit(

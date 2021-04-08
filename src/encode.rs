@@ -10,15 +10,15 @@ use {
         image::{Image, ImageBlit, ImageMemoryBarrier, Layout, SubresourceLayers},
         memory::MemoryBarrier,
         pipeline::{
-            ComputePipeline, GraphicsPipeline, PipelineLayout, RayTracingPipeline,
-            ShaderBindingTable, TypedPipelineLayout, Viewport,
+            ComputePipeline, DynamicGraphicsPipeline, GraphicsPipeline, PipelineLayout,
+            RayTracingPipeline, ShaderBindingTable, TypedPipelineLayout, Viewport,
         },
         queue::QueueCapabilityFlags,
         render_pass::{ClearValue, RenderPass, RenderPassInstance},
         sampler::Filter,
         shader::ShaderStageFlags,
         stage::PipelineStageFlags,
-        Device, Extent3d, IndexType, Offset3d, Rect2d,
+        Device, Extent3d, IndexType, Offset3d, OutOfMemory, Rect2d,
     },
     bumpalo::{collections::Vec as BVec, Bump},
     bytemuck::{cast_slice, Pod},
@@ -419,6 +419,7 @@ impl<'a> Encoder<'a> {
             framebuffer,
             render_pass: &framebuffer.info().render_pass,
             inner: &mut self.inner,
+            subpass: 0,
         }
     }
 
@@ -674,6 +675,7 @@ impl<'a> Encoder<'a> {
 pub struct RenderPassEncoder<'a, 'b> {
     framebuffer: &'b Framebuffer,
     render_pass: &'b RenderPass,
+    subpass: u32,
     inner: &'a mut EncoderCommon<'b>,
 }
 
@@ -699,6 +701,36 @@ impl<'a, 'b> RenderPassEncoder<'a, 'b> {
             vertex_offset,
             instances,
         });
+    }
+
+    pub fn bind_dynamic_graphics_pipeline(
+        &mut self,
+        pipeline: &'b mut DynamicGraphicsPipeline,
+        device: &Device,
+    ) -> Result<(), OutOfMemory> {
+        assert!(self.capabilities.supports_graphics());
+
+        let mut set_viewport = false;
+        let mut set_scissor = false;
+
+        if let Some(rasterizer) = &pipeline.desc.rasterizer {
+            set_viewport = rasterizer.viewport.is_dynamic();
+            set_scissor = rasterizer.scissor.is_dynamic();
+        }
+
+        if set_scissor {
+            self.inner
+                .set_scissor(self.framebuffer.info().extent.into());
+        }
+
+        if set_viewport {
+            self.inner
+                .set_viewport(self.framebuffer.info().extent.into());
+        }
+
+        let gp = pipeline.get(&self.render_pass, self.subpass, device)?;
+        self.inner.bind_graphics_pipeline(gp);
+        Ok(())
     }
 }
 
