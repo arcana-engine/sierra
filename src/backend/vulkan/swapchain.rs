@@ -151,6 +151,10 @@ impl Swapchain {
 }
 
 impl Swapchain {
+    pub fn capabilities(&self) -> &SurfaceCapabilities {
+        &self.surface_capabilities
+    }
+
     #[tracing::instrument]
     pub fn configure(
         &mut self,
