@@ -17,6 +17,12 @@ use {
 #[repr(transparent)]
 pub struct mat<T, const N: usize, const M: usize>(pub [vec<T, M>; N]);
 
+impl<T: Default + Copy, const N: usize, const M: usize> Default for mat<T, N, M> {
+    fn default() -> Self {
+        mat([Default::default(); N])
+    }
+}
+
 // impl<T: Pod, const N: usize, const M: usize> From<[[T; M]; N]> for mat<T, N, M> {
 //     fn from(v: [[T; M]; N]) -> Self {
 //         bytemuck::cast(v)

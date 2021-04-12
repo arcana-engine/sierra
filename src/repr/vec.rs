@@ -8,6 +8,12 @@ use {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct vec<T, const N: usize>(pub [T; N]);
 
+impl<T: Default + Copy, const N: usize> Default for vec<T, N> {
+    fn default() -> Self {
+        vec([Default::default(); N])
+    }
+}
+
 unsafe impl<T: Zeroable, const N: usize> Zeroable for vec<T, N> {}
 unsafe impl<T: Pod, const N: usize> Pod for vec<T, N> {}
 
