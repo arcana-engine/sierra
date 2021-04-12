@@ -450,6 +450,13 @@ pub struct DepthTest {
     pub write: bool,
 }
 
+impl DepthTest {
+    pub const LESS_WRITE: Self = DepthTest {
+        compare: CompareOp::Less,
+        write: true,
+    };
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct StencilTests {
