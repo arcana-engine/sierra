@@ -173,6 +173,13 @@ pub fn parse(attr: proc_macro::TokenStream, item: proc_macro::TokenStream) -> sy
         subpasses.push(subpass.convert(&attachments, &item_struct)?);
     }
 
+    if subpasses.is_empty() {
+        return Err(syn::Error::new(
+            proc_macro2::Span::call_site(),
+            "At least one subpass attribute must be specified",
+        ));
+    }
+
     Ok(Input {
         item_struct,
         attachments,
