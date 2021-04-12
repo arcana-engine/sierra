@@ -103,9 +103,9 @@ impl Queue {
     #[tracing::instrument(skip(cbufs))]
     pub fn submit(
         &mut self,
-        wait: &[(PipelineStageFlags, Semaphore)],
+        wait: &[(PipelineStageFlags, &Semaphore)],
         cbufs: impl IntoIterator<IntoIter = impl ExactSizeIterator<Item = CommandBuffer>>,
-        signal: &[Semaphore],
+        signal: &[&Semaphore],
         fence: Option<&Fence>,
         bump: &Bump,
     ) {
