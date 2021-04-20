@@ -137,6 +137,7 @@ pub enum PresentMode {
 }
 
 bitflags::bitflags! {
+    #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
     pub struct CompositeAlphaFlags: u32 {
         const OPAQUE = 0x1;
         const PRE_MULTIPLIED = 0x2;
@@ -146,6 +147,7 @@ bitflags::bitflags! {
 }
 
 bitflags::bitflags! {
+    #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
     pub struct SurfaceTransformFlags: u32 {
         const IDENTITY = 0x001;
         const ROTATE_90 = 0x002;

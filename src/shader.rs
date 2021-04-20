@@ -148,6 +148,14 @@ impl ShaderModuleInfo {
         }
     }
 
+    /// Creates WGSL shader module info.
+    pub fn wgsl(bytes: impl Into<Box<[u8]>>) -> Self {
+        ShaderModuleInfo {
+            code: bytes.into(),
+            language: ShaderLanguage::WGSL,
+        }
+    }
+
     /// Creates HLSL shader module info.
     pub fn hlsl(bytes: impl Into<Box<[u8]>>) -> Self {
         ShaderModuleInfo {
@@ -337,6 +345,7 @@ pub enum CreateShaderModuleError {
 
     #[error("Failed to parse WGSL shader")]
     NagaWgslParseError {
+        #[source]
         source: Box<dyn std::error::Error + Send + Sync>,
     },
 

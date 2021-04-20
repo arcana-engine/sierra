@@ -126,7 +126,7 @@ pub struct Subpass {
     /// subpass.
     #[cfg_attr(
         feature = "serde-1",
-        serde(skip_serializing_if = "SmallVec::is_empty", default)
+        serde(skip_serializing_if = "Vec::is_empty", default)
     )]
     pub colors: Vec<(u32, Layout)>,
 
