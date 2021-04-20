@@ -337,7 +337,7 @@ impl Device {
         }
     }
 
-    pub(crate) fn graphics(&self) -> &'static Graphics {
+    pub fn graphics(&self) -> &'static Graphics {
         unsafe {
             // Device can be created only via Graphics instance.
             Graphics::get_unchecked()
