@@ -1,12 +1,20 @@
+#[sierra::descriptors]
+pub struct Descriptors {
+    #[sampled_image]
+    pub foo: sierra::ImageView,
+
+    #[sampler]
+    pub bar: sierra::Sampler,
+}
+
 #[sierra::pipeline]
 pub struct Pipeline;
 
 #[sierra::pass]
 #[subpass(color = target)]
 pub struct Main {
-    #[attachment(clear(bg), store(const sierra::Layout::Present))]
+    #[attachment(clear(const sierra::ClearColor(0.3, 0.1, 0.8, 1.0)), store(const sierra::Layout::Present))]
     target: sierra::Image,
-    bg: sierra::ClearColor,
 }
 
 fn main() -> eyre::Result<()> {
@@ -64,7 +72,7 @@ fn fs_main() -> [[location(0)]] vec4<f32> {
             fragment_shader: Some(sierra::FragmentShader::new(shader_module.clone(), "fs_main")),
         ));
 
-    event_loop.run(move |event, target, flow| {
+    event_loop.run(move |event, _target, flow| {
         *flow = winit::event_loop::ControlFlow::Poll;
 
         match event {
@@ -81,7 +89,6 @@ fn fs_main() -> [[location(0)]] vec4<f32> {
                     &mut main,
                     &Main {
                         target: image.info().image.clone(),
-                        bg: sierra::ClearColor(0.3, 0.1, 0.8, 1.0),
                     },
                     &device,
                 )?;
@@ -91,12 +98,9 @@ fn fs_main() -> [[location(0)]] vec4<f32> {
                 render_pass_encoder.draw(0..3, 0..1);
                 drop(render_pass_encoder);
                 queue.submit(
-                    &[(
-                        sierra::PipelineStageFlags::TOP_OF_PIPE,
-                        image.info().wait.clone(),
-                    )],
+                    &[(sierra::PipelineStageFlags::TOP_OF_PIPE, &image.info().wait)],
                     Some(encoder.finish()),
-                    &[image.info().signal.clone()],
+                    &[&image.info().signal],
                     None,
                     &bump,
                 );

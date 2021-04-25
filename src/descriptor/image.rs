@@ -1,263 +1,83 @@
-use crate::{
-    access::AccessFlags,
-    encode::Encoder,
-    image::{Image, ImageSubresourceState, ImageUsage, Layout},
-    queue::QueueId,
-    stage::PipelineStageFlags,
-    view::{ImageView, ImageViewInfo, ImageViewState},
-    Device, OutOfMemory,
+use {
+    super::{
+        AsDescriptors, Descriptors, ImageViewDescriptor, SampledImageDescriptor,
+        StorageImageDescriptor, TypedDescriptors,
+    },
+    crate::{
+        image::{Image, Layout},
+        view::{ImageView, ImageViewInfo},
+        Device, OutOfMemory,
+    },
 };
 
-/// Interface for all types that can be used as `SampledImage` or `CombinedImageSampler` descriptor.
-pub trait SampledImage {
-    /// Compare with image view currently bound to descriptor set.
-    /// Returns `true` if self is equivalent specified image view,
-    /// and no update is required.
-    fn eq(&self, view: &ImageView) -> bool;
-
-    /// Returns `ImageView` equivalent to self.
-    fn get_view(&self, device: &Device) -> Result<ImageView, OutOfMemory>;
-
-    /// Synchronize `self` with access as sampled image in specified stages.
-    /// Record commands as necessary.
-    /// Any commands that may be recorded here must "happen-before" operation
-    /// that will access this image.
-    /// Operations must be either recorded afterward
-    /// or into separate encoder that will be submitted after this one.
-    fn sync<'a>(
-        &'a mut self,
-        encoder: &mut Encoder<'a>,
-        stages: PipelineStageFlags,
-        queue: QueueId,
-    );
-}
-
-impl SampledImage for Image {
-    fn eq(&self, view: &ImageView) -> bool {
-        *self == view.info().image
-    }
-
-    fn get_view(&self, device: &Device) -> Result<ImageView, OutOfMemory> {
-        assert!(self.info().usage.contains(ImageUsage::SAMPLED));
-        device.create_image_view(ImageViewInfo::new(self.clone()))
-    }
-
-    fn sync<'a>(
-        &'a mut self,
-        _encoder: &mut Encoder<'a>,
-        _stages: PipelineStageFlags,
-        _queue: QueueId,
-    ) {
-        // Must be externally synchronized.
+impl<const N: usize> TypedDescriptors<SampledImageDescriptor> for [ImageViewDescriptor; N] {
+    fn descriptors(&self) -> Descriptors<'_> {
+        Descriptors::SampledImage(self)
     }
 }
 
-impl SampledImage for ImageSubresourceState {
-    fn eq(&self, view: &ImageView) -> bool {
-        self.subresource.image == view.info().image
-    }
-
-    fn get_view(&self, device: &Device) -> Result<ImageView, OutOfMemory> {
-        assert!(self
-            .subresource
-            .image
-            .info()
-            .usage
-            .contains(ImageUsage::SAMPLED));
-        device.create_image_view(ImageViewInfo::new(self.subresource.image.clone()))
-    }
-
-    fn sync<'a>(
-        &'a mut self,
-        encoder: &mut Encoder<'a>,
-        stages: PipelineStageFlags,
-        queue: QueueId,
-    ) {
-        self.access(
-            AccessFlags::SHADER_READ,
-            stages,
-            Layout::ShaderReadOnlyOptimal,
-            queue,
-            encoder,
-        );
+/// Interface for all types that can be used as `UniformBuffer` or `StorageBuffer` descriptor.
+impl<const N: usize> TypedDescriptors<StorageImageDescriptor> for [ImageViewDescriptor; N] {
+    fn descriptors(&self) -> Descriptors<'_> {
+        Descriptors::StorageImage(self)
     }
 }
 
-impl SampledImage for ImageView {
-    fn eq(&self, view: &ImageView) -> bool {
-        *self == *view
+impl AsDescriptors for Image {
+    const COUNT: u32 = 1;
+    type Descriptors = [ImageViewDescriptor; 1];
+
+    fn eq(&self, descriptors: &[ImageViewDescriptor; 1]) -> bool {
+        *self == descriptors[0].view.info().image
     }
 
-    fn get_view(&self, _device: &Device) -> Result<ImageView, OutOfMemory> {
-        assert!(self.info().image.info().usage.contains(ImageUsage::SAMPLED));
-        Ok(self.clone())
-    }
-
-    fn sync<'a>(
-        &'a mut self,
-        _encoder: &mut Encoder<'a>,
-        _stages: PipelineStageFlags,
-        _queue: QueueId,
-    ) {
-        // Must be externally synchronized.
+    fn get_descriptors(&self, device: &Device) -> Result<[ImageViewDescriptor; 1], OutOfMemory> {
+        let view = device.create_image_view(ImageViewInfo::new(self.clone()))?;
+        Ok([ImageViewDescriptor {
+            view,
+            layout: Layout::ShaderReadOnlyOptimal,
+        }])
     }
 }
 
-impl SampledImage for ImageViewState {
-    fn eq(&self, view: &ImageView) -> bool {
-        self.view == *view
+impl AsDescriptors for ImageView {
+    const COUNT: u32 = 1;
+    type Descriptors = [ImageViewDescriptor; 1];
+
+    fn eq(&self, descriptors: &[ImageViewDescriptor; 1]) -> bool {
+        *self == descriptors[0].view
     }
 
-    fn get_view(&self, _device: &Device) -> Result<ImageView, OutOfMemory> {
-        assert!(self
-            .view
-            .info()
-            .image
-            .info()
-            .usage
-            .contains(ImageUsage::SAMPLED));
-        Ok(self.view.clone())
-    }
-
-    fn sync<'a>(
-        &'a mut self,
-        encoder: &mut Encoder<'a>,
-        stages: PipelineStageFlags,
-        queue: QueueId,
-    ) {
-        self.access(
-            AccessFlags::SHADER_READ,
-            stages,
-            Layout::ShaderReadOnlyOptimal,
-            queue,
-            encoder,
-        );
+    fn get_descriptors(&self, _device: &Device) -> Result<[ImageViewDescriptor; 1], OutOfMemory> {
+        Ok([ImageViewDescriptor {
+            view: self.clone(),
+            layout: Layout::ShaderReadOnlyOptimal,
+        }])
     }
 }
 
-/// Interface for all types that can be used as `StorageImage` descriptor.
-pub trait StorageImage {
-    /// Compare with image view currently bound to descriptor set.
-    /// Returns `true` if self is equivalent specified image view,
-    /// and no update is required.
-    fn eq(&self, view: &ImageView) -> bool;
+impl<const N: usize> AsDescriptors for [ImageView; N] {
+    const COUNT: u32 = N as u32;
+    type Descriptors = [ImageViewDescriptor; N];
 
-    /// Returns `ImageView` equivalent to self.
-    fn get_view(&self, device: &Device) -> Result<ImageView, OutOfMemory>;
-
-    /// Synchronize `self` with access as sampled image in specified stages.
-    /// Record commands as necessary.
-    /// Any commands that may be recorded here must "happen-before" operation
-    /// that will access this image.
-    /// Operations must be either recorded afterward
-    /// or into separate encoder that will be submitted after this one.
-    fn sync<'a>(
-        &'a mut self,
-        encoder: &mut Encoder<'a>,
-        stages: PipelineStageFlags,
-        queue: QueueId,
-    );
-}
-
-impl StorageImage for Image {
-    fn eq(&self, view: &ImageView) -> bool {
-        *self == view.info().image
+    fn eq(&self, descriptors: &[ImageViewDescriptor; N]) -> bool {
+        self.iter()
+            .zip(descriptors)
+            .all(|(me, descriptor)| *me == descriptor.view)
     }
 
-    fn get_view(&self, device: &Device) -> Result<ImageView, OutOfMemory> {
-        assert!(self.info().usage.contains(ImageUsage::STORAGE));
-        device.create_image_view(ImageViewInfo::new(self.clone()))
-    }
+    fn get_descriptors(&self, _device: &Device) -> Result<[ImageViewDescriptor; N], OutOfMemory> {
+        let mut result = arrayvec::ArrayVec::new();
 
-    fn sync<'a>(
-        &'a mut self,
-        _encoder: &mut Encoder<'a>,
-        _stages: PipelineStageFlags,
-        _queue: QueueId,
-    ) {
-        // Must be externally synchronized.
-    }
-}
+        for me in self {
+            unsafe {
+                result.push_unchecked(ImageViewDescriptor {
+                    view: me.clone(),
+                    layout: Layout::ShaderReadOnlyOptimal,
+                });
+            }
+        }
 
-impl StorageImage for ImageSubresourceState {
-    fn eq(&self, view: &ImageView) -> bool {
-        self.subresource.image == view.info().image
-    }
-
-    fn get_view(&self, device: &Device) -> Result<ImageView, OutOfMemory> {
-        assert!(self
-            .subresource
-            .image
-            .info()
-            .usage
-            .contains(ImageUsage::STORAGE));
-        device.create_image_view(ImageViewInfo::new(self.subresource.image.clone()))
-    }
-
-    fn sync<'a>(
-        &'a mut self,
-        encoder: &mut Encoder<'a>,
-        stages: PipelineStageFlags,
-        queue: QueueId,
-    ) {
-        self.access(
-            AccessFlags::SHADER_READ | AccessFlags::SHADER_WRITE,
-            stages,
-            Layout::General,
-            queue,
-            encoder,
-        );
-    }
-}
-
-impl StorageImage for ImageView {
-    fn eq(&self, view: &ImageView) -> bool {
-        *self == *view
-    }
-
-    fn get_view(&self, _device: &Device) -> Result<ImageView, OutOfMemory> {
-        assert!(self.info().image.info().usage.contains(ImageUsage::STORAGE));
-        Ok(self.clone())
-    }
-
-    fn sync<'a>(
-        &'a mut self,
-        _encoder: &mut Encoder<'a>,
-        _stages: PipelineStageFlags,
-        _queue: QueueId,
-    ) {
-        // Must be externally synchronized.
-    }
-}
-
-impl StorageImage for ImageViewState {
-    fn eq(&self, view: &ImageView) -> bool {
-        self.view == *view
-    }
-
-    fn get_view(&self, _device: &Device) -> Result<ImageView, OutOfMemory> {
-        assert!(self
-            .view
-            .info()
-            .image
-            .info()
-            .usage
-            .contains(ImageUsage::STORAGE));
-        Ok(self.view.clone())
-    }
-
-    fn sync<'a>(
-        &'a mut self,
-        encoder: &mut Encoder<'a>,
-        stages: PipelineStageFlags,
-        queue: QueueId,
-    ) {
-        self.access(
-            AccessFlags::SHADER_READ | AccessFlags::SHADER_WRITE,
-            stages,
-            Layout::General,
-            queue,
-            encoder,
-        );
+        Ok(result.into_inner().unwrap())
     }
 }

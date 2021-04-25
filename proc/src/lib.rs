@@ -175,7 +175,7 @@ fn validate_member(member: &syn::Member, item_struct: &syn::ItemStruct) -> syn::
         (syn::Member::Named(member_ident), syn::Fields::Named(fields)) => {
             for (index, field) in fields.named.iter().enumerate() {
                 let field_ident = field.ident.as_ref().unwrap();
-                if field_ident == member_ident {
+                if *field_ident == *member_ident {
                     return u32::try_from(index)
                         .map_err(|_| syn::Error::new_spanned(member, "Too many fields"));
                 }

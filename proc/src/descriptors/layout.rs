@@ -109,7 +109,7 @@ pub(super) fn generate(input: &Input) -> TokenStream {
 }
 
 fn generate_layout_binding(descriptor: &Descriptor, binding: u32) -> TokenStream {
-    let ty = match descriptor.ty {
+    let desc_ty = match descriptor.desc_ty {
         DescriptorType::Sampler(_) => {
             quote::format_ident!("Sampler")
         }
@@ -138,11 +138,13 @@ fn generate_layout_binding(descriptor: &Descriptor, binding: u32) -> TokenStream
 
     let stages = combined_stages_tokens(descriptor.stages.iter().copied());
 
+    let ty = &descriptor.field.ty;
+
     quote::quote!(
         ::sierra::DescriptorSetLayoutBinding {
             binding: #binding,
-            ty: ::sierra::DescriptorType::#ty,
-            count: 1,
+            ty: ::sierra::DescriptorType::#desc_ty,
+            count: <#ty as ::sierra::AsDescriptors>::COUNT,
             stages: #stages,
             flags: ::sierra::DescriptorBindingFlags::empty(),
         }

@@ -40,6 +40,7 @@ bumpalo = { version = "3.4", features = ["collections", "boxed"] }
 parking_lot = "0.11"
 once_cell = "1.5"
 naga = { version = "0.3.1", features = ["glsl-in", "wgsl-in", "spv-out"], git = "https://github.com/gfx-rs/naga.git" }
+arrayvec = "0.7"
 
 [workspace]
 members = ["demo"]

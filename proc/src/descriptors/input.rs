@@ -19,7 +19,7 @@ fn generate_uniform_struct(input: &Input) -> TokenStream {
     let fields: TokenStream = input.uniforms
         .iter()
         .map(|u| {
-            let field_type = &u.ty;
+            let field_type = &u.field.ty;
 
             let val_ident = quote::format_ident!("val_{}", u.member);
             let pad_ident = quote::format_ident!("pad_{}", u.member);
@@ -54,7 +54,7 @@ fn generate_uniform_struct(input: &Input) -> TokenStream {
         let align_mask = input.uniforms
             .iter()
             .fold(quote::quote!(15), |mut tokens, u| {
-                let field_type = &u.ty;
+                let field_type = &u.field.ty;
     
                 tokens.extend(
                     quote::quote! { | (<#field_type as ::sierra::ShaderRepr<::sierra::Std140>>::ALIGN_MASK) },

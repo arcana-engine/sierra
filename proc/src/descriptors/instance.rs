@@ -5,6 +5,7 @@ use {
         parse::{DescriptorType, Input},
     },
     proc_macro2::TokenStream,
+    syn::spanned::Spanned,
 };
 
 pub(super) fn instance_type_name(input: &Input) -> syn::Ident {
@@ -20,37 +21,12 @@ pub(super) fn generate(input: &Input) -> TokenStream {
     let descriptors: TokenStream = input
         .descriptors
         .iter()
-        .filter_map(|input| match &input.ty {
-            DescriptorType::Sampler(_) => {
-                let descriptor_field = quote::format_ident!("descriptor_{}", input.member);
-                Some(quote::quote!(
-                    pub #descriptor_field: ::std::option::Option<::sierra::Sampler>,
-                ))
-            }
-            DescriptorType::SampledImage(_) => {
-                let descriptor_field = quote::format_ident!("descriptor_{}", input.member);
-                Some(quote::quote!(
-                    pub #descriptor_field: ::std::option::Option<::sierra::ImageViewDescriptor>,
-                ))
-            }
-            DescriptorType::CombinedImageSampler(_) => {
-                let descriptor_field = quote::format_ident!("descriptor_{}", input.member);
-                Some(quote::quote!(
-                    pub #descriptor_field: ::std::option::Option<::sierra::CombinedImageSampler>,
-                ))
-            }
-            DescriptorType::Buffer(_) => {
-                let descriptor_field = quote::format_ident!("descriptor_{}", input.member);
-                Some(quote::quote!(
-                    pub #descriptor_field: ::std::option::Option<::sierra::BufferRange>,
-                ))
-            }
-            DescriptorType::AccelerationStructure(_) => {
-                let descriptor_field = quote::format_ident!("descriptor_{}", input.member);
-                Some(quote::quote!(
-                    pub #descriptor_field: ::std::option::Option<::sierra::AccelerationStructure>,
-                ))
-            }
+        .map(|input| {
+            let descriptor_field = quote::format_ident!("descriptor_{}", input.member);
+            let ty = &input.field.ty;
+            quote::quote_spanned!(
+                input.field.ty.span()=> pub #descriptor_field: ::std::option::Option<<#ty as ::sierra::AsDescriptors>::Descriptors>,
+            )
         })
         .collect();
 
@@ -60,150 +36,21 @@ pub(super) fn generate(input: &Input) -> TokenStream {
         .filter_map(|input| {
             let field = &input.member;
 
-            let descriptor_field =
-                quote::format_ident!("descriptor_{}", input.member);
-            let write_descriptor =
-                quote::format_ident!("write_{}_descriptor", input.member);
+            let descriptor_field = quote::format_ident!("descriptor_{}", input.member);
+            let write_descriptor = quote::format_ident!("write_{}_descriptor", input.member);
 
-            let stream = match &input.ty {
-                DescriptorType::Sampler(_attr) => {
-                    quote::quote!(
-                        let #write_descriptor;
-                        match &elem.#descriptor_field {
-                            Some(sampler) => {
-                                if input.#field == *sampler {
-                                    #write_descriptor = false;
-                                } else {
-                                    elem.#descriptor_field = Some(std::clone::Clone::clone(&input.#field));
-                                    #write_descriptor = true;
-                                }
-                            }
-                            _ => {
-                                elem.#descriptor_field = Some(std::clone::Clone::clone(&input.#field));
-                                #write_descriptor = true;
-                            }
-                        }
-                    )
-                }
-                DescriptorType::SampledImage(_attr) => {
-                    quote::quote!(
-                        let #write_descriptor;
-                        match &elem.#descriptor_field {
-                            Some(::sierra::ImageViewDescriptor { view, layout: ::sierra::Layout::ShaderReadOnlyOptimal }) => {
-                                if ::sierra::SampledImage::eq(&input.#field, view) {
-                                    #write_descriptor = false;
-                                } else {
-                                    let view = ::sierra::SampledImage::get_view(&input.#field, device)?;
-                                    elem.#descriptor_field = Some(::sierra::ImageViewDescriptor {
-                                        view,
-                                        layout: ::sierra::Layout::ShaderReadOnlyOptimal,
-                                    });
-                                    #write_descriptor = true;
-                                }
-                            }
-                            _ => {
-                                let view = ::sierra::SampledImage::get_view(&input.#field, device)?;
-                                elem.#descriptor_field = Some(::sierra::ImageViewDescriptor {
-                                    view,
-                                    layout: ::sierra::Layout::ShaderReadOnlyOptimal,
-                                });
-                                #write_descriptor = true;
-                            }
-                        }
-                    )
-                }
-                DescriptorType::CombinedImageSampler(attr) => {
-                    let sampler = &attr.sampler;
-                    quote::quote!(
-                        let #write_descriptor;
-                        match &elem.#descriptor_field {
-                            Some(::sierra::CombinedImageSampler { view, sampler, layout: ::sierra::Layout::ShaderReadOnlyOptimal }) => {
-                                if ::sierra::SampledImage::eq(&input.#field, view) && input.#sampler == *sampler {
-                                    #write_descriptor = false;
-                                } else {
-                                    let view = ::sierra::SampledImage::get_view(&input.#field, device)?;
-                                    elem.#descriptor_field = Some(::sierra::CombinedImageSampler {
-                                        view,
-                                        sampler: std::clone::Clone::clone(&input.#sampler),
-                                        layout: ::sierra::Layout::ShaderReadOnlyOptimal,
-                                    });
-                                    #write_descriptor = true;
-                                }
-                            }
-                            _ => {
-                                let view = ::sierra::SampledImage::get_view(&input.#field, device)?;
-                                elem.#descriptor_field = Some(::sierra::CombinedImageSampler {
-                                    view,
-                                    sampler: std::clone::Clone::clone(&input.#sampler),
-                                    layout: ::sierra::Layout::ShaderReadOnlyOptimal,
-                                });
-                                #write_descriptor = true;
-                            }
-                        }
-                    )
-                }
-                DescriptorType::Buffer(buffer::Buffer {
-                    kind: buffer::Kind::Uniform,
-                    ..
-                }) => quote::quote!(
-                    let #write_descriptor;
-                    match &elem.#descriptor_field {
-                        Some(range) => {
-                            if ::sierra::UniformBuffer::eq(&input.#field, range) {
-                                #write_descriptor = false;
-                            } else {
-                                let range = ::sierra::UniformBuffer::get_range(&input.#field, device)?;
-                                elem.#descriptor_field = Some(range);
-                                #write_descriptor = true;
-                            }
-                        }
-                        _ => {
-                            let range = ::sierra::UniformBuffer::get_range(&input.#field, device)?;
-                            elem.#descriptor_field = Some(range);
-                            #write_descriptor = true;
-                        }
+            let stream = quote::quote!(
+                let #write_descriptor;
+                match &elem.#descriptor_field {
+                    Some(descriptors) if sierra::AsDescriptors::eq(&input.#field, descriptors) => {
+                        #write_descriptor = false;
                     }
-                ),
-                DescriptorType::Buffer(buffer::Buffer {
-                    kind: buffer::Kind::Storage,
-                    ..
-                }) => quote::quote!(
-                    let #write_descriptor;
-                    match &elem.#descriptor_field {
-                        Some(range) => {
-                            if ::sierra::StorageBuffer::eq(&input.#field, range) {
-                                #write_descriptor = false;
-                            } else {
-                                let range = ::sierra::StorageBuffer::get_range(&input.#field, device)?;
-                                elem.#descriptor_field = Some(range);
-                                #write_descriptor = true;
-                            }
-                        }
-                        _ => {
-                            let range = ::sierra::StorageBuffer::get_range(&input.#field, device)?;
-                            elem.#descriptor_field = Some(range);
-                            #write_descriptor = true;
-                        }
+                    _ => {
+                        elem.#descriptor_field = Some(::sierra::AsDescriptors::get_descriptors(&input.#field, device)?);
+                        #write_descriptor = true;
                     }
-                ),
-                DescriptorType::AccelerationStructure(_) => quote::quote!(
-                    let #write_descriptor;
-                    match &elem.#descriptor_field {
-                        Some(accel) => {
-                            if accel == &input.#field {
-                                #write_descriptor = false;
-                            } else {
-                                elem.#descriptor_field = Some(::std::clone::Clone::clone(&input.#field));
-                                #write_descriptor = true;
-                            }
-                        }
-                        _ => {
-                            elem.#descriptor_field = Some(::std::clone::Clone::clone(&input.#field));
-                            #write_descriptor = true;
-                        }
-                    }
-                ),
-            };
+                }
+            );
 
             Some(stream)
         })
@@ -214,31 +61,32 @@ pub(super) fn generate(input: &Input) -> TokenStream {
         .descriptors
         .iter()
         .filter_map(|input| {
-            let descriptors = match input.ty {
-                DescriptorType::Sampler(_) => Some(quote::quote!(::sierra::Descriptors::Sampler(
-                    std::slice::from_ref(descriptor)
-                ))),
-                DescriptorType::SampledImage(_) => Some(quote::quote!(
-                    ::sierra::Descriptors::SampledImage(std::slice::from_ref(descriptor))
-                )),
-                DescriptorType::CombinedImageSampler(_) => Some(quote::quote!(
-                    ::sierra::Descriptors::CombinedImageSampler(std::slice::from_ref(descriptor))
-                )),
-                DescriptorType::AccelerationStructure(_) => Some(quote::quote!(
-                    ::sierra::Descriptors::AccelerationStructure(std::slice::from_ref(descriptor))
-                )),
+            let span = input.field.ty.span();
+            let descriptors = match input.desc_ty {
+                DescriptorType::Sampler(_) => Some(quote::quote_spanned! {
+                    span=> ::sierra::TypedDescriptors::<::sierra::SamplerDescriptor>::descriptors(descriptors)
+                }),
+                DescriptorType::SampledImage(_) => Some(quote::quote_spanned! {
+                    span=> ::sierra::TypedDescriptors::<::sierra::SampledImageDescriptor>::descriptors(descriptors)
+                }),
+                DescriptorType::CombinedImageSampler(_) => Some(quote::quote_spanned! {
+                    span=> ::sierra::TypedDescriptors::<::sierra::CombinedImageSamplerDescriptor>::descriptors(descriptors)
+                }),
+                DescriptorType::AccelerationStructure(_) => Some(quote::quote_spanned! {
+                    span=> ::sierra::TypedDescriptors::<::sierra::AccelerationStructureDescriptor>::descriptors(descriptors)
+                }),
                 DescriptorType::Buffer(buffer::Buffer {
                     kind: buffer::Kind::Uniform,
                     ..
-                }) => Some(quote::quote!(::sierra::Descriptors::UniformBuffer(
-                    std::slice::from_ref(descriptor)
-                ))),
+                }) => Some(quote::quote_spanned! {
+                    span=> ::sierra::TypedDescriptors::<::sierra::UniformBufferDescriptor>::descriptors(descriptors)
+                }),
                 DescriptorType::Buffer(buffer::Buffer {
                     kind: buffer::Kind::Storage,
                     ..
-                }) => Some(quote::quote!(::sierra::Descriptors::StorageBuffer(
-                    std::slice::from_ref(descriptor)
-                ))),
+                }) => Some(quote::quote_spanned! {
+                    span=> ::sierra::TypedDescriptors::<::sierra::StorageBufferDescriptor>::descriptors(descriptors)
+                }),
             }?;
 
             let descriptor_field = quote::format_ident!("descriptor_{}", input.member);
@@ -246,7 +94,7 @@ pub(super) fn generate(input: &Input) -> TokenStream {
 
             let stream = quote::quote!(
                 if #write_descriptor {
-                    let descriptor: &_ = elem.#descriptor_field.as_ref().unwrap();
+                    let descriptors: &_ = elem.#descriptor_field.as_ref().unwrap();
                     writes.extend(Some(::sierra::WriteDescriptorSet {
                         set: &elem.set,
                         binding: #binding,

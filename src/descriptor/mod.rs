@@ -1,10 +1,11 @@
 mod buffer;
 mod image;
 mod layout;
+mod sampler;
 
 pub use {
     self::{buffer::*, image::*, layout::*},
-    crate::backend::DescriptorSet,
+    crate::{backend::DescriptorSet, queue::QueueId, stage::PipelineStageFlags},
 };
 
 use crate::{
@@ -109,6 +110,17 @@ pub enum Descriptors<'a> {
     /// Acceleration structures.
     AccelerationStructure(&'a [AccelerationStructure]),
 }
+
+pub enum SamplerDescriptor {}
+pub enum CombinedImageSamplerDescriptor {}
+pub enum SampledImageDescriptor {}
+pub enum StorageImageDescriptor {}
+pub enum UniformBufferDescriptor {}
+pub enum StorageBufferDescriptor {}
+pub enum UniformBufferDynamicDescriptor {}
+pub enum StorageBufferDynamicDescriptor {}
+pub enum InputAttachmentDescriptor {}
+pub enum AccelerationStructureDescriptor {}
 
 /// Defines operation to copy descriptors range from one set to another.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -234,4 +246,23 @@ pub trait DescriptorsInput {
 
 pub trait UpdatedPipelineDescriptors<P: ?Sized>: UpdatedDescriptors {
     const N: u32;
+}
+
+/// Interface for all types that can be used as `UniformBuffer` or `StorageBuffer` descriptor.
+pub trait TypedDescriptors<T> {
+    fn descriptors(&self) -> Descriptors<'_>;
+}
+
+/// Interface for all types that can be used as `UniformBuffer` or `StorageBuffer` descriptor.
+pub trait AsDescriptors {
+    const COUNT: u32;
+    type Descriptors;
+
+    /// Compare with image view currently bound to descriptor set.
+    /// Returns `true` if self is equivalent specified image view,
+    /// and no update is required.
+    fn eq(&self, descriptors: &Self::Descriptors) -> bool;
+
+    /// Returns `BufferRange` equivalent to self.
+    fn get_descriptors(&self, device: &Device) -> Result<Self::Descriptors, OutOfMemory>;
 }

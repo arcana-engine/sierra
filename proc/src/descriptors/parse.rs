@@ -20,13 +20,14 @@ pub struct Input {
 
 pub struct Descriptor {
     pub stages: Vec<Stage>,
-    pub ty: DescriptorType,
+    pub desc_ty: DescriptorType,
     pub member: syn::Member,
+    pub field: syn::Field,
 }
 
 impl Descriptor {
     fn validate(&self, item_struct: &syn::ItemStruct) -> syn::Result<()> {
-        match &self.ty {
+        match &self.desc_ty {
             DescriptorType::Sampler(args) => args.validate(item_struct),
             DescriptorType::SampledImage(args) => args.validate(item_struct),
             DescriptorType::CombinedImageSampler(args) => args.validate(item_struct),
@@ -38,7 +39,7 @@ impl Descriptor {
 
 pub struct Uniform {
     pub stages: Vec<Stage>,
-    pub ty: syn::Type,
+    pub field: syn::Field,
     pub member: syn::Member,
 }
 
@@ -168,32 +169,37 @@ fn parse_input_field(field: &mut syn::Field, field_index: u32) -> syn::Result<Op
 
             Ok(Some(match ty {
                 FieldAttribute::Sampler(value) => Field::Descriptor(Descriptor {
-                    ty: DescriptorType::Sampler(value),
+                    desc_ty: DescriptorType::Sampler(value),
                     stages,
                     member,
+                    field: field.clone(),
                 }),
                 FieldAttribute::SampledImage(value) => Field::Descriptor(Descriptor {
-                    ty: DescriptorType::SampledImage(value),
+                    desc_ty: DescriptorType::SampledImage(value),
                     stages,
                     member,
+                    field: field.clone(),
                 }),
                 FieldAttribute::CombinedImageSampler(value) => Field::Descriptor(Descriptor {
-                    ty: DescriptorType::CombinedImageSampler(value),
+                    desc_ty: DescriptorType::CombinedImageSampler(value),
                     stages,
                     member,
+                    field: field.clone(),
                 }),
                 FieldAttribute::Buffer(value) => Field::Descriptor(Descriptor {
-                    ty: DescriptorType::Buffer(value),
+                    desc_ty: DescriptorType::Buffer(value),
                     stages,
                     member,
+                    field: field.clone(),
                 }),
                 FieldAttribute::AccelerationStructure(value) => Field::Descriptor(Descriptor {
-                    ty: DescriptorType::AccelerationStructure(value),
+                    desc_ty: DescriptorType::AccelerationStructure(value),
                     stages,
                     member,
+                    field: field.clone(),
                 }),
                 FieldAttribute::Uniform => Field::Uniform(Uniform {
-                    ty: field.ty.clone(),
+                    field: field.clone(),
                     stages,
                     member,
                 }),
