@@ -138,19 +138,28 @@ impl SamplerInfo {
             unnormalized_coordinates: false,
         }
     }
+
+    pub const fn linear() -> Self {
+        SamplerInfo {
+            mag_filter: Filter::Linear,
+            min_filter: Filter::Linear,
+            mipmap_mode: MipmapMode::Linear,
+            address_mode_u: SamplerAddressMode::ClampToEdge,
+            address_mode_v: SamplerAddressMode::ClampToEdge,
+            address_mode_w: SamplerAddressMode::ClampToEdge,
+            mip_lod_bias: OrderedFloat(0.0),
+            max_anisotropy: None,
+            compare_op: None,
+            min_lod: OrderedFloat(0.0),
+            max_lod: OrderedFloat(0.0),
+            border_color: BorderColor::FloatTransparentBlack,
+            unnormalized_coordinates: false,
+        }
+    }
 }
 
 impl Default for SamplerInfo {
     fn default() -> Self {
         SamplerInfo::new()
-    }
-}
-
-#[cfg(feature = "serde-1")]
-mod defaults {
-    use ordered_float::OrderedFloat;
-
-    pub const fn max_lod() -> OrderedFloat<f32> {
-        OrderedFloat(1000.0)
     }
 }

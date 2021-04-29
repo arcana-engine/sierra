@@ -767,6 +767,13 @@ impl PhysicalDevice {
                 rt: features_rt.build(),
             },
             version,
+            families.iter().flat_map(|&(family, count)| {
+                (0..count).map(move |index| {
+                    let index = index.try_into().unwrap();
+                    let family = family.try_into().unwrap();
+                    QueueId { family, index }
+                })
+            }),
         );
 
         // Wrap families.

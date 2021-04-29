@@ -26,6 +26,7 @@ pub struct Queue {
     device: Device,
     id: QueueId,
     capabilities: QueueCapabilityFlags,
+    cbufs: Vec<CommandBuffer>,
 }
 
 impl Debug for Queue {
@@ -57,6 +58,7 @@ impl Queue {
             pool,
             id,
             capabilities,
+            cbufs: Vec::new(),
         }
     }
 }
@@ -68,45 +70,50 @@ impl Queue {
 
     #[tracing::instrument]
     pub fn create_encoder<'a>(&mut self, bump: &'a Bump) -> Result<Encoder<'a>, OutOfMemory> {
-        if self.pool == vk1_0::CommandPool::null() {
-            self.pool = unsafe {
-                self.device.logical().create_command_pool(
-                    &vk1_0::CommandPoolCreateInfoBuilder::new()
-                        .flags(vk1_0::CommandPoolCreateFlags::RESET_COMMAND_BUFFER)
-                        .queue_family_index(self.id.family as u32),
-                    None,
-                    None,
-                )
+        match self.cbufs.pop() {
+            Some(cbuf) => Ok(Encoder::new(cbuf, self.capabilities, bump)),
+            None => {
+                if self.pool == vk1_0::CommandPool::null() {
+                    self.pool = unsafe {
+                        self.device.logical().create_command_pool(
+                            &vk1_0::CommandPoolCreateInfoBuilder::new()
+                                .flags(vk1_0::CommandPoolCreateFlags::RESET_COMMAND_BUFFER)
+                                .queue_family_index(self.id.family as u32),
+                            None,
+                            None,
+                        )
+                    }
+                    .result()
+                    .map_err(oom_error_from_erupt)?;
+                }
+
+                assert_ne!(self.pool, vk1_0::CommandPool::null());
+
+                let mut buffers = unsafe {
+                    self.device.logical().allocate_command_buffers(
+                        &vk1_0::CommandBufferAllocateInfoBuilder::new()
+                            .command_pool(self.pool)
+                            .level(vk1_0::CommandBufferLevel::PRIMARY)
+                            .command_buffer_count(1),
+                    )
+                }
+                .result()
+                .map_err(oom_error_from_erupt)?;
+
+                let cbuf = CommandBuffer::new(buffers.remove(0), self.id, self.device.downgrade());
+
+                Ok(Encoder::new(cbuf, self.capabilities, bump))
             }
-            .result()
-            .map_err(oom_error_from_erupt)?;
         }
-
-        assert_ne!(self.pool, vk1_0::CommandPool::null());
-
-        let mut buffers = unsafe {
-            self.device.logical().allocate_command_buffers(
-                &vk1_0::CommandBufferAllocateInfoBuilder::new()
-                    .command_pool(self.pool)
-                    .level(vk1_0::CommandBufferLevel::PRIMARY)
-                    .command_buffer_count(1),
-            )
-        }
-        .result()
-        .map_err(oom_error_from_erupt)?;
-
-        let cbuf = CommandBuffer::new(buffers.remove(0), self.id, self.device.downgrade());
-
-        Ok(Encoder::new(cbuf, self.capabilities, bump))
     }
 
     #[tracing::instrument(skip(cbufs))]
     pub fn submit(
         &mut self,
-        wait: &[(PipelineStageFlags, &Semaphore)],
+        wait: &mut [(PipelineStageFlags, &mut Semaphore)],
         cbufs: impl IntoIterator<IntoIter = impl ExactSizeIterator<Item = CommandBuffer>>,
-        signal: &[&Semaphore],
-        fence: Option<&Fence>,
+        signal: &mut [&mut Semaphore],
+        mut fence: Option<&mut Fence>,
         bump: &Bump,
     ) {
         let cbufs = bump.alloc_slice_fill_iter(cbufs.into_iter().map(|cbuf| {
@@ -115,16 +122,18 @@ impl Queue {
             cbuf.handle()
         }));
 
-        for (_, semaphore) in wait {
+        for (_, semaphore) in wait.iter_mut() {
             assert_owner!(semaphore, self.device);
         }
 
-        for semaphore in signal {
+        for semaphore in signal.iter_mut() {
             assert_owner!(semaphore, self.device);
         }
 
-        if let Some(fence) = fence {
+        if let Some(fence) = fence.as_deref_mut() {
             assert_owner!(fence, self.device);
+            let epoch = self.device.epochs().next_epoch(self.id);
+            fence.arm(self.id, epoch, &self.device);
         }
 
         // FIXME: Check semaphore states.
@@ -171,7 +180,7 @@ impl Queue {
     }
 
     #[tracing::instrument]
-    pub fn present(&mut self, image: SwapchainImage) -> Result<PresentOk, OutOfMemory> {
+    pub fn present(&mut self, mut image: SwapchainImage<'_>) -> Result<PresentOk, OutOfMemory> {
         assert_owner!(image, self.device);
 
         // FIXME: Check semaphore states.
@@ -187,17 +196,21 @@ impl Queue {
             image
         );
 
+        let [_, signal] = image.wait_signal();
+
         let result = unsafe {
             self.device.logical().queue_present_khr(
                 self.handle,
                 &PresentInfoKHRBuilder::new()
-                    .wait_semaphores(&[image.info().signal.handle()])
+                    .wait_semaphores(&[signal.handle()])
                     .swapchains(&[image.handle()])
                     .image_indices(&[image.index()]),
             )
         };
 
         image.presented();
+
+        self.drain_ready_cbufs()?;
 
         match result.raw {
             vk1_0::Result::SUCCESS => Ok(PresentOk::Success),
@@ -214,6 +227,22 @@ impl Queue {
         unsafe { self.device.logical().queue_wait_idle(self.handle) }
             .result()
             .map_err(queue_error)
+    }
+
+    fn drain_ready_cbufs(&mut self) -> Result<(), OutOfMemory> {
+        self.device.epochs().drain_cbuf(self.id, &mut self.cbufs);
+        for cbuf in &self.cbufs {
+            unsafe {
+                self.device.logical().reset_command_buffer(
+                    cbuf.handle(),
+                    Some(vk1_0::CommandBufferResetFlags::RELEASE_RESOURCES),
+                )
+            }
+            .result()
+            .map_err(queue_error)?;
+        }
+
+        Ok(())
     }
 }
 

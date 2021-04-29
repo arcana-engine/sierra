@@ -233,7 +233,7 @@ pub(super) fn generate(input: &Input) -> TokenStream {
                 device: &::sierra::Device,
                 writes: &mut impl ::std::iter::Extend<::sierra::WriteDescriptorSet<'a>>,
                 encoder: &mut ::sierra::Encoder<'a>,
-            ) -> ::std::result::Result<&'a #elem_ident, ::sierra::OutOfMemory> {
+            ) -> ::std::result::Result<&'a #elem_ident, ::sierra::DescriptorsAllocationError> {
                 while self.cycle.len() <= fence {
                         let new_elem = self.new_cycle_elem(device)?;
                         self.cycle.push(new_elem);
@@ -256,7 +256,7 @@ pub(super) fn generate(input: &Input) -> TokenStream {
                 &self.layout
             }
 
-            fn new_cycle_elem(&self, device: &::sierra::Device) -> ::std::result::Result<#elem_ident, ::sierra::OutOfMemory> {
+            fn new_cycle_elem(&self, device: &::sierra::Device) -> ::std::result::Result<#elem_ident, ::sierra::DescriptorsAllocationError> {
                 ::std::result::Result::Ok(#elem_ident {
                     set: device.create_descriptor_set(::sierra::DescriptorSetInfo {
                         layout: self.layout.clone(),
@@ -278,7 +278,7 @@ pub(super) fn generate(input: &Input) -> TokenStream {
                 device: &::sierra::Device,
                 writes: &mut impl ::std::iter::Extend<::sierra::WriteDescriptorSet<'a>>,
                 encoder: &mut ::sierra::Encoder<'a>,
-            ) -> ::std::result::Result<&'a #elem_ident, ::sierra::OutOfMemory> {
+            ) -> ::std::result::Result<&'a #elem_ident, ::sierra::DescriptorsAllocationError> {
                 self.update(input, fence, device, writes, encoder)
             }
 

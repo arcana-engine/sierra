@@ -219,9 +219,10 @@ impl Offset3d {
 }
 
 /// Error that may occur when allocation fails because of either
-/// host or device memory is exhausted.
+/// device memory is exhausted.
 ///
-/// It can be matched to see which.
+/// Deallocation of device memory or other resources may increase chance
+/// that operation would succeed.
 #[derive(Clone, Copy, Debug, thiserror::Error, PartialEq, Eq)]
 #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 #[error("Out of device memory")]

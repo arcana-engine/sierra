@@ -21,6 +21,7 @@ use erupt::{
     vk1_0,
 };
 use std::{
+    collections::VecDeque,
     convert::TryInto as _,
     sync::{
         atomic::{AtomicU32, AtomicU64, Ordering::*},
@@ -30,26 +31,34 @@ use std::{
 
 static UID: AtomicU64 = AtomicU64::new(1);
 
-#[derive(Clone, Debug)]
-pub struct SwapchainImage {
-    info: SwapchainImageInfo,
+#[derive(Debug)]
+pub struct SwapchainImage<'a> {
+    image: &'a Image,
+    wait: &'a mut Semaphore,
+    signal: &'a mut Semaphore,
     owner: WeakDevice,
     handle: SwapchainKHR,
     supported_families: Arc<[bool]>,
-    acquired_counter: Arc<AtomicU32>,
+    acquired_counter: &'a AtomicU32,
     index: u32,
 }
 
-impl SwapchainImage {
-    pub fn info(&self) -> &SwapchainImageInfo {
-        &self.info
-    }
-
+impl SwapchainImage<'_> {
     pub(super) fn supported_families(&self) -> &[bool] {
         &*self.supported_families
     }
 
-    pub fn index(&self) -> u32 {
+    /// Swapchain image.
+    pub fn image(&self) -> &Image {
+        self.image
+    }
+
+    /// Semaphores that should be waited upon before and signaled after last image access.
+    pub fn wait_signal(&mut self) -> [&mut Semaphore; 2] {
+        [&mut *self.wait, &mut *self.signal]
+    }
+
+    pub(super) fn index(&self) -> u32 {
         self.index
     }
 
@@ -66,24 +75,6 @@ impl SwapchainImage {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct SwapchainImageInfo {
-    /// Swapchain image.
-    pub image: Image,
-
-    /// Semaphore that should be waited upon before accessing an image.
-    ///
-    /// Acquisition semaphore management may be rather complex,
-    /// so keep that to the implementation.
-    pub wait: Semaphore,
-
-    /// Semaphore that should be signaled after last image access.
-    ///
-    /// Presentation semaphore management may be rather complex,
-    /// so keep that to the implementation.
-    pub signal: Semaphore,
-}
-
 #[derive(Debug)]
 struct SwapchainImageAndSemaphores {
     image: Image,
@@ -96,7 +87,7 @@ struct SwapchainInner {
     handle: vksw::SwapchainKHR,
     index: usize,
     images: Vec<SwapchainImageAndSemaphores>,
-    acquired_counter: Arc<AtomicU32>,
+    acquired_counter: AtomicU32,
     format: Format,
     extent: Extent2d,
     usage: ImageUsage,
@@ -106,7 +97,7 @@ struct SwapchainInner {
 #[derive(Debug)]
 pub struct Swapchain {
     inner: Option<SwapchainInner>,
-    retired: Vec<SwapchainInner>,
+    retired: VecDeque<SwapchainInner>,
     retired_offset: u64,
     free_semaphore: Semaphore,
     device: WeakDevice,
@@ -142,7 +133,7 @@ impl Swapchain {
             surface: surface.clone(),
             free_semaphore,
             inner: None,
-            retired: Vec::new(),
+            retired: VecDeque::new(),
             retired_offset: 0,
             device: device.downgrade(),
             surface_capabilities,
@@ -166,6 +157,33 @@ impl Swapchain {
             .device
             .upgrade()
             .ok_or_else(|| SurfaceError::SurfaceLost)?;
+
+        // TODO: Configurable count
+        if self.retired.len() > 16 {
+            // Too many swapchains accumulated.
+            // Give resources a chance to be freed.
+            device.wait_idle();
+        }
+
+        'a: while let Some(mut inner) = self.retired.pop_front() {
+            while let Some(mut iws) = inner.images.pop() {
+                if let Err(image) = iws.image.try_dispose() {
+                    iws.image = image;
+                    inner.images.push(iws);
+                    break 'a;
+                }
+            }
+
+            unsafe {
+                // This swapchain and its images are no longer in use.
+                device.destroy_swapchain(inner.index)
+            }
+        }
+
+        assert!(
+            self.retired.len() <= 16,
+            "Resources that reference old swapchain images should be freed in timely manner"
+        );
 
         let surface = self.surface.handle();
 
@@ -227,7 +245,7 @@ impl Swapchain {
 
         let old_swapchain = if let Some(inner) = self.inner.take() {
             let handle = inner.handle;
-            self.retired.push(inner);
+            self.retired.push_back(inner);
 
             handle
         } else {
@@ -282,7 +300,7 @@ impl Swapchain {
                 SurfaceError::OutOfMemory { source: err }
             })?;
 
-        let index = device.swapchains().lock().insert(handle);
+        let index = device.insert_swapchain(handle);
 
         self.inner = Some(SwapchainInner {
             handle,
@@ -308,7 +326,7 @@ impl Swapchain {
                     release: r,
                 })
                 .collect(),
-            acquired_counter: Arc::new(AtomicU32::new(0)),
+            acquired_counter: AtomicU32::new(0),
             extent: caps.current_extent,
             format,
             usage,
@@ -319,7 +337,7 @@ impl Swapchain {
         Ok(())
     }
 
-    pub fn acquire_image(&mut self, optimal: bool) -> Result<SwapchainImage, SurfaceError> {
+    pub fn acquire_image(&mut self, optimal: bool) -> Result<SwapchainImage<'_>, SurfaceError> {
         let device = self
             .device
             .upgrade()
@@ -330,7 +348,7 @@ impl Swapchain {
             "Should be enabled given that there is a Swapchain"
         );
 
-        loop {
+        let index = loop {
             if let Some(inner) = self.inner.as_mut() {
                 if inner.acquired_counter.load(Acquire)
                     >= (inner.images.len() as u32 - self.surface_capabilities.min_image_count)
@@ -339,7 +357,7 @@ impl Swapchain {
                 }
 
                 // FIXME: Use fences to know that acquire semaphore is unused.
-                let wait = self.free_semaphore.clone();
+                let wait = &self.free_semaphore;
 
                 let result = unsafe {
                     device.logical().acquire_next_image_khr(
@@ -389,27 +407,28 @@ impl Swapchain {
 
                 std::mem::swap(&mut image_and_semaphores.acquire, &mut self.free_semaphore);
 
-                let signal = image_and_semaphores.release.clone();
-
-                let swapchain_image = SwapchainImage {
-                    info: SwapchainImageInfo {
-                        image: image_and_semaphores.image.clone(),
-                        wait,
-                        signal,
-                    },
-                    owner: self.device.clone(),
-                    handle: inner.handle,
-                    supported_families: self.surface_capabilities.supported_families.clone(),
-                    acquired_counter: { inner.acquired_counter.clone() },
-                    index,
-                };
-
                 inner.acquired_counter.fetch_add(1, Acquire);
 
-                return Ok(swapchain_image);
+                break index;
             } else {
                 return Err(SurfaceError::NotConfigured);
             }
-        }
+        };
+
+        let inner = self.inner.as_mut().unwrap();
+        let image_and_semaphores = &mut inner.images[index as usize];
+        let wait = &mut image_and_semaphores.acquire;
+        let signal = &mut image_and_semaphores.release;
+
+        Ok(SwapchainImage {
+            image: &image_and_semaphores.image,
+            wait,
+            signal,
+            owner: self.device.clone(),
+            handle: inner.handle,
+            supported_families: self.surface_capabilities.supported_families.clone(),
+            acquired_counter: &inner.acquired_counter,
+            index,
+        })
     }
 }

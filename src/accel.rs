@@ -179,37 +179,37 @@ pub struct AccelerationStructureBuildGeometryInfo<'a> {
 }
 
 /// Geometry data to build into acceleration structure.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub enum AccelerationStructureGeometry {
     /// Triangles data to build into acceleration structure.
     Triangles {
         flags: GeometryFlags,
         vertex_format: Format,
-        vertex_data: DeviceAddress,
+        vertex_data: BufferRange,
         vertex_stride: u64,
         vertex_count: u32,
         first_vertex: u32,
         primitive_count: u32,
         index_data: Option<IndexData>,
-        transform_data: Option<DeviceAddress>,
+        transform_data: Option<BufferRange>,
     },
     AABBs {
         flags: GeometryFlags,
-        data: DeviceAddress,
+        data: BufferRange,
         stride: u64,
         primitive_count: u32,
     },
     Instances {
         flags: GeometryFlags,
-        data: DeviceAddress,
+        data: BufferRange,
         primitive_count: u32,
     },
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub enum IndexData {
-    U16(DeviceAddress),
-    U32(DeviceAddress),
+    U16(BufferRange),
+    U32(BufferRange),
 }
 
 #[derive(Clone, Copy, Debug)]

@@ -6,9 +6,9 @@ macro_rules! assert_owner {
 
 mod access;
 mod convert;
-mod descriptor;
 mod device;
 mod encode;
+mod epochs;
 mod graphics;
 mod physical;
 mod queue;
@@ -17,8 +17,8 @@ mod surface;
 mod swapchain;
 
 pub use self::{
-    descriptor::*, device::*, encode::*, graphics::*, physical::*, queue::*, resources::*,
-    surface::*, swapchain::*,
+    device::*, encode::*, graphics::*, physical::*, queue::*, resources::*, surface::*,
+    swapchain::*,
 };
 
 #[track_caller]

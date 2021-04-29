@@ -29,9 +29,11 @@ thiserror = "1.0"
 tracing = "0.1"
 ordered-float = "2.0"
 bytemuck = "1.4"
-erupt = { version = "0.17", optional = true, features = ["loading"] }
-gpu-alloc-erupt = { version = "0.3", optional = true }
-gpu-alloc = { version = "0.4.1", optional = true, features = ["freelist", "tracing"] }
+erupt = { version = "0.18", optional = true, features = ["loading"] }
+gpu-alloc-erupt = { version = "0.4", optional = true }
+gpu-alloc = { version = "0.4.4", optional = true, features = ["freelist", "tracing"] }
+gpu-descriptor = { version = "0.1", path = "../gpu-descriptor/gpu-descriptor" }
+gpu-descriptor-erupt = { version = "0.1", path = "../gpu-descriptor/erupt" }
 
 slab = "0.4"
 libloading = "0.7"
@@ -39,7 +41,7 @@ lazy_static = "1.4"
 bumpalo = { version = "3.4", features = ["collections", "boxed"] }
 parking_lot = "0.11"
 once_cell = "1.5"
-naga = { version = "0.3.1", features = ["glsl-in", "wgsl-in", "spv-out"], git = "https://github.com/gfx-rs/naga.git" }
+naga = { version = "0.4", features = ["glsl-in", "wgsl-in", "spv-out"], git = "https://github.com/gfx-rs/naga.git" }
 arrayvec = "0.7"
 
 [workspace]

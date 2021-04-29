@@ -40,8 +40,8 @@ fn main() -> eyre::Result<()> {
         code: br#"
 [[stage(vertex)]]
 fn vs_main([[builtin(vertex_index)]] in_vertex_index: u32) -> [[builtin(position)]] vec4<f32> {
-    const x = f32(i32(in_vertex_index) - 1);
-    const y = f32(i32(in_vertex_index & 1u) * 2 - 1);
+    let x = f32(i32(in_vertex_index) - 1);
+    let y = f32(i32(in_vertex_index & 1u) * 2 - 1);
     return vec4<f32>(x, y, 0.0, 1.0);
 }
 
@@ -82,13 +82,13 @@ fn fs_main() -> [[location(0)]] vec4<f32> {
             } => *flow = winit::event_loop::ControlFlow::Exit,
 
             winit::event::Event::RedrawRequested(_) => (|| -> eyre::Result<()> {
-                let image = swapchain.acquire_image(false)?;
+                let mut image = swapchain.acquire_image(false)?;
 
                 let mut encoder = queue.create_encoder(&bump)?;
                 let mut render_pass_encoder = encoder.with_render_pass(
                     &mut main,
                     &Main {
-                        target: image.info().image.clone(),
+                        target: image.image().clone(),
                     },
                     &device,
                 )?;
@@ -97,10 +97,13 @@ fn fs_main() -> [[location(0)]] vec4<f32> {
                     .bind_dynamic_graphics_pipeline(&mut graphics_pipeline, &device)?;
                 render_pass_encoder.draw(0..3, 0..1);
                 drop(render_pass_encoder);
+
+                let [wait, signal] = image.wait_signal();
+
                 queue.submit(
-                    &[(sierra::PipelineStageFlags::TOP_OF_PIPE, &image.info().wait)],
+                    &mut [(sierra::PipelineStageFlags::TOP_OF_PIPE, wait)],
                     Some(encoder.finish()),
-                    &[&image.info().signal],
+                    &mut [signal],
                     None,
                     &bump,
                 );

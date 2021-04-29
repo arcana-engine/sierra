@@ -5,8 +5,8 @@ use {
             buffer_memory_usage_to_gpu_alloc, from_erupt, image_memory_usage_to_gpu_alloc,
             oom_error_from_erupt, ToErupt as _,
         },
-        descriptor::DescriptorSizes,
         device_lost,
+        epochs::Epochs,
         graphics::Graphics,
         physical::{Features, Properties},
         unexpected_result,
@@ -22,8 +22,10 @@ use {
             Buffer, BufferInfo, BufferRange, BufferUsage, MappableBuffer, StridedBufferRange,
         },
         descriptor::{
-            CopyDescriptorSet, DescriptorSet, DescriptorSetInfo, DescriptorSetLayout,
-            DescriptorSetLayoutFlags, DescriptorSetLayoutInfo, Descriptors, WriteDescriptorSet,
+            CopyDescriptorSet, DescriptorBindingFlags, DescriptorSet, DescriptorSetInfo,
+            DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutFlags,
+            DescriptorSetLayoutInfo, DescriptorType, Descriptors, DescriptorsAllocationError,
+            WriteDescriptorSet,
         },
         fence::Fence,
         framebuffer::{Framebuffer, FramebufferInfo},
@@ -37,6 +39,7 @@ use {
             RayTracingPipelineInfo, RayTracingShaderGroupInfo, ShaderBindingTable,
             ShaderBindingTableInfo, State,
         },
+        queue::QueueId,
         render_pass::{CreateRenderPassError, RenderPass, RenderPassInfo},
         sampler::{Sampler, SamplerInfo},
         semaphore::Semaphore,
@@ -58,8 +61,10 @@ use {
         },
         vk1_0, vk1_2, DeviceLoader, ExtendableFrom as _,
     },
-    gpu_alloc::GpuAllocator,
+    gpu_alloc::{GpuAllocator, MemoryBlock},
     gpu_alloc_erupt::EruptMemoryDevice,
+    gpu_descriptor::{DescriptorAllocator, DescriptorSetLayoutCreateFlags, DescriptorTotalCount},
+    gpu_descriptor_erupt::EruptDescriptorDevice,
     parking_lot::Mutex,
     slab::Slab,
     smallvec::SmallVec,
@@ -97,9 +102,7 @@ pub(crate) struct Inner {
     allocator: Mutex<GpuAllocator<vk1_0::DeviceMemory>>,
     version: u32,
     buffers: Mutex<Slab<vk1_0::Buffer>>,
-    // buffer_views: Mutex<Slab<vk1_0::BufferView>>,
-    descriptor_pools: Mutex<Slab<vk1_0::DescriptorPool>>,
-    // descriptor_sets: Mutex<Slab<vk1_0::DescriptorSet>>,
+    descriptor_allocator: Mutex<DescriptorAllocator<vk1_0::DescriptorPool, vk1_0::DescriptorSet>>,
     descriptor_set_layouts: Mutex<Slab<vk1_0::DescriptorSetLayout>>,
     fences: Mutex<Slab<vk1_0::Fence>>,
     framebuffers: Mutex<Slab<vk1_0::Framebuffer>>,
@@ -113,6 +116,8 @@ pub(crate) struct Inner {
     acceleration_strucutres: Mutex<Slab<vkacc::AccelerationStructureKHR>>,
     samplers: Mutex<Slab<vk1_0::Sampler>>,
     swapchains: Mutex<Slab<vksw::SwapchainKHR>>,
+
+    epochs: Epochs,
 }
 
 impl Debug for Inner {
@@ -200,108 +205,29 @@ impl Debug for Device {
 }
 
 impl Device {
-    pub(crate) fn logical(&self) -> &DeviceLoader {
+    pub(super) fn logical(&self) -> &DeviceLoader {
         &self.inner.logical
     }
 
-    pub(crate) fn physical(&self) -> vk1_0::PhysicalDevice {
+    pub(super) fn physical(&self) -> vk1_0::PhysicalDevice {
         self.inner.physical
     }
 
-    pub(crate) fn properties(&self) -> &Properties {
+    pub(super) fn properties(&self) -> &Properties {
         &self.inner.properties
     }
 
-    // pub(crate) fn features(&self) -> &Features {
-    //     &self.inner.features
-    // }
-
-    // pub(crate) fn version(&self) -> u32 {
-    //     self.inner.version
-    // }
-
-    // pub(crate) fn buffers(&self) -> &Mutex<Slab<vk1_0::Buffer>> {
-    //     &self.inner.buffers
-    // }
-
-    // pub(crate) fn buffer_views(&self) -> &Mutex<Slab<vk1_0::BufferView>> {
-    //     &self.inner.buffer_views
-    // }
-
-    // pub(crate) fn descriptor_pools(
-    //     &self,
-    // ) -> &Mutex<Slab<vk1_0::DescriptorPool>> {
-    //     &self.inner.descriptor_pools
-    // }
-
-    // pub(crate) fn descriptor_sets(&self) ->
-    // &Mutex<Slab<vk1_0::DescriptorSet>> {     &self.inner.descriptor_sets
-    // }
-
-    // pub(crate) fn descriptor_set_layouts(
-    //     &self,
-    // ) -> &Mutex<Slab<vk1_0::DescriptorSetLayout>> {
-    //     &self.inner.descriptor_set_layouts
-    // }
-
-    // pub(crate) fn fences(&self) -> &Mutex<Slab<vk1_0::Fence>> {
-    //     &self.inner.fences
-    // }
-
-    // pub(crate) fn framebuffers(&self) -> &Mutex<Slab<vk1_0::Framebuffer>> {
-    //     &self.inner.framebuffers
-    // }
-
-    // pub(crate) fn images(&self) -> &Mutex<Slab<vk1_0::Image>> {
-    //     &self.inner.images
-    // }
-
-    // pub(crate) fn image_views(&self) -> &Mutex<Slab<vk1_0::ImageView>> {
-    //     &self.inner.image_views
-    // }
-
-    // pub(crate) fn pipelines(&self) -> &Mutex<Slab<vk1_0::Pipeline>> {
-    //     &self.inner.pipelines
-    // }
-
-    // pub(crate) fn pipeline_layouts(
-    //     &self,
-    // ) -> &Mutex<Slab<vk1_0::PipelineLayout>> {
-    //     &self.inner.pipeline_layouts
-    // }
-
-    // pub(crate) fn render_passes(&self) -> &Mutex<Slab<vk1_0::RenderPass>> {
-    //     &self.inner.render_passes
-    // }
-
-    // pub(crate) fn semaphores(&self) -> &Mutex<Slab<vk1_0::Semaphore>> {
-    //     &self.inner.semaphores
-    // }
-
-    // pub(crate) fn shaders(&self) -> &Mutex<Slab<vk1_0::ShaderModule>> {
-    //     &self.inner.shaders
-    // }
-
-    // pub(crate) fn acceleration_strucutres(
-    //     &self,
-    // ) -> &Mutex<Slab<vkrt::AccelerationStructureKHR>> {
-    //     &self.inner.acceleration_strucutres
-    // }
-
-    // pub(crate) fn samplers(&self) -> &Mutex<Slab<vk1_0::Sampler>> {
-    //     &self.inner.samplers
-    // }
-
-    pub(crate) fn swapchains(&self) -> &Mutex<Slab<vksw::SwapchainKHR>> {
-        &self.inner.swapchains
+    pub(super) fn epochs(&self) -> &Epochs {
+        &self.inner.epochs
     }
 
-    pub(crate) fn new(
+    pub(super) fn new(
         logical: DeviceLoader,
         physical: vk1_0::PhysicalDevice,
         properties: Properties,
         features: Features,
         version: u32,
+        queues: impl Iterator<Item = QueueId>,
     ) -> Self {
         Device {
             inner: Arc::new(Inner {
@@ -309,17 +235,15 @@ impl Device {
                     gpu_alloc::Config::i_am_prototyping(),
                     memory_device_properties(&logical, &properties, &features),
                 )),
-                logical,
-                physical,
-                version,
-                properties,
-                features,
+
+                descriptor_allocator: Mutex::new(DescriptorAllocator::new(
+                    properties
+                        .v12
+                        .max_update_after_bind_descriptors_in_all_pools,
+                )),
 
                 // Numbers here are hints so no strong reasoning is required.
                 buffers: Mutex::new(Slab::with_capacity(4096)),
-                // buffer_views: Mutex::new(Slab::with_capacity(4096)),
-                descriptor_pools: Mutex::new(Slab::with_capacity(64)),
-                // descriptor_sets: Mutex::new(Slab::with_capacity(1024)),
                 descriptor_set_layouts: Mutex::new(Slab::with_capacity(64)),
                 fences: Mutex::new(Slab::with_capacity(128)),
                 framebuffers: Mutex::new(Slab::with_capacity(128)),
@@ -333,6 +257,14 @@ impl Device {
                 swapchains: Mutex::new(Slab::with_capacity(32)),
                 acceleration_strucutres: Mutex::new(Slab::with_capacity(1024)),
                 samplers: Mutex::new(Slab::with_capacity(128)),
+
+                logical,
+                physical,
+                version,
+                properties,
+                features,
+
+                epochs: Epochs::new(queues),
             }),
         }
     }
@@ -515,6 +447,20 @@ impl Device {
         }
     }
 
+    pub(super) unsafe fn destroy_buffer(
+        &self,
+        index: usize,
+        block: MemoryBlock<vk1_0::DeviceMemory>,
+    ) {
+        self.inner
+            .allocator
+            .lock()
+            .dealloc(EruptMemoryDevice::wrap(&self.inner.logical), block);
+
+        let handle = self.inner.buffers.lock().remove(index);
+        self.inner.logical.destroy_buffer(Some(handle), None);
+    }
+
     /// Creates a fence.
     /// Fences are create in unsignaled state.
     #[tracing::instrument]
@@ -531,6 +477,11 @@ impl Device {
 
         tracing::debug!("Fence created {:p}", fence);
         Ok(Fence::new(self.downgrade(), fence, index))
+    }
+
+    pub(super) unsafe fn destroy_fence(&self, index: usize) {
+        let handle = self.inner.fences.lock().remove(index);
+        self.inner.logical.destroy_fence(Some(handle), None);
     }
 
     /// Creates framebuffer for specified render pass from views.
@@ -583,6 +534,11 @@ impl Device {
 
         tracing::debug!("Framebuffer created {:p}", framebuffer);
         Ok(Framebuffer::new(info, self.downgrade(), framebuffer, index))
+    }
+
+    pub(super) unsafe fn destroy_framebuffer(&self, index: usize) {
+        let handle = self.inner.framebuffers.lock().remove(index);
+        self.inner.logical.destroy_framebuffer(Some(handle), None);
     }
 
     /// Creates graphics pipeline.
@@ -967,6 +923,11 @@ impl Device {
         ))
     }
 
+    pub(super) unsafe fn destroy_pipeline(&self, index: usize) {
+        let handle = self.inner.pipelines.lock().remove(index);
+        self.inner.logical.destroy_pipeline(Some(handle), None);
+    }
+
     /// Creates image with uninitialized content.
     #[tracing::instrument]
     pub fn create_image(&self, info: ImageInfo) -> Result<Image, CreateImageError> {
@@ -1045,6 +1006,20 @@ impl Device {
                 Err(oom_error_from_erupt(err).into())
             }
         }
+    }
+
+    pub(super) unsafe fn destroy_image(
+        &self,
+        index: usize,
+        block: MemoryBlock<vk1_0::DeviceMemory>,
+    ) {
+        self.inner
+            .allocator
+            .lock()
+            .dealloc(EruptMemoryDevice::wrap(&self.logical()), block);
+
+        let handle = self.inner.images.lock().remove(index);
+        self.inner.logical.destroy_image(Some(handle), None);
     }
 
     // /// Creates static image with preinitialized content from `data`.
@@ -1209,6 +1184,11 @@ impl Device {
         Ok(ImageView::new(info, self.downgrade(), view, index))
     }
 
+    pub(super) unsafe fn destroy_image_view(&self, index: usize) {
+        let handle = self.inner.image_views.lock().remove(index);
+        self.inner.logical.destroy_image_view(Some(handle), None);
+    }
+
     /// Creates pipeline layout.
     #[tracing::instrument]
     pub fn create_pipeline_layout(
@@ -1257,6 +1237,13 @@ impl Device {
             pipeline_layout,
             index,
         ))
+    }
+
+    pub(super) unsafe fn destroy_pipeline_layout(&self, index: usize) {
+        let handle = self.inner.pipeline_layouts.lock().remove(index);
+        self.inner
+            .logical
+            .destroy_pipeline_layout(Some(handle), None);
     }
 
     /// Creates render pass.
@@ -1394,6 +1381,11 @@ impl Device {
         Ok(RenderPass::new(info, self.downgrade(), render_pass, index))
     }
 
+    pub(super) unsafe fn destroy_render_pass(&self, index: usize) {
+        let handle = self.inner.render_passes.lock().remove(index);
+        self.inner.logical.destroy_render_pass(Some(handle), None);
+    }
+
     pub(crate) fn create_semaphore_raw(&self) -> Result<(vk1_0::Semaphore, usize), vk1_0::Result> {
         let semaphore = unsafe {
             self.inner.logical.create_semaphore(
@@ -1416,6 +1408,11 @@ impl Device {
 
         tracing::debug!("Semaphore created: {:p}", handle);
         Ok(Semaphore::new(self.downgrade(), handle, index))
+    }
+
+    pub(super) unsafe fn destroy_semaphore(&self, index: usize) {
+        let handle = self.inner.semaphores.lock().remove(index);
+        self.inner.logical.destroy_semaphore(Some(handle), None);
     }
 
     #[tracing::instrument]
@@ -1565,6 +1562,11 @@ impl Device {
         Ok(ShaderModule::new(info, self.downgrade(), module, index))
     }
 
+    pub(super) unsafe fn destroy_shader_module(&self, index: usize) {
+        let handle = self.inner.shaders.lock().remove(index);
+        self.inner.logical.destroy_shader_module(Some(handle), None);
+    }
+
     /// Creates swapchain for specified surface.
     /// Only one swapchain may be associated with one surface.
     #[tracing::instrument]
@@ -1572,34 +1574,51 @@ impl Device {
         Ok(Swapchain::new(surface, self)?)
     }
 
+    pub(super) fn insert_swapchain(&self, swapchain: vksw::SwapchainKHR) -> usize {
+        self.inner.swapchains.lock().insert(swapchain)
+    }
+
+    pub(super) unsafe fn destroy_swapchain(&self, index: usize) {
+        let handle = self.inner.swapchains.lock().remove(index);
+        self.inner.logical.destroy_swapchain_khr(Some(handle), None);
+    }
+
     /// Resets fences.
     /// All specified fences must be in signalled state.
     /// Fences are moved into unsignalled state.
     #[tracing::instrument]
-    pub fn reset_fences(&self, fences: &[&Fence]) {
-        for fence in fences {
+    pub fn reset_fences(&self, fences: &mut [&mut Fence]) {
+        for fence in fences.iter_mut() {
             assert_owner!(fence, self);
         }
 
-        let fences = fences
+        let handles = fences
             .iter()
             .map(|fence| fence.handle())
             .collect::<SmallVec<[_; 16]>>();
 
-        match unsafe { self.inner.logical.reset_fences(&fences) }.result() {
-            Ok(()) => {}
+        match unsafe { self.inner.logical.reset_fences(&handles) }.result() {
+            Ok(()) => {
+                for fence in fences {
+                    fence.reset(self);
+                }
+            }
             Err(vk1_0::Result::ERROR_DEVICE_LOST) => device_lost(),
             Err(result) => unexpected_result(result),
         }
     }
 
     #[tracing::instrument]
-    pub fn is_fence_signalled(&self, fence: &Fence) -> bool {
-        assert_owner!(fence, self);
-        let fence = fence.handle();
+    pub fn is_fence_signalled(&self, fence: &mut Fence) -> bool {
+        assert_owner!(fence, *self);
 
-        match unsafe { self.inner.logical.get_fence_status(fence) }.raw {
-            vk1_0::Result::SUCCESS => true,
+        match unsafe { self.inner.logical.get_fence_status(fence.handle()) }.raw {
+            vk1_0::Result::SUCCESS => {
+                if let Some((queue, epoch)) = fence.signalled() {
+                    self.inner.epochs.close_epoch(queue, epoch);
+                }
+                true
+            }
             vk1_0::Result::NOT_READY => true,
             vk1_0::Result::ERROR_DEVICE_LOST => device_lost(),
             err => unexpected_result(err),
@@ -1613,18 +1632,47 @@ impl Device {
     /// one is signaled if `all == false`). Fences are signaled by `Queue`s.
     /// See `Queue::submit`.
     #[tracing::instrument]
-    pub fn wait_fences(&self, fences: &[&Fence], all: bool) {
-        for fence in fences {
+    pub fn wait_fences(&self, fences: &mut [&mut Fence], all: bool) {
+        assert!(!fences.is_empty());
+
+        for fence in fences.iter_mut() {
             assert_owner!(fence, self);
         }
 
-        let fences = fences
+        let handles = fences
             .iter()
             .map(|fence| fence.handle())
             .collect::<SmallVec<[_; 16]>>();
 
-        match unsafe { self.inner.logical.wait_for_fences(&fences, all, !0) }.result() {
-            Ok(()) => {}
+        match unsafe { self.inner.logical.wait_for_fences(&handles, all, !0) }.result() {
+            Ok(()) => {
+                if all || fences.len() == 1 {
+                    let mut epochs = SmallVec::<[_; 16]>::new();
+
+                    for fence in fences {
+                        if let Some((queue, epoch)) = fence.signalled() {
+                            epochs.push((queue, epoch));
+                        }
+                    }
+
+                    if !epochs.is_empty() {
+                        // Dedup. Keep largest epoch per queue.
+                        epochs.sort_unstable_by_key(|(q, e)| (*q, !*e));
+                        let mut last_queue = None;
+                        epochs.retain(|(q, _)| {
+                            if Some(*q) == last_queue {
+                                false
+                            } else {
+                                last_queue = Some(*q);
+                                true
+                            }
+                        });
+                        for (queue, epoch) in epochs {
+                            self.inner.epochs.close_epoch(queue, epoch)
+                        }
+                    }
+                }
+            }
             Err(vk1_0::Result::ERROR_DEVICE_LOST) => device_lost(),
             Err(result) => unexpected_result(result),
         }
@@ -1636,8 +1684,15 @@ impl Device {
     /// destruction.
     #[tracing::instrument]
     pub fn wait_idle(&self) {
-        match unsafe { self.inner.logical.device_wait_idle() }.result() {
-            Ok(()) => {}
+        let epochs = self.inner.epochs.next_epoch_all_queues();
+        let result = unsafe { self.inner.logical.device_wait_idle() }.result();
+
+        match result {
+            Ok(()) => {
+                for (queue, epoch) in epochs {
+                    self.inner.epochs.close_epoch(queue, epoch);
+                }
+            }
             Err(vk1_0::Result::ERROR_DEVICE_LOST) => device_lost(),
             Err(result) => unexpected_result(result),
         }
@@ -1818,6 +1873,13 @@ impl Device {
             address,
             index,
         ))
+    }
+
+    pub(super) unsafe fn destroy_acceleration_structure(&self, index: usize) {
+        let handle = self.inner.acceleration_strucutres.lock().remove(index);
+        self.inner
+            .logical
+            .destroy_acceleration_structure_khr(Some(handle), None);
     }
 
     /// Returns buffers device address.
@@ -2029,10 +2091,24 @@ impl Device {
                 info.bindings.iter().all(|binding| binding.flags.is_empty()),
                 "Vulkan 1.2 is required for non-empty `DescriptorBindingFlags`",
             );
-            assert!(
-                info.bindings.iter().all(|binding| binding.count > 0),
-                "Binding `count` must be greater than 0",
-            );
+
+            if info.bindings.iter().any(|binding| {
+                binding
+                    .flags
+                    .contains(DescriptorBindingFlags::UPDATE_AFTER_BIND)
+            }) {
+                assert!(info
+                    .flags
+                    .contains(DescriptorSetLayoutFlags::UPDATE_AFTER_BIND_POOL))
+            }
+
+            // Is it so?
+            // assert!(
+            //     info.bindings.iter().all(|binding| binding.count > 0),
+            //     "Binding `count` must be greater than 0",
+            // );
+
+            // TODO: Validated descriptor count according to physical device properties.
 
             unsafe {
                 self.inner.logical.create_descriptor_set_layout(
@@ -2093,73 +2169,83 @@ impl Device {
 
         let index = self.inner.descriptor_set_layouts.lock().insert(handle);
 
-        let sizes = DescriptorSizes::from_bindings(&info.bindings);
+        let total_count = descriptor_count_from_bindings(&info.bindings);
 
         tracing::debug!("DescriptorSetLayout created {:p}", handle);
         Ok(DescriptorSetLayout::new(
             info,
             self.downgrade(),
             handle,
-            sizes,
+            total_count,
             index,
         ))
+    }
+
+    pub(super) unsafe fn destroy_descriptor_set_layout(&self, index: usize) {
+        let handle = self.inner.descriptor_set_layouts.lock().remove(index);
+        self.inner
+            .logical
+            .destroy_descriptor_set_layout(Some(handle), None);
     }
 
     #[tracing::instrument]
     pub fn create_descriptor_set(
         &self,
         info: DescriptorSetInfo,
-    ) -> Result<DescriptorSet, OutOfMemory> {
+    ) -> Result<DescriptorSet, DescriptorsAllocationError> {
         assert_owner!(info.layout, self);
-        let mut pool_flags = vk1_0::DescriptorPoolCreateFlags::empty();
 
-        if info
-            .layout
-            .info()
-            .flags
-            .contains(DescriptorSetLayoutFlags::UPDATE_AFTER_BIND_POOL)
-        {
-            pool_flags |= vk1_0::DescriptorPoolCreateFlags::UPDATE_AFTER_BIND;
+        assert!(
+            !info
+                .layout
+                .info()
+                .flags
+                .contains(DescriptorSetLayoutFlags::PUSH_DESCRIPTOR),
+            "Push descriptor sets must not be created. "
+        );
+
+        let layout_flags = info.layout.info().flags;
+        let mut flags = DescriptorSetLayoutCreateFlags::empty();
+
+        if layout_flags.contains(DescriptorSetLayoutFlags::UPDATE_AFTER_BIND_POOL) {
+            flags |= DescriptorSetLayoutCreateFlags::UPDATE_AFTER_BIND;
         }
 
-        let pool = unsafe {
-            self.inner.logical.create_descriptor_pool(
-                &vk1_0::DescriptorPoolCreateInfoBuilder::new()
-                    .max_sets(1)
-                    .pool_sizes(info.layout.sizes())
-                    .flags(pool_flags),
-                None,
-                None,
+        let mut sets = unsafe {
+            self.inner.descriptor_allocator.lock().allocate(
+                EruptDescriptorDevice::wrap(&self.inner.logical),
+                &info.layout.handle(),
+                flags,
+                &info.layout.total_count(),
+                1,
             )
         }
-        .result()
-        .map_err(oom_error_from_erupt)?;
+        .map_err(|err| match err {
+            gpu_descriptor::AllocationError::OutOfHostMemory => out_of_host_memory(),
+            gpu_descriptor::AllocationError::OutOfDeviceMemory => {
+                DescriptorsAllocationError::OutOfMemory {
+                    source: OutOfMemory,
+                }
+            }
+            gpu_descriptor::AllocationError::Fragmentation => {
+                DescriptorsAllocationError::Fragmentation
+            }
+        })?;
 
-        let handles = unsafe {
-            self.inner.logical.allocate_descriptor_sets(
-                &vk1_0::DescriptorSetAllocateInfoBuilder::new()
-                    .descriptor_pool(pool)
-                    .set_layouts(&[info.layout.handle()]),
-            )
-        }
-        .result()
-        .map_err(oom_error_from_erupt)?;
+        let set = sets.remove(0);
 
-        debug_assert_eq!(handles.len(), 1);
+        tracing::debug!("DescriptorSet created {:?}", set);
+        Ok(DescriptorSet::new(info, self.downgrade(), set))
+    }
 
-        let handle = handles[0];
-
-        // let index = self.inner.descriptor_sets.lock().insert(handle);
-        let pool_index = self.inner.descriptor_pools.lock().insert(pool);
-
-        tracing::debug!("DescriptorSet created {:p}", handle);
-        Ok(DescriptorSet::new(
-            info,
-            self.downgrade(),
-            handle,
-            pool,
-            pool_index,
-        ))
+    pub(super) unsafe fn destroy_descriptor_set(
+        &self,
+        set: gpu_descriptor::DescriptorSet<vk1_0::DescriptorSet>,
+    ) {
+        self.inner
+            .descriptor_allocator
+            .lock()
+            .free(EruptDescriptorDevice::wrap(&self.inner.logical), Some(set))
     }
 
     #[tracing::instrument]
@@ -2710,4 +2796,27 @@ fn memory_device_properties(
             || device.enabled().khr_buffer_device_address
             || device.enabled().ext_buffer_device_address,
     }
+}
+
+pub(super) fn descriptor_count_from_bindings(
+    bindings: &[DescriptorSetLayoutBinding],
+) -> DescriptorTotalCount {
+    let mut result = DescriptorTotalCount::default();
+
+    for binding in bindings {
+        match binding.ty {
+            DescriptorType::AccelerationStructure => result.acceleration_structure += binding.count,
+            DescriptorType::CombinedImageSampler => result.combined_image_sampler += binding.count,
+            DescriptorType::InputAttachment => result.input_attachment += binding.count,
+            DescriptorType::SampledImage => result.sampled_image += binding.count,
+            DescriptorType::Sampler => result.sampler += binding.count,
+            DescriptorType::StorageBuffer => result.storage_buffer += binding.count,
+            DescriptorType::StorageBufferDynamic => result.storage_buffer_dynamic += binding.count,
+            DescriptorType::StorageImage => result.storage_image += binding.count,
+            DescriptorType::UniformBuffer => result.uniform_buffer += binding.count,
+            DescriptorType::UniformBufferDynamic => result.uniform_buffer_dynamic += binding.count,
+        }
+    }
+
+    result
 }

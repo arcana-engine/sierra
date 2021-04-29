@@ -1,5 +1,5 @@
 use {
-    super::{descriptor::DescriptorSizes, device::WeakDevice},
+    super::device::{Device, WeakDevice},
     crate::{
         accel::AccelerationStructureInfo,
         buffer::BufferInfo,
@@ -10,6 +10,7 @@ use {
         pipeline::{
             ComputePipelineInfo, GraphicsPipelineInfo, PipelineLayoutInfo, RayTracingPipelineInfo,
         },
+        queue::QueueId,
         render_pass::RenderPassInfo,
         sampler::SamplerInfo,
         shader::ShaderModuleInfo,
@@ -18,6 +19,7 @@ use {
     },
     erupt::{extensions::khr_acceleration_structure as vkacc, vk1_0},
     gpu_alloc::MemoryBlock,
+    gpu_descriptor::DescriptorTotalCount,
     std::{
         cell::UnsafeCell,
         fmt::{self, Debug},
@@ -29,10 +31,7 @@ use {
 };
 
 struct BufferInner {
-    info: BufferInfo,
-    handle: vk1_0::Buffer,
     owner: WeakDevice,
-    address: Option<DeviceAddress>,
     index: usize,
     memory_handle: vk1_0::DeviceMemory,
     memory_offset: u64,
@@ -44,8 +43,10 @@ struct BufferInner {
 /// GPU buffer is an object representing contiguous array of bytes
 /// accessible by GPU operations.
 #[derive(Clone)]
-#[repr(transparent)]
 pub struct Buffer {
+    handle: vk1_0::Buffer,
+    info: BufferInfo,
+    address: Option<DeviceAddress>,
     inner: Arc<BufferInner>,
 }
 
@@ -80,10 +81,10 @@ impl Debug for Buffer {
             }
 
             fmt.debug_struct("Buffer")
-                .field("info", &self.inner.info)
+                .field("info", &self.info)
                 .field("owner", &self.inner.owner)
-                .field("handle", &self.inner.handle)
-                .field("address", &self.inner.address)
+                .field("handle", &self.handle)
+                .field("address", &self.address)
                 .field("index", &self.inner.index)
                 .field(
                     "memory",
@@ -95,18 +96,18 @@ impl Debug for Buffer {
                 )
                 .finish()
         } else {
-            write!(fmt, "Buffer({:p})", self.inner.handle)
+            write!(fmt, "Buffer({:p})", self.handle)
         }
     }
 }
 
 impl Buffer {
     pub fn info(&self) -> &BufferInfo {
-        &self.inner.info
+        &self.info
     }
 
     pub fn address(&self) -> Option<DeviceAddress> {
-        self.inner.address
+        self.address
     }
 
     pub(super) fn is_owned_by(&self, owner: &impl PartialEq<WeakDevice>) -> bool {
@@ -114,8 +115,8 @@ impl Buffer {
     }
 
     pub(super) fn handle(&self) -> vk1_0::Buffer {
-        debug_assert!(!self.inner.handle.is_null());
-        self.inner.handle
+        debug_assert!(!self.handle.is_null());
+        self.handle
     }
 }
 
@@ -154,7 +155,7 @@ impl Hash for MappableBuffer {
     where
         H: Hasher,
     {
-        self.buffer.inner.handle.hash(hasher)
+        self.buffer.handle.hash(hasher)
     }
 }
 
@@ -170,10 +171,10 @@ impl Debug for MappableBuffer {
             }
 
             fmt.debug_struct("Buffer")
-                .field("info", &self.inner.info)
+                .field("info", &self.info)
                 .field("owner", &self.inner.owner)
-                .field("handle", &self.inner.handle)
-                .field("address", &self.inner.address)
+                .field("handle", &self.handle)
+                .field("address", &self.address)
                 .field("index", &self.inner.index)
                 .field(
                     "memory",
@@ -186,7 +187,7 @@ impl Debug for MappableBuffer {
                 )
                 .finish()
         } else {
-            write!(fmt, "MappableBuffer({:p})", self.inner.handle)
+            write!(fmt, "MappableBuffer({:p})", self.handle)
         }
     }
 }
@@ -200,10 +201,8 @@ impl Deref for MappableBuffer {
 }
 
 impl MappableBuffer {
-    pub fn share(&self) -> Buffer {
-        Buffer {
-            inner: self.inner.clone(),
-        }
+    pub fn share(self) -> Buffer {
+        self.buffer
     }
 
     pub(super) fn new(
@@ -217,11 +216,11 @@ impl MappableBuffer {
     ) -> Self {
         MappableBuffer {
             buffer: Buffer {
+                handle,
+                info,
+                address,
                 inner: Arc::new(BufferInner {
-                    info,
                     owner,
-                    handle,
-                    address,
                     memory_handle: *memory_block.memory(),
                     memory_offset: memory_block.offset(),
                     memory_size: memory_block.size(),
@@ -269,13 +268,17 @@ impl ImageFlavor {
 pub struct Image {
     info: ImageInfo,
     handle: vk1_0::Image,
+    inner: Arc<ImageInner>,
+}
+
+struct ImageInner {
     owner: WeakDevice,
     flavor: ImageFlavor,
 }
 
 impl PartialEq for Image {
     fn eq(&self, rhs: &Self) -> bool {
-        (self.handle, self.flavor.uid()) == (rhs.handle, rhs.flavor.uid())
+        (self.handle, self.inner.flavor.uid()) == (rhs.handle, rhs.inner.flavor.uid())
     }
 }
 
@@ -286,7 +289,7 @@ impl Hash for Image {
     where
         H: Hasher,
     {
-        (self.handle, self.flavor.uid()).hash(hasher)
+        (self.handle, self.inner.flavor.uid()).hash(hasher)
     }
 }
 
@@ -295,10 +298,10 @@ impl Debug for Image {
         if fmt.alternate() {
             let mut fmt = fmt.debug_struct("Image");
             fmt.field("info", &self.info)
-                .field("owner", &self.owner)
+                .field("owner", &self.inner.owner)
                 .field("handle", &self.handle);
 
-            match &self.flavor {
+            match &self.inner.flavor {
                 ImageFlavor::DeviceImage {
                     memory_block,
                     index,
@@ -330,12 +333,14 @@ impl Image {
     ) -> Self {
         Image {
             info,
-            owner,
             handle,
-            flavor: ImageFlavor::DeviceImage {
-                memory_block: Arc::new(memory_block),
-                index,
-            },
+            inner: Arc::new(ImageInner {
+                owner,
+                flavor: ImageFlavor::DeviceImage {
+                    memory_block: Arc::new(memory_block),
+                    index,
+                },
+            }),
         }
     }
 
@@ -347,14 +352,16 @@ impl Image {
     ) -> Self {
         Image {
             info,
-            owner,
             handle,
-            flavor: ImageFlavor::SwapchainImage { uid },
+            inner: Arc::new(ImageInner {
+                owner,
+                flavor: ImageFlavor::SwapchainImage { uid },
+            }),
         }
     }
 
     pub(super) fn is_owned_by(&self, owner: &impl PartialEq<WeakDevice>) -> bool {
-        *owner == self.owner
+        *owner == self.inner.owner
     }
 
     pub(super) fn handle(&self) -> vk1_0::Image {
@@ -362,31 +369,20 @@ impl Image {
         self.handle
     }
 
-    // pub(super) fn swapchain_acq(&self) {
-    //     match &self.flavor {
-    //         ImageFlavor::SwapchainImage { state } => {
-    //             state.fetch_add(1, Relaxed);
-    //         }
-    //         _ => unreachable!(),
-    //     }
-    // }
-
-    // pub(super) fn swapchain_rel(&self) {
-    //     match &self.flavor {
-    //         ImageFlavor::SwapchainImage { state } => {
-    //             state.fetch_sub(1, Relaxed);
-    //         }
-    //         _ => unreachable!(),
-    //     }
-    // }
-
-    // fn retired(&self) -> bool {
-    //     if let ImageFlavor::SwapchainImage { state } = &self.flavor {
-    //         state.load(Relaxed) == 0
-    //     } else {
-    //         false
-    //     }
-    // }
+    /// Must be called only for retired swapchain.
+    pub(super) fn try_dispose(mut self) -> Result<(), Self> {
+        assert!(matches!(
+            self.inner.flavor,
+            ImageFlavor::SwapchainImage { .. }
+        ));
+        match Arc::try_unwrap(self.inner) {
+            Ok(_) => Ok(()),
+            Err(inner) => {
+                self.inner = inner;
+                Err(self)
+            }
+        }
+    }
 }
 
 /// Handle to GPU image view object.
@@ -396,8 +392,12 @@ impl Image {
 /// or only part of [`Image`]s layers, levels and aspects.
 #[derive(Clone)]
 pub struct ImageView {
-    info: ImageViewInfo,
     handle: vk1_0::ImageView,
+    inner: Arc<ImageViewInner>,
+}
+
+struct ImageViewInner {
+    info: ImageViewInfo,
     owner: WeakDevice,
     index: usize,
 }
@@ -406,9 +406,9 @@ impl Debug for ImageView {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         if fmt.alternate() {
             fmt.debug_struct("ImageView")
-                .field("info", &self.info)
+                .field("info", &self.inner.info)
                 .field("handle", &self.handle)
-                .field("owner", &self.owner)
+                .field("owner", &self.inner.owner)
                 .finish()
         } else {
             write!(fmt, "ImageView({:p})", self.handle)
@@ -435,7 +435,7 @@ impl Hash for ImageView {
 
 impl ImageView {
     pub fn info(&self) -> &ImageViewInfo {
-        &self.info
+        &self.inner.info
     }
 
     pub(super) fn new(
@@ -445,15 +445,13 @@ impl ImageView {
         index: usize,
     ) -> Self {
         ImageView {
-            info,
-            owner,
             handle,
-            index,
+            inner: Arc::new(ImageViewInner { info, owner, index }),
         }
     }
 
     pub(super) fn is_owned_by(&self, owner: &impl PartialEq<WeakDevice>) -> bool {
-        *owner == self.owner
+        *owner == self.inner.owner
     }
 
     pub(super) fn handle(&self) -> vk1_0::ImageView {
@@ -474,11 +472,26 @@ impl ImageView {
 ///
 /// Prefer using semaphores and pipeline barriers to synchronize
 /// operations on GPU with each other.
-#[derive(Clone)]
 pub struct Fence {
     handle: vk1_0::Fence,
     owner: WeakDevice,
     index: usize,
+    state: FenceState,
+}
+
+#[derive(Clone, Copy)]
+enum FenceState {
+    /// Fence is not signalled and won't be signalled by any pending submissions.
+    /// It must not be used in `Device::wait_for_fences` without timeout.
+    UnSignalled,
+
+    /// Fence is currently unsignalled and will be signalled by pending submission.
+    /// Pending submission may be already signalled the fence object
+    /// but checking through device is required.
+    Armed { queue: QueueId, epoch: u64 },
+
+    /// Fence is in signalled state.
+    Signalled,
 }
 
 impl Debug for Fence {
@@ -487,6 +500,14 @@ impl Debug for Fence {
             fmt.debug_struct("Fence")
                 .field("handle", &self.handle)
                 .field("owner", &self.owner)
+                .field(
+                    "state",
+                    &match &self.state {
+                        FenceState::UnSignalled => "unsignalled",
+                        FenceState::Signalled => "signalled",
+                        FenceState::Armed { .. } => "armed",
+                    },
+                )
                 .finish()
         } else {
             write!(fmt, "Fence({:p})", self.handle)
@@ -517,6 +538,7 @@ impl Fence {
             owner,
             handle,
             index,
+            state: FenceState::UnSignalled,
         }
     }
 
@@ -528,6 +550,60 @@ impl Fence {
         debug_assert!(!self.handle.is_null());
         self.handle
     }
+
+    /// Called when submitted to a queue for signal.
+    pub(super) fn arm(&mut self, queue: QueueId, epoch: u64, device: &Device) {
+        debug_assert!(self.is_owned_by(device));
+        match &self.state {
+            FenceState::UnSignalled => {
+                self.state = FenceState::Armed { queue, epoch };
+            }
+            FenceState::Armed { .. } => {
+                // Could be come signalled already.
+                // User may be sure because they called device or queue wait idle method.
+                if device.is_fence_signalled(self) {
+                    self.state = FenceState::Armed { queue, epoch };
+                } else {
+                    panic!("Fence must not be resubmitted while associated submission is pending")
+                }
+            }
+            FenceState::Signalled => {
+                panic!("Fence must not be resubmitted before resetting")
+            }
+        }
+    }
+
+    /// Called when device knows fence is signalled.
+    pub(super) fn signalled(&mut self) -> Option<(QueueId, u64)> {
+        match self.state {
+            FenceState::Signalled => {
+                self.state = FenceState::Signalled;
+                None
+            }
+            FenceState::Armed { queue, epoch } => Some((queue, epoch)),
+            FenceState::UnSignalled => {
+                panic!("Fence cannot become signalled before being submitted")
+            }
+        }
+    }
+
+    /// Called when device resets the fence.
+    pub(super) fn reset(&mut self, device: &Device) {
+        match &self.state {
+            FenceState::Signalled | FenceState::UnSignalled => {
+                self.state = FenceState::Signalled;
+            }
+            FenceState::Armed { .. } => {
+                // Could be come signalled already.
+                // User may be sure because they called device or queue wait idle method.
+                if device.is_fence_signalled(self) {
+                    self.state = FenceState::Signalled;
+                } else {
+                    panic!("Fence must not be reset while associated submission is pending")
+                }
+            }
+        }
+    }
 }
 
 /// Handle for GPU semaphore object.
@@ -536,7 +612,6 @@ impl Fence {
 /// as well as operations on GPU queue with presentation engine.
 ///
 /// Avoid using semaphores to synchronize operations on the same queue.
-#[derive(Clone)]
 pub struct Semaphore {
     handle: vk1_0::Semaphore,
     owner: WeakDevice,
@@ -887,7 +962,7 @@ pub struct DescriptorSetLayout {
     info: DescriptorSetLayoutInfo,
     handle: vk1_0::DescriptorSetLayout,
     owner: WeakDevice,
-    sizes: DescriptorSizes,
+    total_count: DescriptorTotalCount,
     index: usize,
 }
 
@@ -930,14 +1005,14 @@ impl DescriptorSetLayout {
         info: DescriptorSetLayoutInfo,
         owner: WeakDevice,
         handle: vk1_0::DescriptorSetLayout,
-        sizes: DescriptorSizes,
+        total_count: DescriptorTotalCount,
         index: usize,
     ) -> Self {
         DescriptorSetLayout {
             info,
             owner,
             handle,
-            sizes,
+            total_count,
             index,
         }
     }
@@ -951,38 +1026,39 @@ impl DescriptorSetLayout {
         self.handle
     }
 
-    pub(super) fn sizes(&self) -> &DescriptorSizes {
-        &self.sizes
+    pub(super) fn total_count(&self) -> &DescriptorTotalCount {
+        &self.total_count
     }
+}
+
+struct DescriptorSetInner {
+    info: DescriptorSetInfo,
+    set: gpu_descriptor::DescriptorSet<vk1_0::DescriptorSet>,
+    owner: WeakDevice,
 }
 
 /// Set of descriptors with specific layout.
 #[derive(Clone)]
 pub struct DescriptorSet {
-    info: DescriptorSetInfo,
-    handle: vk1_0::DescriptorSet,
-    owner: WeakDevice,
-    pool: vk1_0::DescriptorPool,
-    pool_index: usize,
+    inner: Arc<DescriptorSetInner>,
 }
 
 impl Debug for DescriptorSet {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         if fmt.alternate() {
             fmt.debug_struct("DescriptorSet")
-                .field("handle", &self.handle)
-                .field("owner", &self.owner)
-                .field("pool", &self.pool)
+                .field("handle", &self.inner.set)
+                .field("owner", &self.inner.owner)
                 .finish()
         } else {
-            write!(fmt, "DescriptorSet({:p})", self.handle)
+            write!(fmt, "DescriptorSet({:p})", self.inner.set.raw())
         }
     }
 }
 
 impl PartialEq for DescriptorSet {
     fn eq(&self, rhs: &Self) -> bool {
-        self.handle == rhs.handle
+        self.inner.set.raw() == rhs.inner.set.raw()
     }
 }
 
@@ -993,38 +1069,32 @@ impl Hash for DescriptorSet {
     where
         H: Hasher,
     {
-        self.handle.hash(hasher)
+        self.inner.set.raw().hash(hasher)
     }
 }
 
 impl DescriptorSet {
     pub fn info(&self) -> &DescriptorSetInfo {
-        &self.info
+        &self.inner.info
     }
 
     pub(super) fn new(
         info: DescriptorSetInfo,
         owner: WeakDevice,
-        handle: vk1_0::DescriptorSet,
-        pool: vk1_0::DescriptorPool,
-        pool_index: usize,
+        set: gpu_descriptor::DescriptorSet<vk1_0::DescriptorSet>,
     ) -> Self {
         DescriptorSet {
-            info,
-            owner,
-            handle,
-            pool,
-            pool_index,
+            inner: Arc::new(DescriptorSetInner { info, owner, set }),
         }
     }
 
     pub(super) fn is_owned_by(&self, owner: &impl PartialEq<WeakDevice>) -> bool {
-        *owner == self.owner
+        *owner == self.inner.owner
     }
 
     pub(super) fn handle(&self) -> vk1_0::DescriptorSet {
-        debug_assert!(!self.handle.is_null());
-        self.handle
+        debug_assert!(!self.inner.set.raw().is_null());
+        *self.inner.set.raw()
     }
 }
 
@@ -1034,8 +1104,12 @@ impl DescriptorSet {
 /// used by a pipeline.
 #[derive(Clone)]
 pub struct PipelineLayout {
-    info: PipelineLayoutInfo,
     handle: vk1_0::PipelineLayout,
+    inner: Arc<PipelineLayoutInner>,
+}
+
+struct PipelineLayoutInner {
+    info: PipelineLayoutInfo,
     owner: WeakDevice,
     index: usize,
 }
@@ -1045,7 +1119,7 @@ impl Debug for PipelineLayout {
         if fmt.alternate() {
             fmt.debug_struct("PipelineLayout")
                 .field("handle", &self.handle)
-                .field("owner", &self.owner)
+                .field("owner", &self.inner.owner)
                 .finish()
         } else {
             write!(fmt, "PipelineLayout({:p})", self.handle)
@@ -1072,7 +1146,7 @@ impl Hash for PipelineLayout {
 
 impl PipelineLayout {
     pub fn info(&self) -> &PipelineLayoutInfo {
-        &self.info
+        &self.inner.info
     }
 
     pub(super) fn new(
@@ -1082,15 +1156,13 @@ impl PipelineLayout {
         index: usize,
     ) -> Self {
         PipelineLayout {
-            info,
-            owner,
             handle,
-            index,
+            inner: Arc::new(PipelineLayoutInner { info, owner, index }),
         }
     }
 
     pub(super) fn is_owned_by(&self, owner: &impl PartialEq<WeakDevice>) -> bool {
-        *owner == self.owner
+        *owner == self.inner.owner
     }
 
     pub(super) fn handle(&self) -> vk1_0::PipelineLayout {
@@ -1102,8 +1174,12 @@ impl PipelineLayout {
 /// Resource that describes whole compute pipeline state.
 #[derive(Clone)]
 pub struct ComputePipeline {
-    info: ComputePipelineInfo,
     handle: vk1_0::Pipeline,
+    inner: Arc<ComputePipelineInner>,
+}
+
+struct ComputePipelineInner {
+    info: ComputePipelineInfo,
     owner: WeakDevice,
     index: usize,
 }
@@ -1113,7 +1189,7 @@ impl Debug for ComputePipeline {
         if fmt.alternate() {
             fmt.debug_struct("ComputePipeline")
                 .field("handle", &self.handle)
-                .field("owner", &self.owner)
+                .field("owner", &self.inner.owner)
                 .finish()
         } else {
             write!(fmt, "ComputePipeline({:p})", self.handle)
@@ -1140,7 +1216,7 @@ impl Hash for ComputePipeline {
 
 impl ComputePipeline {
     pub fn info(&self) -> &ComputePipelineInfo {
-        &self.info
+        &self.inner.info
     }
 
     pub(super) fn new(
@@ -1150,15 +1226,13 @@ impl ComputePipeline {
         index: usize,
     ) -> Self {
         ComputePipeline {
-            info,
-            owner,
             handle,
-            index,
+            inner: Arc::new(ComputePipelineInner { info, owner, index }),
         }
     }
 
     pub(super) fn is_owned_by(&self, owner: &impl PartialEq<WeakDevice>) -> bool {
-        *owner == self.owner
+        *owner == self.inner.owner
     }
 
     pub(super) fn handle(&self) -> vk1_0::Pipeline {
@@ -1170,8 +1244,12 @@ impl ComputePipeline {
 /// Resource that describes whole graphics pipeline state.
 #[derive(Clone)]
 pub struct GraphicsPipeline {
-    info: GraphicsPipelineInfo,
     handle: vk1_0::Pipeline,
+    inner: Arc<GraphicsPipelineInner>,
+}
+
+struct GraphicsPipelineInner {
+    info: GraphicsPipelineInfo,
     owner: WeakDevice,
     index: usize,
 }
@@ -1181,7 +1259,7 @@ impl Debug for GraphicsPipeline {
         if fmt.alternate() {
             fmt.debug_struct("GraphicsPipeline")
                 .field("handle", &self.handle)
-                .field("owner", &self.owner)
+                .field("owner", &self.inner.owner)
                 .finish()
         } else {
             write!(fmt, "GraphicsPipeline({:p})", self.handle)
@@ -1208,7 +1286,7 @@ impl Hash for GraphicsPipeline {
 
 impl GraphicsPipeline {
     pub fn info(&self) -> &GraphicsPipelineInfo {
-        &self.info
+        &self.inner.info
     }
 
     pub(super) fn new(
@@ -1218,15 +1296,13 @@ impl GraphicsPipeline {
         index: usize,
     ) -> Self {
         GraphicsPipeline {
-            info,
-            owner,
             handle,
-            index,
+            inner: Arc::new(GraphicsPipelineInner { info, owner, index }),
         }
     }
 
     pub(super) fn is_owned_by(&self, owner: &impl PartialEq<WeakDevice>) -> bool {
-        *owner == self.owner
+        *owner == self.inner.owner
     }
 
     pub(super) fn handle(&self) -> vk1_0::Pipeline {
@@ -1238,10 +1314,14 @@ impl GraphicsPipeline {
 /// Bottom-level acceleration structure.
 #[derive(Clone)]
 pub struct AccelerationStructure {
-    info: AccelerationStructureInfo,
-    handle: vkacc::AccelerationStructureKHR,
-    owner: WeakDevice,
     address: DeviceAddress,
+    handle: vkacc::AccelerationStructureKHR,
+    inner: Arc<AccelerationStructureInner>,
+}
+
+struct AccelerationStructureInner {
+    info: AccelerationStructureInfo,
+    owner: WeakDevice,
     index: usize,
 }
 
@@ -1250,7 +1330,7 @@ impl Debug for AccelerationStructure {
         if fmt.alternate() {
             fmt.debug_struct("AccelerationStructure")
                 .field("handle", &self.handle)
-                .field("owner", &self.owner)
+                .field("owner", &self.inner.owner)
                 .field("address", &self.address)
                 .finish()
         } else {
@@ -1278,7 +1358,7 @@ impl Hash for AccelerationStructure {
 
 impl AccelerationStructure {
     pub fn info(&self) -> &AccelerationStructureInfo {
-        &self.info
+        &self.inner.info
     }
 
     pub fn address(&self) -> DeviceAddress {
@@ -1293,16 +1373,14 @@ impl AccelerationStructure {
         index: usize,
     ) -> Self {
         AccelerationStructure {
-            info,
-            owner,
             handle,
             address,
-            index,
+            inner: Arc::new(AccelerationStructureInner { info, owner, index }),
         }
     }
 
     pub(super) fn is_owned_by(&self, owner: &impl PartialEq<WeakDevice>) -> bool {
-        *owner == self.owner
+        *owner == self.inner.owner
     }
 
     pub(super) fn handle(&self) -> vkacc::AccelerationStructureKHR {
@@ -1314,8 +1392,12 @@ impl AccelerationStructure {
 /// Resource that describes whole ray-tracing pipeline state.
 #[derive(Clone)]
 pub struct RayTracingPipeline {
-    info: RayTracingPipelineInfo,
     handle: vk1_0::Pipeline,
+    inner: Arc<RayTracingPipelineInner>,
+}
+
+struct RayTracingPipelineInner {
+    info: RayTracingPipelineInfo,
     owner: WeakDevice,
     group_handlers: Arc<[u8]>,
     index: usize,
@@ -1326,7 +1408,7 @@ impl Debug for RayTracingPipeline {
         if fmt.alternate() {
             fmt.debug_struct("RayTracingPipeline")
                 .field("handle", &self.handle)
-                .field("owner", &self.owner)
+                .field("owner", &self.inner.owner)
                 .finish()
         } else {
             write!(fmt, "RayTracingPipeline({:p})", self.handle)
@@ -1353,7 +1435,7 @@ impl Hash for RayTracingPipeline {
 
 impl RayTracingPipeline {
     pub fn info(&self) -> &RayTracingPipelineInfo {
-        &self.info
+        &self.inner.info
     }
 
     pub(super) fn new(
@@ -1364,16 +1446,18 @@ impl RayTracingPipeline {
         index: usize,
     ) -> Self {
         RayTracingPipeline {
-            info,
-            owner,
             handle,
-            group_handlers,
-            index,
+            inner: Arc::new(RayTracingPipelineInner {
+                info,
+                owner,
+                group_handlers,
+                index,
+            }),
         }
     }
 
     pub(super) fn is_owned_by(&self, owner: &impl PartialEq<WeakDevice>) -> bool {
-        *owner == self.owner
+        *owner == self.inner.owner
     }
 
     pub(super) fn handle(&self) -> vk1_0::Pipeline {
@@ -1382,6 +1466,6 @@ impl RayTracingPipeline {
     }
 
     pub(super) fn group_handlers(&self) -> &[u8] {
-        &*self.group_handlers
+        &*self.inner.group_handlers
     }
 }

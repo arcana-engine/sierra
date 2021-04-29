@@ -89,12 +89,12 @@ pub struct StridedBufferRange {
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub struct BufferMemoryBarrier<'a> {
-    pub range: &'a Buffer,
-    pub old: AccessFlags,
-    pub new: AccessFlags,
-    pub family_transfer: Option<(u32, u32)>,
+    pub buffer: &'a Buffer,
     pub offset: u64,
     pub size: u64,
+    pub old_access: AccessFlags,
+    pub new_access: AccessFlags,
+    pub family_transfer: Option<(u32, u32)>,
 }
 
 /// Buffer range with access mask,
@@ -126,9 +126,9 @@ impl BufferRangeState {
                 self.stages,
                 stages,
                 &[BufferMemoryBarrier {
-                    range: &self.range.buffer,
-                    old: self.access,
-                    new: access,
+                    buffer: &self.range.buffer,
+                    old_access: self.access,
+                    new_access: access,
                     family_transfer: None,
                     offset: self.range.offset,
                     size: self.range.size,
@@ -141,9 +141,9 @@ impl BufferRangeState {
                     self.stages,
                     stages,
                     &[BufferMemoryBarrier {
-                        range: &self.range.buffer,
-                        old: self.access,
-                        new: access,
+                        buffer: &self.range.buffer,
+                        old_access: self.access,
+                        new_access: access,
                         family_transfer: None,
                         offset: self.range.offset,
                         size: self.range.size,
@@ -160,9 +160,9 @@ impl BufferRangeState {
                     self.stages,
                     stages,
                     &[BufferMemoryBarrier {
-                        range: &self.range.buffer,
-                        old: self.access,
-                        new: access,
+                        buffer: &self.range.buffer,
+                        old_access: self.access,
+                        new_access: access,
                         family_transfer: Some((from, to)),
                         offset: self.range.offset,
                         size: self.range.size,
@@ -189,9 +189,9 @@ impl BufferRangeState {
             self.stages,
             stages,
             &[BufferMemoryBarrier {
-                range: &self.range.buffer,
-                old: AccessFlags::empty(),
-                new: access,
+                buffer: &self.range.buffer,
+                old_access: AccessFlags::empty(),
+                new_access: access,
                 family_transfer: None,
                 offset: self.range.offset,
                 size: self.range.size,

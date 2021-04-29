@@ -13,14 +13,32 @@ use crate::{
     backend::Device,
     buffer::BufferRange,
     encode::Encoder,
-    image::Image,
+    // image::Image,
     image::Layout,
-    image::{ImageExtent, SubresourceRange},
+    // image::{ImageExtent, SubresourceRange},
     sampler::Sampler,
     view::ImageView,
-    view::ImageViewKind,
+    // view::ImageViewKind,
     OutOfMemory,
 };
+
+/// AllocationError that may occur during descriptor sets allocation.
+#[derive(Clone, Copy, Debug, thiserror::Error, PartialEq, Eq)]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
+pub enum DescriptorsAllocationError {
+    /// Out of device memory
+    #[error(transparent)]
+    OutOfMemory {
+        #[from]
+        source: OutOfMemory,
+    },
+
+    /// The total number of descriptors across all pools created\
+    /// with flag `CREATE_UPDATE_AFTER_BIND_BIT` set exceeds `max_update_after_bind_descriptors_in_all_pools`
+    /// Or fragmentation of the underlying hardware resources occurs.
+    #[error("Failed to allocate descriptors due to fragmentation")]
+    Fragmentation,
+}
 
 /// Contains information required to create `DescriptorSet` instance.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -111,15 +129,25 @@ pub enum Descriptors<'a> {
     AccelerationStructure(&'a [AccelerationStructure]),
 }
 
+#[derive(Clone, Copy, Debug)]
 pub enum SamplerDescriptor {}
+#[derive(Clone, Copy, Debug)]
 pub enum CombinedImageSamplerDescriptor {}
+#[derive(Clone, Copy, Debug)]
 pub enum SampledImageDescriptor {}
+#[derive(Clone, Copy, Debug)]
 pub enum StorageImageDescriptor {}
+#[derive(Clone, Copy, Debug)]
 pub enum UniformBufferDescriptor {}
+#[derive(Clone, Copy, Debug)]
 pub enum StorageBufferDescriptor {}
+#[derive(Clone, Copy, Debug)]
 pub enum UniformBufferDynamicDescriptor {}
+#[derive(Clone, Copy, Debug)]
 pub enum StorageBufferDynamicDescriptor {}
+#[derive(Clone, Copy, Debug)]
 pub enum InputAttachmentDescriptor {}
+#[derive(Clone, Copy, Debug)]
 pub enum AccelerationStructureDescriptor {}
 
 /// Defines operation to copy descriptors range from one set to another.
@@ -147,61 +175,61 @@ pub struct CopyDescriptorSet<'a> {
     pub count: u32,
 }
 
-#[doc(hidden)]
-#[derive(Debug)]
-pub struct CombinedImageSamplerEq<'a, I> {
-    pub image: &'a I,
-    pub layout: Layout,
-    pub sampler: &'a Sampler,
-}
+// #[doc(hidden)]
+// #[derive(Debug)]
+// pub struct CombinedImageSamplerEq<'a, I> {
+//     pub image: &'a I,
+//     pub layout: Layout,
+//     pub sampler: &'a Sampler,
+// }
 
-impl<I> Copy for CombinedImageSamplerEq<'_, I> {}
-impl<I> Clone for CombinedImageSamplerEq<'_, I> {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
+// impl<I> Copy for CombinedImageSamplerEq<'_, I> {}
+// impl<I> Clone for CombinedImageSamplerEq<'_, I> {
+//     fn clone(&self) -> Self {
+//         *self
+//     }
+// }
 
-impl PartialEq<CombinedImageSampler> for CombinedImageSamplerEq<'_, ImageView> {
-    fn eq(&self, rhs: &CombinedImageSampler) -> bool {
-        *self.image == rhs.view && self.layout == rhs.layout && *self.sampler == rhs.sampler
-    }
-}
+// impl PartialEq<CombinedImageSampler> for CombinedImageSamplerEq<'_, ImageView> {
+//     fn eq(&self, rhs: &CombinedImageSampler) -> bool {
+//         *self.image == rhs.view && self.layout == rhs.layout && *self.sampler == rhs.sampler
+//     }
+// }
 
-impl PartialEq<CombinedImageSampler> for CombinedImageSamplerEq<'_, Image> {
-    fn eq(&self, rhs: &CombinedImageSampler) -> bool {
-        image_eq_view(self.image, &rhs.view)
-            && self.layout == rhs.layout
-            && *self.sampler == rhs.sampler
-    }
-}
+// impl PartialEq<CombinedImageSampler> for CombinedImageSamplerEq<'_, Image> {
+//     fn eq(&self, rhs: &CombinedImageSampler) -> bool {
+//         image_eq_view(self.image, &rhs.view)
+//             && self.layout == rhs.layout
+//             && *self.sampler == rhs.sampler
+//     }
+// }
 
-pub fn image_eq_view(image: &Image, view: &ImageView) -> bool {
-    let view_info = view.info();
-    let image_info = image.info();
+// pub fn image_eq_view(image: &Image, view: &ImageView) -> bool {
+//     let view_info = view.info();
+//     let image_info = image.info();
 
-    if view_info.view_kind
-        != match image_info.extent {
-            ImageExtent::D1 { .. } => ImageViewKind::D1,
-            ImageExtent::D2 { .. } => ImageViewKind::D2,
-            ImageExtent::D3 { .. } => ImageViewKind::D3,
-        }
-    {
-        return false;
-    }
+//     if view_info.view_kind
+//         != match image_info.extent {
+//             ImageExtent::D1 { .. } => ImageViewKind::D1,
+//             ImageExtent::D2 { .. } => ImageViewKind::D2,
+//             ImageExtent::D3 { .. } => ImageViewKind::D3,
+//         }
+//     {
+//         return false;
+//     }
 
-    if view_info.range
-        != SubresourceRange::new(
-            image_info.format.aspect_flags(),
-            0..image_info.levels,
-            0..image_info.layers,
-        )
-    {
-        return false;
-    }
+//     if view_info.range
+//         != SubresourceRange::new(
+//             image_info.format.aspect_flags(),
+//             0..image_info.levels,
+//             0..image_info.layers,
+//         )
+//     {
+//         return false;
+//     }
 
-    *image == view_info.image
-}
+//     *image == view_info.image
+// }
 
 pub trait DescriptorsLayout {
     type Instance;
@@ -230,7 +258,7 @@ pub trait DescriptorsInstance {
         device: &Device,
         writes: &mut impl Extend<WriteDescriptorSet<'a>>,
         encoder: &mut Encoder<'a>,
-    ) -> Result<&'a Self::Updated, OutOfMemory>;
+    ) -> Result<&'a Self::Updated, DescriptorsAllocationError>;
 
     fn raw_layout(&self) -> &DescriptorSetLayout;
 }
@@ -248,12 +276,12 @@ pub trait UpdatedPipelineDescriptors<P: ?Sized>: UpdatedDescriptors {
     const N: u32;
 }
 
-/// Interface for all types that can be used as `UniformBuffer` or `StorageBuffer` descriptor.
+/// Trait for an array of typed descriptors.
 pub trait TypedDescriptors<T> {
     fn descriptors(&self) -> Descriptors<'_>;
 }
 
-/// Interface for all types that can be used as `UniformBuffer` or `StorageBuffer` descriptor.
+/// Trait for all types that can be used as descriptor.
 pub trait AsDescriptors {
     const COUNT: u32;
     type Descriptors;
