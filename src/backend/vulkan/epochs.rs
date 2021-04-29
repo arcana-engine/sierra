@@ -1,3 +1,5 @@
+use lazy_static::__Deref;
+
 use {
     super::{
         encode::CommandBuffer,
@@ -7,6 +9,7 @@ use {
         },
     },
     crate::queue::QueueId,
+    erupt::DeviceLoader,
     parking_lot::Mutex,
     smallvec::SmallVec,
     std::{
@@ -42,10 +45,13 @@ impl Epochs {
         debug_assert!(queue.current > epoch);
         if let Ok(len) = usize::try_from(queue.current - epoch) {
             if len < queue.epochs.len() {
-                let mut epochs = queue.epochs.drain(len..).collect::<SmallVec<[_; 16]>>();
+                let epochs = queue.epochs.drain(len..).collect::<SmallVec<[_; 16]>>();
 
                 for mut epoch in epochs {
-                    queue.cbufs.extend(epoch.cbufs.drain(..));
+                    for mut cbuf in epoch.cbufs.drain(..) {
+                        cbuf.references().clear();
+                        queue.cbufs.push(cbuf);
+                    }
                     queue.cache.push_back(epoch);
                 }
             }
@@ -86,6 +92,21 @@ struct QueueEpochs {
     cbufs: Vec<CommandBuffer>,
     cache: VecDeque<Epoch>,
     epochs: VecDeque<Epoch>,
+}
+
+impl Drop for QueueEpochs {
+    fn drop(&mut self) {
+        assert!(self
+            .cbufs
+            .iter_mut()
+            .all(|cbuf| cbuf.references().is_empty()));
+        assert!(self.cache.iter().all(|e| e.cbufs.is_empty()));
+        assert!(self.epochs.iter().all(|e| e.cbufs.is_empty()) || std::thread::panicking());
+
+        self.cbufs.clear();
+        self.epochs.clear();
+        self.cache.clear();
+    }
 }
 
 struct Epoch {
@@ -179,24 +200,22 @@ impl References {
         self.fences.push(fence);
     }
 
-    pub fn append(&mut self, append: &mut Self) {
-        self.buffers.append(&mut append.buffers);
-        self.images.append(&mut append.images);
-        self.image_views.append(&mut append.image_views);
-        self.graphics_pipelines
-            .append(&mut append.graphics_pipelines);
-        self.compute_pipelines.append(&mut append.compute_pipelines);
-        self.ray_tracing_pipelines
-            .append(&mut append.ray_tracing_pipelines);
-        self.pipeline_layouts.append(&mut append.pipeline_layouts);
-        self.framebuffers.append(&mut append.framebuffers);
-        self.acceleration_strucutres
-            .append(&mut append.acceleration_strucutres);
-        self.samplers.append(&mut append.samplers);
-        self.fences.append(&mut append.fences);
+    pub fn is_empty(&self) -> bool {
+        self.buffers.is_empty()
+            && self.images.is_empty()
+            && self.image_views.is_empty()
+            && self.graphics_pipelines.is_empty()
+            && self.compute_pipelines.is_empty()
+            && self.ray_tracing_pipelines.is_empty()
+            && self.pipeline_layouts.is_empty()
+            && self.framebuffers.is_empty()
+            && self.acceleration_strucutres.is_empty()
+            && self.samplers.is_empty()
+            && self.descriptor_sets.is_empty()
+            && self.fences.is_empty()
     }
 
-    fn clear(&mut self) {
+    pub fn clear(&mut self) {
         self.buffers.clear();
         self.images.clear();
         self.image_views.clear();
@@ -207,6 +226,7 @@ impl References {
         self.framebuffers.clear();
         self.acceleration_strucutres.clear();
         self.samplers.clear();
+        self.descriptor_sets.clear();
         self.fences.clear();
     }
 }

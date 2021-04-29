@@ -31,8 +31,8 @@ ordered-float = "2.0"
 bytemuck = "1.4"
 erupt = { version = "0.18", optional = true, features = ["loading"] }
 gpu-alloc-erupt = { version = "0.4", optional = true }
-gpu-alloc = { version = "0.4.4", optional = true, features = ["freelist", "tracing"] }
-gpu-descriptor = { version = "0.1", path = "../gpu-descriptor/gpu-descriptor" }
+gpu-alloc = { version = "0.4.4", optional = true, features = ["tracing"] }
+gpu-descriptor = { version = "0.1", path = "../gpu-descriptor/gpu-descriptor", features = ["tracing"] }
 gpu-descriptor-erupt = { version = "0.1", path = "../gpu-descriptor/erupt" }
 
 slab = "0.4"

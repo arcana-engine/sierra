@@ -15,7 +15,7 @@ use {
         stage::PipelineStageFlags,
         OutOfMemory,
     },
-    bumpalo::Bump,
+    bumpalo::{collections::Vec as BVec, Bump},
     erupt::{extensions::khr_swapchain::PresentInfoKHRBuilder, vk1_0},
     std::fmt::{self, Debug},
 };
@@ -116,11 +116,16 @@ impl Queue {
         mut fence: Option<&mut Fence>,
         bump: &Bump,
     ) {
-        let cbufs = bump.alloc_slice_fill_iter(cbufs.into_iter().map(|cbuf| {
+        let cbufs = cbufs.into_iter();
+        let mut handles = BVec::with_capacity_in(cbufs.len(), bump);
+        let mut array = BVec::with_capacity_in(cbufs.len(), bump);
+
+        cbufs.for_each(|cbuf| {
             assert_owner!(cbuf, self.device);
             assert_eq!(self.id, cbuf.queue());
-            cbuf.handle()
-        }));
+            handles.push(cbuf.handle());
+            array.push(cbuf);
+        });
 
         for (_, semaphore) in wait.iter_mut() {
             assert_owner!(semaphore, self.device);
@@ -150,11 +155,13 @@ impl Queue {
                         .wait_semaphores(&wait_semaphores)
                         .wait_dst_stage_mask(&wait_stages)
                         .signal_semaphores(&signal_semaphores)
-                        .command_buffers(&cbufs)],
+                        .command_buffers(&handles)],
                     fence.map(|f| f.handle()),
                 )
                 .expect("TODO: Handle queue submit error")
         };
+
+        self.device.epochs().submit(self.id, array.into_iter());
     }
 
     #[tracing::instrument]
@@ -230,17 +237,17 @@ impl Queue {
     }
 
     fn drain_ready_cbufs(&mut self) -> Result<(), OutOfMemory> {
-        self.device.epochs().drain_cbuf(self.id, &mut self.cbufs);
-        for cbuf in &self.cbufs {
-            unsafe {
-                self.device.logical().reset_command_buffer(
-                    cbuf.handle(),
-                    Some(vk1_0::CommandBufferResetFlags::RELEASE_RESOURCES),
-                )
-            }
-            .result()
-            .map_err(queue_error)?;
-        }
+        // self.device.epochs().drain_cbuf(self.id, &mut self.cbufs);
+        // for cbuf in &self.cbufs {
+        //     unsafe {
+        //         self.device.logical().reset_command_buffer(
+        //             cbuf.handle(),
+        //             Some(vk1_0::CommandBufferResetFlags::RELEASE_RESOURCES),
+        //         )
+        //     }
+        //     .result()
+        //     .map_err(queue_error)?;
+        // }
 
         Ok(())
     }

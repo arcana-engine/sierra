@@ -133,6 +133,19 @@ impl Debug for Inner {
     }
 }
 
+impl Drop for Inner {
+    fn drop(&mut self) {
+        unsafe {
+            self.allocator
+                .get_mut()
+                .cleanup(EruptMemoryDevice::wrap(&self.logical));
+            self.descriptor_allocator
+                .get_mut()
+                .cleanup(EruptDescriptorDevice::wrap(&self.logical));
+        }
+    }
+}
+
 #[derive(Clone)]
 #[repr(transparent)]
 pub struct WeakDevice {
@@ -2542,6 +2555,11 @@ impl Device {
 
         tracing::debug!("Sampler created {:p}", handle);
         Ok(Sampler::new(info, self.downgrade(), handle, index))
+    }
+
+    pub(super) unsafe fn destroy_sampler(&self, index: usize) {
+        let handle = self.inner.samplers.lock().remove(index);
+        self.inner.logical.destroy_sampler(Some(handle), None);
     }
 
     #[tracing::instrument]

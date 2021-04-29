@@ -24,6 +24,7 @@ use {
         cell::UnsafeCell,
         fmt::{self, Debug},
         hash::{Hash, Hasher},
+        mem::ManuallyDrop,
         num::NonZeroU64,
         ops::Deref,
         sync::Arc,
@@ -36,7 +37,18 @@ struct BufferInner {
     memory_handle: vk1_0::DeviceMemory,
     memory_offset: u64,
     memory_size: u64,
-    memory_block: UnsafeCell<MemoryBlock<vk1_0::DeviceMemory>>,
+    memory_block: UnsafeCell<ManuallyDrop<MemoryBlock<vk1_0::DeviceMemory>>>,
+}
+
+impl Drop for BufferInner {
+    fn drop(&mut self) {
+        if let Some(device) = self.owner.upgrade() {
+            unsafe {
+                let block = ManuallyDrop::take(self.memory_block.get_mut());
+                device.destroy_buffer(self.index, block);
+            }
+        }
+    }
 }
 
 /// Handle for GPU buffer object.
@@ -224,7 +236,7 @@ impl MappableBuffer {
                     memory_handle: *memory_block.memory(),
                     memory_offset: memory_block.offset(),
                     memory_size: memory_block.size(),
-                    memory_block: UnsafeCell::new(memory_block),
+                    memory_block: UnsafeCell::new(ManuallyDrop::new(memory_block)),
                     index,
                 }),
             },
@@ -241,10 +253,9 @@ impl MappableBuffer {
     }
 }
 
-#[derive(Clone)]
 enum ImageFlavor {
     DeviceImage {
-        memory_block: Arc<MemoryBlock<vk1_0::DeviceMemory>>,
+        memory_block: ManuallyDrop<MemoryBlock<vk1_0::DeviceMemory>>,
         index: usize,
     },
     SwapchainImage {
@@ -274,6 +285,25 @@ pub struct Image {
 struct ImageInner {
     owner: WeakDevice,
     flavor: ImageFlavor,
+}
+
+impl Drop for ImageInner {
+    fn drop(&mut self) {
+        match &mut self.flavor {
+            ImageFlavor::DeviceImage {
+                memory_block,
+                index,
+            } => {
+                if let Some(device) = self.owner.upgrade() {
+                    unsafe {
+                        let block = ManuallyDrop::take(memory_block);
+                        device.destroy_image(*index, block);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
 }
 
 impl PartialEq for Image {
@@ -337,7 +367,7 @@ impl Image {
             inner: Arc::new(ImageInner {
                 owner,
                 flavor: ImageFlavor::DeviceImage {
-                    memory_block: Arc::new(memory_block),
+                    memory_block: ManuallyDrop::new(memory_block),
                     index,
                 },
             }),
@@ -400,6 +430,14 @@ struct ImageViewInner {
     info: ImageViewInfo,
     owner: WeakDevice,
     index: usize,
+}
+
+impl Drop for ImageViewInner {
+    fn drop(&mut self) {
+        if let Some(device) = self.owner.upgrade() {
+            unsafe { device.destroy_image_view(self.index) }
+        }
+    }
 }
 
 impl Debug for ImageView {
@@ -477,6 +515,20 @@ pub struct Fence {
     owner: WeakDevice,
     index: usize,
     state: FenceState,
+}
+
+impl Drop for Fence {
+    fn drop(&mut self) {
+        if let Some(device) = self.owner.upgrade() {
+            match self.state {
+                FenceState::Armed { .. } => {
+                    device.wait_fences(&mut [self], true);
+                }
+                _ => {}
+            }
+            unsafe { device.destroy_fence(self.index) }
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -591,13 +643,13 @@ impl Fence {
     pub(super) fn reset(&mut self, device: &Device) {
         match &self.state {
             FenceState::Signalled | FenceState::UnSignalled => {
-                self.state = FenceState::Signalled;
+                self.state = FenceState::UnSignalled;
             }
             FenceState::Armed { .. } => {
                 // Could be come signalled already.
                 // User may be sure because they called device or queue wait idle method.
                 if device.is_fence_signalled(self) {
-                    self.state = FenceState::Signalled;
+                    self.state = FenceState::UnSignalled;
                 } else {
                     panic!("Fence must not be reset while associated submission is pending")
                 }
@@ -616,6 +668,15 @@ pub struct Semaphore {
     handle: vk1_0::Semaphore,
     owner: WeakDevice,
     index: usize,
+}
+
+impl Drop for Semaphore {
+    fn drop(&mut self) {
+        // TODO: Check there's no pending signal operations.
+        if let Some(device) = self.owner.upgrade() {
+            unsafe { device.destroy_semaphore(self.index) }
+        }
+    }
 }
 
 impl Debug for Semaphore {
@@ -674,10 +735,22 @@ impl Semaphore {
 /// and describes how attachments are used over the course of subpasses.
 #[derive(Clone)]
 pub struct RenderPass {
-    info: RenderPassInfo,
     handle: vk1_0::RenderPass,
+    inner: Arc<RenderPassInner>,
+}
+
+struct RenderPassInner {
+    info: RenderPassInfo,
     owner: WeakDevice,
     index: usize,
+}
+
+impl Drop for RenderPassInner {
+    fn drop(&mut self) {
+        if let Some(device) = self.owner.upgrade() {
+            unsafe { device.destroy_render_pass(self.index) }
+        }
+    }
 }
 
 impl Debug for RenderPass {
@@ -685,7 +758,7 @@ impl Debug for RenderPass {
         if fmt.alternate() {
             fmt.debug_struct("RenderPass")
                 .field("handle", &self.handle)
-                .field("owner", &self.owner)
+                .field("owner", &self.inner.owner)
                 .finish()
         } else {
             write!(fmt, "RenderPass({:p})", self.handle)
@@ -712,7 +785,7 @@ impl Hash for RenderPass {
 
 impl RenderPass {
     pub fn info(&self) -> &RenderPassInfo {
-        &self.info
+        &self.inner.info
     }
 
     pub(super) fn new(
@@ -722,15 +795,13 @@ impl RenderPass {
         index: usize,
     ) -> Self {
         RenderPass {
-            info,
-            owner,
             handle,
-            index,
+            inner: Arc::new(RenderPassInner { info, owner, index }),
         }
     }
 
     pub(super) fn is_owned_by(&self, owner: &impl PartialEq<WeakDevice>) -> bool {
-        *owner == self.owner
+        *owner == self.inner.owner
     }
 
     pub(super) fn handle(&self) -> vk1_0::RenderPass {
@@ -741,10 +812,22 @@ impl RenderPass {
 
 #[derive(Clone)]
 pub struct Sampler {
-    info: SamplerInfo,
     handle: vk1_0::Sampler,
+    info: SamplerInfo,
+    inner: Arc<SamplerInner>,
+}
+
+struct SamplerInner {
     owner: WeakDevice,
     index: usize,
+}
+
+impl Drop for SamplerInner {
+    fn drop(&mut self) {
+        if let Some(device) = self.owner.upgrade() {
+            unsafe { device.destroy_sampler(self.index) }
+        }
+    }
 }
 
 impl Debug for Sampler {
@@ -752,7 +835,7 @@ impl Debug for Sampler {
         if fmt.alternate() {
             fmt.debug_struct("Sampler")
                 .field("handle", &self.handle)
-                .field("owner", &self.owner)
+                .field("owner", &self.inner.owner)
                 .finish()
         } else {
             write!(fmt, "Sampler({:p})", self.handle)
@@ -790,14 +873,13 @@ impl Sampler {
     ) -> Self {
         Sampler {
             info,
-            owner,
             handle,
-            index,
+            inner: Arc::new(SamplerInner { owner, index }),
         }
     }
 
     pub(super) fn is_owned_by(&self, owner: &impl PartialEq<WeakDevice>) -> bool {
-        *owner == self.owner
+        *owner == self.inner.owner
     }
 
     pub(super) fn handle(&self) -> vk1_0::Sampler {
@@ -811,10 +893,22 @@ impl Sampler {
 /// All image views must be 2D with 1 mip level and 1 array level.
 #[derive(Clone)]
 pub struct Framebuffer {
-    info: FramebufferInfo,
     handle: vk1_0::Framebuffer,
+    inner: Arc<FramebufferInner>,
+}
+
+struct FramebufferInner {
+    info: FramebufferInfo,
     owner: WeakDevice,
     index: usize,
+}
+
+impl Drop for FramebufferInner {
+    fn drop(&mut self) {
+        if let Some(device) = self.owner.upgrade() {
+            unsafe { device.destroy_framebuffer(self.index) }
+        }
+    }
 }
 
 impl Debug for Framebuffer {
@@ -822,7 +916,7 @@ impl Debug for Framebuffer {
         if fmt.alternate() {
             fmt.debug_struct("Framebuffer")
                 .field("handle", &self.handle)
-                .field("owner", &self.owner)
+                .field("owner", &self.inner.owner)
                 .finish()
         } else {
             write!(fmt, "Framebuffer({:p})", self.handle)
@@ -849,7 +943,7 @@ impl Hash for Framebuffer {
 
 impl Framebuffer {
     pub fn info(&self) -> &FramebufferInfo {
-        &self.info
+        &self.inner.info
     }
 
     pub(super) fn new(
@@ -859,15 +953,13 @@ impl Framebuffer {
         index: usize,
     ) -> Self {
         Framebuffer {
-            info,
-            owner,
             handle,
-            index,
+            inner: Arc::new(FramebufferInner { info, owner, index }),
         }
     }
 
     pub(super) fn is_owned_by(&self, owner: &impl PartialEq<WeakDevice>) -> bool {
-        *owner == self.owner
+        *owner == self.inner.owner
     }
 
     pub(super) fn handle(&self) -> vk1_0::Framebuffer {
@@ -885,10 +977,22 @@ impl Framebuffer {
 /// [`GraphicsPipeline`], [`ComputePipeline`] and [`RayTracingPipeline`].
 #[derive(Clone)]
 pub struct ShaderModule {
-    info: ShaderModuleInfo,
     handle: vk1_0::ShaderModule,
+    inner: Arc<ShaderModuleInner>,
+}
+
+struct ShaderModuleInner {
+    info: ShaderModuleInfo,
     owner: WeakDevice,
     index: usize,
+}
+
+impl Drop for ShaderModuleInner {
+    fn drop(&mut self) {
+        if let Some(device) = self.owner.upgrade() {
+            unsafe { device.destroy_shader_module(self.index) }
+        }
+    }
 }
 
 impl Debug for ShaderModule {
@@ -896,7 +1000,7 @@ impl Debug for ShaderModule {
         if fmt.alternate() {
             fmt.debug_struct("ShaderModule")
                 .field("handle", &self.handle)
-                .field("owner", &self.owner)
+                .field("owner", &self.inner.owner)
                 .finish()
         } else {
             write!(fmt, "ShaderModule({:p})", self.handle)
@@ -923,7 +1027,7 @@ impl Hash for ShaderModule {
 
 impl ShaderModule {
     pub fn info(&self) -> &ShaderModuleInfo {
-        &self.info
+        &self.inner.info
     }
 
     pub(super) fn new(
@@ -933,15 +1037,13 @@ impl ShaderModule {
         index: usize,
     ) -> Self {
         ShaderModule {
-            info,
-            owner,
             handle,
-            index,
+            inner: Arc::new(ShaderModuleInner { info, owner, index }),
         }
     }
 
     pub(super) fn is_owned_by(&self, owner: &impl PartialEq<WeakDevice>) -> bool {
-        *owner == self.owner
+        *owner == self.inner.owner
     }
 
     pub(super) fn handle(&self) -> vk1_0::ShaderModule {
@@ -959,11 +1061,25 @@ impl ShaderModule {
 /// descriptor set layout that was specified at index N for bound [`PipelineLayout`].
 #[derive(Clone)]
 pub struct DescriptorSetLayout {
-    info: DescriptorSetLayoutInfo,
     handle: vk1_0::DescriptorSetLayout,
+    inner: Arc<DescriptorSetLayoutInner>,
+}
+
+struct DescriptorSetLayoutInner {
+    info: DescriptorSetLayoutInfo,
     owner: WeakDevice,
     total_count: DescriptorTotalCount,
     index: usize,
+}
+
+impl Drop for DescriptorSetLayoutInner {
+    fn drop(&mut self) {
+        if let Some(device) = self.owner.upgrade() {
+            unsafe {
+                device.destroy_descriptor_set_layout(self.index);
+            }
+        }
+    }
 }
 
 impl Debug for DescriptorSetLayout {
@@ -971,7 +1087,7 @@ impl Debug for DescriptorSetLayout {
         if fmt.alternate() {
             fmt.debug_struct("DescriptorSetLayout")
                 .field("handle", &self.handle)
-                .field("owner", &self.owner)
+                .field("owner", &self.inner.owner)
                 .finish()
         } else {
             write!(fmt, "DescriptorSetLayout({:p})", self.handle)
@@ -998,7 +1114,7 @@ impl Hash for DescriptorSetLayout {
 
 impl DescriptorSetLayout {
     pub fn info(&self) -> &DescriptorSetLayoutInfo {
-        &self.info
+        &self.inner.info
     }
 
     pub(super) fn new(
@@ -1009,16 +1125,18 @@ impl DescriptorSetLayout {
         index: usize,
     ) -> Self {
         DescriptorSetLayout {
-            info,
-            owner,
             handle,
-            total_count,
-            index,
+            inner: Arc::new(DescriptorSetLayoutInner {
+                info,
+                owner,
+                total_count,
+                index,
+            }),
         }
     }
 
     pub(super) fn is_owned_by(&self, owner: &impl PartialEq<WeakDevice>) -> bool {
-        *owner == self.owner
+        *owner == self.inner.owner
     }
 
     pub(super) fn handle(&self) -> vk1_0::DescriptorSetLayout {
@@ -1027,20 +1145,30 @@ impl DescriptorSetLayout {
     }
 
     pub(super) fn total_count(&self) -> &DescriptorTotalCount {
-        &self.total_count
+        &self.inner.total_count
     }
-}
-
-struct DescriptorSetInner {
-    info: DescriptorSetInfo,
-    set: gpu_descriptor::DescriptorSet<vk1_0::DescriptorSet>,
-    owner: WeakDevice,
 }
 
 /// Set of descriptors with specific layout.
 #[derive(Clone)]
 pub struct DescriptorSet {
     inner: Arc<DescriptorSetInner>,
+}
+
+struct DescriptorSetInner {
+    info: DescriptorSetInfo,
+    set: ManuallyDrop<gpu_descriptor::DescriptorSet<vk1_0::DescriptorSet>>,
+    owner: WeakDevice,
+}
+
+impl Drop for DescriptorSetInner {
+    fn drop(&mut self) {
+        if let Some(device) = self.owner.upgrade() {
+            unsafe { device.destroy_descriptor_set(ManuallyDrop::take(&mut self.set)) }
+        } else {
+            panic!("Device already dropped")
+        }
+    }
 }
 
 impl Debug for DescriptorSet {
@@ -1084,7 +1212,11 @@ impl DescriptorSet {
         set: gpu_descriptor::DescriptorSet<vk1_0::DescriptorSet>,
     ) -> Self {
         DescriptorSet {
-            inner: Arc::new(DescriptorSetInner { info, owner, set }),
+            inner: Arc::new(DescriptorSetInner {
+                info,
+                owner,
+                set: ManuallyDrop::new(set),
+            }),
         }
     }
 
@@ -1112,6 +1244,14 @@ struct PipelineLayoutInner {
     info: PipelineLayoutInfo,
     owner: WeakDevice,
     index: usize,
+}
+
+impl Drop for PipelineLayoutInner {
+    fn drop(&mut self) {
+        if let Some(device) = self.owner.upgrade() {
+            unsafe { device.destroy_pipeline_layout(self.index) }
+        }
+    }
 }
 
 impl Debug for PipelineLayout {
@@ -1184,6 +1324,14 @@ struct ComputePipelineInner {
     index: usize,
 }
 
+impl Drop for ComputePipelineInner {
+    fn drop(&mut self) {
+        if let Some(device) = self.owner.upgrade() {
+            unsafe { device.destroy_pipeline(self.index) }
+        }
+    }
+}
+
 impl Debug for ComputePipeline {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         if fmt.alternate() {
@@ -1252,6 +1400,14 @@ struct GraphicsPipelineInner {
     info: GraphicsPipelineInfo,
     owner: WeakDevice,
     index: usize,
+}
+
+impl Drop for GraphicsPipelineInner {
+    fn drop(&mut self) {
+        if let Some(device) = self.owner.upgrade() {
+            unsafe { device.destroy_pipeline(self.index) }
+        }
+    }
 }
 
 impl Debug for GraphicsPipeline {
@@ -1323,6 +1479,14 @@ struct AccelerationStructureInner {
     info: AccelerationStructureInfo,
     owner: WeakDevice,
     index: usize,
+}
+
+impl Drop for AccelerationStructureInner {
+    fn drop(&mut self) {
+        if let Some(device) = self.owner.upgrade() {
+            unsafe { device.destroy_acceleration_structure(self.index) }
+        }
+    }
 }
 
 impl Debug for AccelerationStructure {
@@ -1401,6 +1565,14 @@ struct RayTracingPipelineInner {
     owner: WeakDevice,
     group_handlers: Arc<[u8]>,
     index: usize,
+}
+
+impl Drop for RayTracingPipelineInner {
+    fn drop(&mut self) {
+        if let Some(device) = self.owner.upgrade() {
+            unsafe { device.destroy_pipeline(self.index) }
+        }
+    }
 }
 
 impl Debug for RayTracingPipeline {

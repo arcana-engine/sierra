@@ -29,7 +29,6 @@ pub struct CommandBuffer {
     handle: vk1_0::CommandBuffer,
     queue: QueueId,
     owner: WeakDevice,
-    recording: bool,
     references: References,
 }
 
@@ -53,7 +52,6 @@ impl CommandBuffer {
             handle,
             queue,
             owner,
-            recording: false,
             references: References::new(),
         }
     }
@@ -80,19 +78,15 @@ impl CommandBuffer {
             None => return Ok(()),
         };
 
-        if !self.recording {
-            unsafe {
-                device.logical().begin_command_buffer(
-                    self.handle,
-                    &vk1_0::CommandBufferBeginInfoBuilder::new()
-                        .flags(vk1_0::CommandBufferUsageFlags::ONE_TIME_SUBMIT),
-                )
-            }
-            .result()
-            .map_err(oom_error_from_erupt)?;
-
-            self.recording = true;
+        unsafe {
+            device.logical().begin_command_buffer(
+                self.handle,
+                &vk1_0::CommandBufferBeginInfoBuilder::new()
+                    .flags(vk1_0::CommandBufferUsageFlags::ONE_TIME_SUBMIT),
+            )
         }
+        .result()
+        .map_err(oom_error_from_erupt)?;
 
         let logical = &device.logical();
 

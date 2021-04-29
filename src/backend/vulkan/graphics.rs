@@ -535,7 +535,8 @@ unsafe extern "system" fn debug_report_callback(
     let message = CStr::from_ptr(p_message);
 
     if flags.contains(DebugReportFlagsEXT::ERROR_EXT) {
-        tracing::error!("{:?}: {:?} | {:?}", layer_prefix, object_type, message);
+        // tracing::error!("{:?}: {:?} | {:?}", layer_prefix, object_type, message);
+        panic!("{:?}: {:?} | {:?}", layer_prefix, object_type, message);
     } else if flags.contains(DebugReportFlagsEXT::PERFORMANCE_WARNING_EXT) {
         tracing::warn!("{:?}: {:?} | {:?}", layer_prefix, object_type, message);
     } else if flags.contains(DebugReportFlagsEXT::WARNING_EXT) {
