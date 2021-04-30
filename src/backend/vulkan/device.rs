@@ -69,7 +69,7 @@ use {
     slab::Slab,
     smallvec::SmallVec,
     std::{
-        collections::HashMap,
+        collections::hash_map::{Entry, HashMap},
         convert::{TryFrom as _, TryInto as _},
         ffi::CString,
         fmt::{self, Debug},
@@ -116,6 +116,8 @@ pub(crate) struct Inner {
     acceleration_strucutres: Mutex<Slab<vkacc::AccelerationStructureKHR>>,
     samplers: Mutex<Slab<vk1_0::Sampler>>,
     swapchains: Mutex<Slab<vksw::SwapchainKHR>>,
+
+    samplers_cache: Mutex<HashMap<SamplerInfo, Sampler>>,
 
     epochs: Epochs,
 }
@@ -276,6 +278,8 @@ impl Device {
                 version,
                 properties,
                 features,
+
+                samplers_cache: Mutex::new(HashMap::new()),
 
                 epochs: Epochs::new(queues),
             }),
@@ -2523,38 +2527,44 @@ impl Device {
 
     #[tracing::instrument]
     pub fn create_sampler(&self, info: SamplerInfo) -> Result<Sampler, OutOfMemory> {
-        let handle = unsafe {
-            self.inner.logical.create_sampler(
-                &vk1_0::SamplerCreateInfoBuilder::new()
-                    .mag_filter(info.mag_filter.to_erupt())
-                    .min_filter(info.min_filter.to_erupt())
-                    .mipmap_mode(info.mipmap_mode.to_erupt())
-                    .address_mode_u(info.address_mode_u.to_erupt())
-                    .address_mode_v(info.address_mode_v.to_erupt())
-                    .address_mode_w(info.address_mode_w.to_erupt())
-                    .mip_lod_bias(info.mip_lod_bias.into_inner())
-                    .anisotropy_enable(info.max_anisotropy.is_some())
-                    .max_anisotropy(info.max_anisotropy.unwrap_or(0.0.into()).into_inner())
-                    .compare_enable(info.compare_op.is_some())
-                    .compare_op(match info.compare_op {
-                        Some(compare_op) => compare_op.to_erupt(),
-                        None => vk1_0::CompareOp::NEVER,
-                    })
-                    .min_lod(info.min_lod.into_inner())
-                    .max_lod(info.max_lod.into_inner())
-                    .border_color(info.border_color.to_erupt())
-                    .unnormalized_coordinates(info.unnormalized_coordinates),
-                None,
-                None,
-            )
+        match self.inner.samplers_cache.lock().entry(info) {
+            Entry::Occupied(entry) => Ok(entry.get().clone()),
+            Entry::Vacant(entry) => {
+                let handle = unsafe {
+                    self.inner.logical.create_sampler(
+                        &vk1_0::SamplerCreateInfoBuilder::new()
+                            .mag_filter(info.mag_filter.to_erupt())
+                            .min_filter(info.min_filter.to_erupt())
+                            .mipmap_mode(info.mipmap_mode.to_erupt())
+                            .address_mode_u(info.address_mode_u.to_erupt())
+                            .address_mode_v(info.address_mode_v.to_erupt())
+                            .address_mode_w(info.address_mode_w.to_erupt())
+                            .mip_lod_bias(info.mip_lod_bias.into_inner())
+                            .anisotropy_enable(info.max_anisotropy.is_some())
+                            .max_anisotropy(info.max_anisotropy.unwrap_or(0.0.into()).into_inner())
+                            .compare_enable(info.compare_op.is_some())
+                            .compare_op(match info.compare_op {
+                                Some(compare_op) => compare_op.to_erupt(),
+                                None => vk1_0::CompareOp::NEVER,
+                            })
+                            .min_lod(info.min_lod.into_inner())
+                            .max_lod(info.max_lod.into_inner())
+                            .border_color(info.border_color.to_erupt())
+                            .unnormalized_coordinates(info.unnormalized_coordinates),
+                        None,
+                        None,
+                    )
+                }
+                .result()
+                .map_err(oom_error_from_erupt)?;
+
+                let index = self.inner.samplers.lock().insert(handle);
+
+                tracing::debug!("Sampler created {:p}", handle);
+                let sampler = Sampler::new(info, self.downgrade(), handle, index);
+                Ok(entry.insert(sampler).clone())
+            }
         }
-        .result()
-        .map_err(oom_error_from_erupt)?;
-
-        let index = self.inner.samplers.lock().insert(handle);
-
-        tracing::debug!("Sampler created {:p}", handle);
-        Ok(Sampler::new(info, self.downgrade(), handle, index))
     }
 
     pub(super) unsafe fn destroy_sampler(&self, index: usize) {

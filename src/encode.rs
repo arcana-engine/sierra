@@ -392,6 +392,10 @@ impl<'a> Encoder<'a> {
         }
     }
 
+    pub fn bump(&self) -> &'a Bump {
+        self.bump
+    }
+
     /// Begins render pass and returns `RenderPassEncoder` to encode commands of
     /// the render pass. `RenderPassEncoder` borrows `Encoder`.
     /// To continue use this `Encoder` returned `RenderPassEncoder` must be
