@@ -22,8 +22,15 @@ use {
     std::{
         convert::TryFrom as _,
         fmt::{self, Debug},
+        sync::atomic::{AtomicU64, Ordering::Relaxed},
     },
 };
+
+#[cfg(feature = "leak-detection")]
+static COMMAND_BUFFER_ALLOCATED: AtomicU64 = AtomicU64::new(0);
+
+#[cfg(feature = "leak-detection")]
+static COMMAND_BUFFER_FREED: AtomicU64 = AtomicU64::new(0);
 
 pub struct CommandBuffer {
     handle: vk1_0::CommandBuffer,
@@ -46,8 +53,23 @@ impl Debug for CommandBuffer {
     }
 }
 
+#[cfg(feature = "leak-detection")]
+impl Drop for CommandBuffer {
+    fn drop(&mut self) {
+        COMMAND_BUFFER_ALLOCATED.fetch_sub(1, Relaxed);
+    }
+}
+
 impl CommandBuffer {
     pub(super) fn new(handle: vk1_0::CommandBuffer, queue: QueueId, owner: WeakDevice) -> Self {
+        #[cfg(feature = "leak-detection")]
+        let allocated = 1 + COMMAND_BUFFER_ALLOCATED.fetch_add(1, Relaxed);
+
+        #[cfg(feature = "leak-detection")]
+        if allocated - COMMAND_BUFFER_FREED.load(Relaxed) > 1024 {
+            tracing::error!("Too many cbufs allocated");
+        }
+
         CommandBuffer {
             handle,
             queue,
@@ -72,7 +94,10 @@ impl CommandBuffer {
         self.queue
     }
 
-    pub fn write(&mut self, commands: &[Command<'_>]) -> Result<(), OutOfMemory> {
+    pub fn write<'a>(
+        &mut self,
+        commands: impl IntoIterator<Item = Command<'a>>,
+    ) -> Result<(), OutOfMemory> {
         let device = match self.owner.upgrade() {
             Some(device) => device,
             None => return Ok(()),
@@ -91,7 +116,7 @@ impl CommandBuffer {
         let logical = &device.logical();
 
         for command in commands {
-            match *command {
+            match command {
                 Command::BeginRenderPass {
                     framebuffer,
                     clears,

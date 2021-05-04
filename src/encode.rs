@@ -667,7 +667,7 @@ impl<'a> Encoder<'a> {
     /// buffer.
     pub fn finish(mut self) -> CommandBuffer {
         self.command_buffer
-            .write(&self.inner.commands)
+            .write(self.inner.commands)
             .expect("TODO: Handle command buffer writing error");
 
         self.command_buffer

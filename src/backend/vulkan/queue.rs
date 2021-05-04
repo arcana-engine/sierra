@@ -168,7 +168,7 @@ impl Queue {
     pub fn submit_one(&mut self, cbuf: CommandBuffer, fence: Option<&Fence>) {
         assert_owner!(cbuf, self.device);
         assert_eq!(self.id, cbuf.queue());
-        let cbuf = cbuf.handle();
+        let handle = cbuf.handle();
 
         unsafe {
             self.device
@@ -179,11 +179,13 @@ impl Queue {
                         .wait_semaphores(&[])
                         .wait_dst_stage_mask(&[])
                         .signal_semaphores(&[])
-                        .command_buffers(std::slice::from_ref(&cbuf))],
+                        .command_buffers(std::slice::from_ref(&handle))],
                     fence.map(|f| f.handle()),
                 )
                 .expect("TODO: Handle queue submit error")
         };
+
+        self.device.epochs().submit(self.id, std::iter::once(cbuf));
     }
 
     #[tracing::instrument]
@@ -237,17 +239,23 @@ impl Queue {
     }
 
     fn drain_ready_cbufs(&mut self) -> Result<(), OutOfMemory> {
-        // self.device.epochs().drain_cbuf(self.id, &mut self.cbufs);
-        // for cbuf in &self.cbufs {
-        //     unsafe {
-        //         self.device.logical().reset_command_buffer(
-        //             cbuf.handle(),
-        //             Some(vk1_0::CommandBufferResetFlags::RELEASE_RESOURCES),
-        //         )
-        //     }
-        //     .result()
-        //     .map_err(queue_error)?;
-        // }
+        let offset = self.cbufs.len();
+        self.device.epochs().drain_cbuf(self.id, &mut self.cbufs);
+        for cbuf in &self.cbufs[offset..] {
+            unsafe {
+                self.device.logical().reset_command_buffer(
+                    cbuf.handle(),
+                    Some(vk1_0::CommandBufferResetFlags::RELEASE_RESOURCES),
+                )
+            }
+            .result()
+            .map_err(queue_error)?;
+        }
+
+        #[cfg(feature = "leak-detection")]
+        if self.cbufs.len() > 4096 {
+            tracing::warn!("Too many cbufs accumulated");
+        }
 
         Ok(())
     }

@@ -42,6 +42,8 @@ struct BufferInner {
 
 impl Drop for BufferInner {
     fn drop(&mut self) {
+        resource_freed();
+
         if let Some(device) = self.owner.upgrade() {
             unsafe {
                 let block = ManuallyDrop::take(self.memory_block.get_mut());
@@ -226,6 +228,8 @@ impl MappableBuffer {
         memory_block: MemoryBlock<vk1_0::DeviceMemory>,
         memory_usage: MemoryUsage,
     ) -> Self {
+        resource_allocated();
+
         MappableBuffer {
             buffer: Buffer {
                 handle,
@@ -289,6 +293,8 @@ struct ImageInner {
 
 impl Drop for ImageInner {
     fn drop(&mut self) {
+        resource_freed();
+
         match &mut self.flavor {
             ImageFlavor::DeviceImage {
                 memory_block,
@@ -361,6 +367,8 @@ impl Image {
         memory_block: MemoryBlock<vk1_0::DeviceMemory>,
         index: usize,
     ) -> Self {
+        resource_allocated();
+
         Image {
             info,
             handle,
@@ -434,6 +442,8 @@ struct ImageViewInner {
 
 impl Drop for ImageViewInner {
     fn drop(&mut self) {
+        resource_freed();
+
         if let Some(device) = self.owner.upgrade() {
             unsafe { device.destroy_image_view(self.index) }
         }
@@ -482,6 +492,8 @@ impl ImageView {
         handle: vk1_0::ImageView,
         index: usize,
     ) -> Self {
+        resource_allocated();
+
         ImageView {
             handle,
             inner: Arc::new(ImageViewInner { info, owner, index }),
@@ -519,6 +531,8 @@ pub struct Fence {
 
 impl Drop for Fence {
     fn drop(&mut self) {
+        resource_freed();
+
         if let Some(device) = self.owner.upgrade() {
             match self.state {
                 FenceState::Armed { .. } => {
@@ -586,6 +600,8 @@ impl Hash for Fence {
 
 impl Fence {
     pub(super) fn new(owner: WeakDevice, handle: vk1_0::Fence, index: usize) -> Self {
+        resource_allocated();
+
         Fence {
             owner,
             handle,
@@ -672,6 +688,8 @@ pub struct Semaphore {
 
 impl Drop for Semaphore {
     fn drop(&mut self) {
+        resource_freed();
+
         // TODO: Check there's no pending signal operations.
         if let Some(device) = self.owner.upgrade() {
             unsafe { device.destroy_semaphore(self.index) }
@@ -711,6 +729,8 @@ impl Hash for Semaphore {
 
 impl Semaphore {
     pub(super) fn new(owner: WeakDevice, handle: vk1_0::Semaphore, index: usize) -> Self {
+        resource_allocated();
+
         Semaphore {
             owner,
             handle,
@@ -747,6 +767,8 @@ struct RenderPassInner {
 
 impl Drop for RenderPassInner {
     fn drop(&mut self) {
+        resource_freed();
+
         if let Some(device) = self.owner.upgrade() {
             unsafe { device.destroy_render_pass(self.index) }
         }
@@ -794,6 +816,8 @@ impl RenderPass {
         handle: vk1_0::RenderPass,
         index: usize,
     ) -> Self {
+        resource_allocated();
+
         RenderPass {
             handle,
             inner: Arc::new(RenderPassInner { info, owner, index }),
@@ -824,6 +848,8 @@ struct SamplerInner {
 
 impl Drop for SamplerInner {
     fn drop(&mut self) {
+        resource_freed();
+
         if let Some(device) = self.owner.upgrade() {
             unsafe { device.destroy_sampler(self.index) }
         }
@@ -871,6 +897,8 @@ impl Sampler {
         handle: vk1_0::Sampler,
         index: usize,
     ) -> Self {
+        resource_allocated();
+
         Sampler {
             info,
             handle,
@@ -905,6 +933,8 @@ struct FramebufferInner {
 
 impl Drop for FramebufferInner {
     fn drop(&mut self) {
+        resource_freed();
+
         if let Some(device) = self.owner.upgrade() {
             unsafe { device.destroy_framebuffer(self.index) }
         }
@@ -952,6 +982,8 @@ impl Framebuffer {
         handle: vk1_0::Framebuffer,
         index: usize,
     ) -> Self {
+        resource_allocated();
+
         Framebuffer {
             handle,
             inner: Arc::new(FramebufferInner { info, owner, index }),
@@ -989,6 +1021,8 @@ struct ShaderModuleInner {
 
 impl Drop for ShaderModuleInner {
     fn drop(&mut self) {
+        resource_freed();
+
         if let Some(device) = self.owner.upgrade() {
             unsafe { device.destroy_shader_module(self.index) }
         }
@@ -1036,6 +1070,8 @@ impl ShaderModule {
         handle: vk1_0::ShaderModule,
         index: usize,
     ) -> Self {
+        resource_allocated();
+
         ShaderModule {
             handle,
             inner: Arc::new(ShaderModuleInner { info, owner, index }),
@@ -1074,6 +1110,8 @@ struct DescriptorSetLayoutInner {
 
 impl Drop for DescriptorSetLayoutInner {
     fn drop(&mut self) {
+        resource_freed();
+
         if let Some(device) = self.owner.upgrade() {
             unsafe {
                 device.destroy_descriptor_set_layout(self.index);
@@ -1124,6 +1162,8 @@ impl DescriptorSetLayout {
         total_count: DescriptorTotalCount,
         index: usize,
     ) -> Self {
+        resource_allocated();
+
         DescriptorSetLayout {
             handle,
             inner: Arc::new(DescriptorSetLayoutInner {
@@ -1163,6 +1203,8 @@ struct DescriptorSetInner {
 
 impl Drop for DescriptorSetInner {
     fn drop(&mut self) {
+        resource_freed();
+
         if let Some(device) = self.owner.upgrade() {
             unsafe { device.destroy_descriptor_set(ManuallyDrop::take(&mut self.set)) }
         } else {
@@ -1211,6 +1253,8 @@ impl DescriptorSet {
         owner: WeakDevice,
         set: gpu_descriptor::DescriptorSet<vk1_0::DescriptorSet>,
     ) -> Self {
+        resource_allocated();
+
         DescriptorSet {
             inner: Arc::new(DescriptorSetInner {
                 info,
@@ -1248,6 +1292,8 @@ struct PipelineLayoutInner {
 
 impl Drop for PipelineLayoutInner {
     fn drop(&mut self) {
+        resource_freed();
+
         if let Some(device) = self.owner.upgrade() {
             unsafe { device.destroy_pipeline_layout(self.index) }
         }
@@ -1295,6 +1341,8 @@ impl PipelineLayout {
         handle: vk1_0::PipelineLayout,
         index: usize,
     ) -> Self {
+        resource_allocated();
+
         PipelineLayout {
             handle,
             inner: Arc::new(PipelineLayoutInner { info, owner, index }),
@@ -1326,6 +1374,8 @@ struct ComputePipelineInner {
 
 impl Drop for ComputePipelineInner {
     fn drop(&mut self) {
+        resource_freed();
+
         if let Some(device) = self.owner.upgrade() {
             unsafe { device.destroy_pipeline(self.index) }
         }
@@ -1373,6 +1423,8 @@ impl ComputePipeline {
         handle: vk1_0::Pipeline,
         index: usize,
     ) -> Self {
+        resource_allocated();
+
         ComputePipeline {
             handle,
             inner: Arc::new(ComputePipelineInner { info, owner, index }),
@@ -1404,6 +1456,8 @@ struct GraphicsPipelineInner {
 
 impl Drop for GraphicsPipelineInner {
     fn drop(&mut self) {
+        resource_freed();
+
         if let Some(device) = self.owner.upgrade() {
             unsafe { device.destroy_pipeline(self.index) }
         }
@@ -1451,6 +1505,8 @@ impl GraphicsPipeline {
         handle: vk1_0::Pipeline,
         index: usize,
     ) -> Self {
+        resource_allocated();
+
         GraphicsPipeline {
             handle,
             inner: Arc::new(GraphicsPipelineInner { info, owner, index }),
@@ -1483,6 +1539,8 @@ struct AccelerationStructureInner {
 
 impl Drop for AccelerationStructureInner {
     fn drop(&mut self) {
+        resource_freed();
+
         if let Some(device) = self.owner.upgrade() {
             unsafe { device.destroy_acceleration_structure(self.index) }
         }
@@ -1536,6 +1594,8 @@ impl AccelerationStructure {
         address: DeviceAddress,
         index: usize,
     ) -> Self {
+        resource_allocated();
+
         AccelerationStructure {
             handle,
             address,
@@ -1569,6 +1629,8 @@ struct RayTracingPipelineInner {
 
 impl Drop for RayTracingPipelineInner {
     fn drop(&mut self) {
+        resource_freed();
+
         if let Some(device) = self.owner.upgrade() {
             unsafe { device.destroy_pipeline(self.index) }
         }
@@ -1617,6 +1679,8 @@ impl RayTracingPipeline {
         group_handlers: Arc<[u8]>,
         index: usize,
     ) -> Self {
+        resource_allocated();
+
         RayTracingPipeline {
             handle,
             inner: Arc::new(RayTracingPipelineInner {
@@ -1641,3 +1705,44 @@ impl RayTracingPipeline {
         &*self.inner.group_handlers
     }
 }
+
+#[cfg(feature = "leak-detection")]
+mod resource_counting {
+    use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
+
+    static RESOURCE_ALLOCATED: AtomicU64 = AtomicU64::new(0);
+    static RESOURCE_FREED: AtomicU64 = AtomicU64::new(0);
+
+    #[track_caller]
+    pub fn resource_allocated() {
+        let allocated = 1 + RESOURCE_ALLOCATED.fetch_add(1, Relaxed);
+        let freed = RESOURCE_FREED.load(Relaxed);
+
+        assert!(
+            allocated > freed,
+            "More resources freed ({}) than allocated ({})",
+            freed,
+            allocated
+        );
+
+        if allocated - freed > 16536 {
+            panic!("Too many resources allocated");
+        }
+    }
+
+    #[track_caller]
+    pub fn resource_freed() {
+        RESOURCE_FREED.fetch_add(1, Relaxed);
+    }
+}
+
+#[cfg(not(feature = "leak-detection"))]
+mod resource_counting {
+    #[inline(always)]
+    pub fn resource_allocated() {}
+
+    #[inline(always)]
+    pub fn resource_freed() {}
+}
+
+use self::resource_counting::{resource_allocated, resource_freed};

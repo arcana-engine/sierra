@@ -37,6 +37,15 @@ impl Epochs {
 
         let epoch = queue.cache.pop_front().unwrap_or_else(Epoch::new);
         queue.epochs.push_front(epoch);
+
+        #[cfg(feature = "leak-detection")]
+        if queue.epochs.len() > 32 {
+            tracing::warn!(
+                "Too many active epochs ({}) accumulated",
+                queue.epochs.len()
+            );
+        }
+
         queue.current - 1
     }
 
@@ -55,6 +64,14 @@ impl Epochs {
                     queue.cache.push_back(epoch);
                 }
             }
+        }
+
+        if queue.cache.len() > 64 {
+            tracing::warn!("Too large epochs cache accumulated");
+        }
+
+        if queue.cbufs.len() > 1024 {
+            tracing::warn!("Too large cbuf cache accumulated");
         }
     }
 

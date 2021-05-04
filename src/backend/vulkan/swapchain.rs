@@ -162,6 +162,8 @@ impl Swapchain {
         if self.retired.len() > 16 {
             // Too many swapchains accumulated.
             // Give resources a chance to be freed.
+
+            tracing::warn!("Too many retired swapchains. Wait device idle");
             device.wait_idle();
         }
 
@@ -174,6 +176,7 @@ impl Swapchain {
                 }
             }
 
+            tracing::trace!("Destroying retired swapchain. {} left", self.retired.len());
             unsafe {
                 // This swapchain and its images are no longer in use.
                 device.destroy_swapchain(inner.index)
