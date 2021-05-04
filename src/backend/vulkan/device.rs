@@ -1483,7 +1483,7 @@ impl Device {
                 let code = from_utf8(&info.code)?;
                 let module = naga::front::wgsl::parse_str(code).map_err(|err| {
                     CreateShaderModuleError::NagaWgslParseError {
-                        source: Box::from(err.emit_to_string()),
+                        source: Box::from(err.emit_to_string(".")),
                     }
                 })?;
                 let info = naga::valid::Validator::new(naga::valid::ValidationFlags::all())
