@@ -644,11 +644,11 @@ impl Fence {
     /// Called when device knows fence is signalled.
     pub(super) fn signalled(&mut self) -> Option<(QueueId, u64)> {
         match self.state {
-            FenceState::Signalled => {
+            FenceState::Signalled => None,
+            FenceState::Armed { queue, epoch } => {
                 self.state = FenceState::Signalled;
-                None
+                Some((queue, epoch))
             }
-            FenceState::Armed { queue, epoch } => Some((queue, epoch)),
             FenceState::UnSignalled => {
                 panic!("Fence cannot become signalled before being submitted")
             }

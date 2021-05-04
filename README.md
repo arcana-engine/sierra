@@ -7,7 +7,16 @@
 ![loc](https://img.shields.io/tokei/lines/github/zakarumych/sierra?style=for-the-badge)
 
 
-sierra crate.
+Sierra is Vulkan-lite API, focused on ease of use
+while maintaining high level of control.
+
+While resembles Vulkan in most ways,\
+sierra does both memory and descriptor allocation.
+And tracks resources usage to free them automatically once
+no references left.
+
+Sierra provides reach proc-macro system for declarative
+descriptor sets and render passes.
 
 
 ## License

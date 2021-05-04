@@ -1,5 +1,3 @@
-use lazy_static::__Deref;
-
 use {
     super::{
         encode::CommandBuffer,
@@ -9,7 +7,6 @@ use {
         },
     },
     crate::queue::QueueId,
-    erupt::DeviceLoader,
     parking_lot::Mutex,
     smallvec::SmallVec,
     std::{
@@ -177,9 +174,9 @@ impl References {
         self.images.push(image);
     }
 
-    pub fn add_image_view(&mut self, image_view: ImageView) {
-        self.image_views.push(image_view);
-    }
+    // pub fn add_image_view(&mut self, image_view: ImageView) {
+    //     self.image_views.push(image_view);
+    // }
 
     pub fn add_graphics_pipeline(&mut self, graphics_pipeline: GraphicsPipeline) {
         self.graphics_pipelines.push(graphics_pipeline);
@@ -205,17 +202,17 @@ impl References {
         self.acceleration_strucutres.push(acceleration_strucutre);
     }
 
-    pub fn add_sampler(&mut self, sampler: Sampler) {
-        self.samplers.push(sampler);
-    }
+    // pub fn add_sampler(&mut self, sampler: Sampler) {
+    //     self.samplers.push(sampler);
+    // }
 
     pub fn add_descriptor_set(&mut self, descriptor_set: DescriptorSet) {
         self.descriptor_sets.push(descriptor_set);
     }
 
-    pub fn add_fence(&mut self, fence: Fence) {
-        self.fences.push(fence);
-    }
+    // pub fn add_fence(&mut self, fence: Fence) {
+    //     self.fences.push(fence);
+    // }
 
     pub fn is_empty(&self) -> bool {
         self.buffers.is_empty()

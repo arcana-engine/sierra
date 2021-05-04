@@ -16,13 +16,12 @@ use {
     },
     erupt::{
         extensions::{khr_acceleration_structure as vkacc, khr_ray_tracing_pipeline as vkrt},
-        vk1_0, vk1_1, vk1_2,
+        vk1_0,
     },
     smallvec::SmallVec,
     std::{
         convert::TryFrom as _,
         fmt::{self, Debug},
-        sync::atomic::{AtomicU64, Ordering::Relaxed},
     },
 };
 
