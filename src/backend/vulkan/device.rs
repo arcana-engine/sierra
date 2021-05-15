@@ -1467,8 +1467,11 @@ impl Device {
                     },
                 )?;
 
-                let info = naga::valid::Validator::new(naga::valid::ValidationFlags::all())
-                    .validate(&module)?;
+                let info = naga::valid::Validator::new(
+                    naga::valid::ValidationFlags::all(),
+                    Default::default(),
+                )
+                .validate(&module)?;
 
                 spv = naga::back::spv::write_vec(
                     &module,
@@ -1486,8 +1489,11 @@ impl Device {
                         source: Box::from(err.emit_to_string(".")),
                     }
                 })?;
-                let info = naga::valid::Validator::new(naga::valid::ValidationFlags::all())
-                    .validate(&module)?;
+                let info = naga::valid::Validator::new(
+                    naga::valid::ValidationFlags::all(),
+                    Default::default(),
+                )
+                .validate(&module)?;
 
                 spv = naga::back::spv::write_vec(
                     &module,
