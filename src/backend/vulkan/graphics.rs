@@ -403,7 +403,7 @@ impl Graphics {
                 .result()
                 .map_err(|err| match err {
                     vk1_0::Result::ERROR_OUT_OF_HOST_MEMORY => out_of_host_memory(),
-                    vk1_0::Result::ERROR_OUT_OF_DEVICE_MEMORY => OutOfMemory.into(),
+                    vk1_0::Result::ERROR_OUT_OF_DEVICE_MEMORY => OutOfMemory,
                     _ => unexpected_result(err),
                 })?
             }
