@@ -61,7 +61,7 @@ pub(super) fn generate(input: &Input) -> TokenStream {
             let ty = &set.ty;
             let index = u32::try_from(index).expect("Too many sets");
             quote::quote!(
-                impl ::sierra::UpdatedPipelineDescriptors<#layout_ident> for <<#ty as ::sierra::DescriptorsInput>::Instance as ::sierra::DescriptorsInstance>::Updated {
+                impl ::sierra::UpdatedPipelineDescriptors<#layout_ident> for <<#ty as ::sierra::DescriptorsInput>::Instance as ::sierra::DescriptorsInstance<#ty>>::Updated {
                     const N: u32 = #index;
                 }
             )

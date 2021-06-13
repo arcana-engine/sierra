@@ -25,7 +25,7 @@ pub(super) fn generate(input: &Input) -> TokenStream {
             let descriptor_field = quote::format_ident!("descriptor_{}", input.member);
             let ty = &input.field.ty;
             quote::quote_spanned!(
-                input.field.ty.span()=> pub #descriptor_field: ::std::option::Option<<#ty as ::sierra::AsDescriptors>::Descriptors>,
+                input.field.ty.span()=> pub #descriptor_field: ::std::option::Option<<#ty as ::sierra::TypedDescriptorBinding>::Descriptors>,
             )
         })
         .collect();
@@ -42,11 +42,11 @@ pub(super) fn generate(input: &Input) -> TokenStream {
             let stream = quote::quote!(
                 let #write_descriptor;
                 match &elem.#descriptor_field {
-                    Some(descriptors) if sierra::AsDescriptors::eq(&input.#field, descriptors) => {
+                    Some(descriptors) if sierra::TypedDescriptorBinding::eq(&input.#field, descriptors) => {
                         #write_descriptor = false;
                     }
                     _ => {
-                        elem.#descriptor_field = Some(::sierra::AsDescriptors::get_descriptors(&input.#field, device)?);
+                        elem.#descriptor_field = Some(::sierra::TypedDescriptorBinding::get_descriptors(&input.#field, device)?);
                         #write_descriptor = true;
                     }
                 }
@@ -64,28 +64,28 @@ pub(super) fn generate(input: &Input) -> TokenStream {
             let span = input.field.ty.span();
             let descriptors = match input.desc_ty {
                 DescriptorType::Sampler(_) => Some(quote::quote_spanned! {
-                    span=> ::sierra::TypedDescriptors::<::sierra::SamplerDescriptor>::descriptors(descriptors)
+                    span=> <::sierra::SamplerDescriptor as ::sierra::TypedDescriptor>::descriptors(descriptors)
                 }),
                 DescriptorType::SampledImage(_) => Some(quote::quote_spanned! {
-                    span=> ::sierra::TypedDescriptors::<::sierra::SampledImageDescriptor>::descriptors(descriptors)
+                    span=> <::sierra::SampledImageDescriptor as ::sierra::TypedDescriptor>::descriptors(descriptors)
                 }),
                 DescriptorType::CombinedImageSampler(_) => Some(quote::quote_spanned! {
-                    span=> ::sierra::TypedDescriptors::<::sierra::CombinedImageSamplerDescriptor>::descriptors(descriptors)
+                    span=> <::sierra::CombinedImageSamplerDescriptor as ::sierra::TypedDescriptor>::descriptors(descriptors)
                 }),
                 DescriptorType::AccelerationStructure(_) => Some(quote::quote_spanned! {
-                    span=> ::sierra::TypedDescriptors::<::sierra::AccelerationStructureDescriptor>::descriptors(descriptors)
+                    span=> <::sierra::AccelerationStructureDescriptor as ::sierra::TypedDescriptor>::descriptors(descriptors)
                 }),
                 DescriptorType::Buffer(buffer::Buffer {
                     kind: buffer::Kind::Uniform,
                     ..
                 }) => Some(quote::quote_spanned! {
-                    span=> ::sierra::TypedDescriptors::<::sierra::UniformBufferDescriptor>::descriptors(descriptors)
+                    span=> <::sierra::UniformBufferDescriptor as ::sierra::TypedDescriptor>::descriptors(descriptors)
                 }),
                 DescriptorType::Buffer(buffer::Buffer {
                     kind: buffer::Kind::Storage,
                     ..
                 }) => Some(quote::quote_spanned! {
-                    span=> ::sierra::TypedDescriptors::<::sierra::StorageBufferDescriptor>::descriptors(descriptors)
+                    span=> <::sierra::StorageBufferDescriptor as ::sierra::TypedDescriptor>::descriptors(descriptors)
                 }),
             }?;
 
@@ -267,9 +267,8 @@ pub(super) fn generate(input: &Input) -> TokenStream {
             }
         }
 
-        impl ::sierra::DescriptorsInstance for #instance_ident {
+        impl ::sierra::DescriptorsInstance<#ident> for #instance_ident {
             type Updated = #elem_ident;
-            type Input = #ident;
 
             fn update<'a>(
                 &'a mut self,

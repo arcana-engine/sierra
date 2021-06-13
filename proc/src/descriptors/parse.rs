@@ -6,6 +6,7 @@ use {
         sampled_image::{parse_sampled_image_attr, SampledImage},
         sampler::{parse_sampler_attr, Sampler},
         uniform::parse_uniform_attr,
+        BindingFlag,
     },
     crate::{find_unique_attribute, stage::Stage, take_attributes},
     std::convert::TryFrom as _,
@@ -20,6 +21,7 @@ pub struct Input {
 
 pub struct Descriptor {
     pub stages: Vec<Stage>,
+    pub flags: Vec<BindingFlag>,
     pub desc_ty: DescriptorType,
     pub member: syn::Member,
     pub field: syn::Field,
@@ -159,6 +161,30 @@ fn parse_input_field(field: &mut syn::Field, field_index: u32) -> syn::Result<Op
                 .flatten()
                 .collect();
 
+            let flags: Vec<_> = if matches!(ty, FieldAttribute::Uniform) {
+                Vec::new()
+            } else {
+                take_attributes(&mut field.attrs, |attr| match attr.path.get_ident() {
+                    Some(ident) if ident == "flags" => attr
+                        .parse_args_with(|stream: syn::parse::ParseStream<'_>| {
+                            let stages = stream.parse_terminated::<_, syn::Token![,]>(
+                                |stream| match stream.parse::<syn::Ident>()? {
+                                    i if i == "UpdateAfterBind" => Ok(BindingFlag::UpdateAfterBind),
+                                    i if i == "PartiallyBound" => Ok(BindingFlag::PartiallyBound),
+                                    i if i == "UpdateUnused" => Ok(BindingFlag::UpdateUnused),
+                                    i => Err(stream.error(format!("Unrecognized flags `{}`", i))),
+                                },
+                            )?;
+                            Ok(stages)
+                        })
+                        .map(Some),
+                    _ => Ok(None),
+                })?
+                .into_iter()
+                .flatten()
+                .collect()
+            };
+
             let member = match field.ident.as_ref() {
                 None => syn::Member::Unnamed(syn::Index {
                     index: field_index,
@@ -170,30 +196,35 @@ fn parse_input_field(field: &mut syn::Field, field_index: u32) -> syn::Result<Op
             Ok(Some(match ty {
                 FieldAttribute::Sampler(value) => Field::Descriptor(Descriptor {
                     desc_ty: DescriptorType::Sampler(value),
+                    flags,
                     stages,
                     member,
                     field: field.clone(),
                 }),
                 FieldAttribute::SampledImage(value) => Field::Descriptor(Descriptor {
                     desc_ty: DescriptorType::SampledImage(value),
+                    flags,
                     stages,
                     member,
                     field: field.clone(),
                 }),
                 FieldAttribute::CombinedImageSampler(value) => Field::Descriptor(Descriptor {
                     desc_ty: DescriptorType::CombinedImageSampler(value),
+                    flags,
                     stages,
                     member,
                     field: field.clone(),
                 }),
                 FieldAttribute::Buffer(value) => Field::Descriptor(Descriptor {
                     desc_ty: DescriptorType::Buffer(value),
+                    flags,
                     stages,
                     member,
                     field: field.clone(),
                 }),
                 FieldAttribute::AccelerationStructure(value) => Field::Descriptor(Descriptor {
                     desc_ty: DescriptorType::AccelerationStructure(value),
+                    flags,
                     stages,
                     member,
                     field: field.clone(),

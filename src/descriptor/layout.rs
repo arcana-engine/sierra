@@ -13,6 +13,10 @@ bitflags::bitflags! {
         /// where set is used.
         const UPDATE_AFTER_BIND = 0x00000001;
 
+        /// Allows descriptors that are not dynamically used by
+        /// any shader invocation to be unbound.
+        const PARTIALLY_BOUND = 0x00000002;
+
         /// Allows updating descriptors in this binding that are not used.
         /// while set is bound to pending command buffer.\
         /// i.e. when shader may access other descriptors in the set.
@@ -21,11 +25,7 @@ bitflags::bitflags! {
         /// dynamically used by any shader invocation can be updated.
         /// Otherwise only descriptors that are not statically used
         /// by any shader invocation can be updated.
-        const UPDATE_UNUSED_WHILE_PENDING = 0x00000002;
-
-        /// Allows descriptors that are not dynamically used by
-        /// any shader invocation to be unbound.
-        const PARTIALLY_BOUND = 0x00000004;
+        const UPDATE_UNUSED_WHILE_PENDING = 0x00000004;
 
         /// Binding with this flag does not have descriptors count defined by layout.
         /// Instead count is specified when set instance is created.

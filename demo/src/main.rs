@@ -8,7 +8,10 @@ pub struct Descriptors {
 }
 
 #[sierra::pipeline]
-pub struct Pipeline;
+pub struct Pipeline {
+    descriptors: Descriptors,
+    sparse: sierra::SparseDescriptorSet<sierra::SampledImageDescriptor, 32>,
+}
 
 #[sierra::pass]
 #[subpass(color = target)]
@@ -79,7 +82,10 @@ fn fs_main() -> [[location(0)]] vec4<f32> {
             winit::event::Event::WindowEvent {
                 event: winit::event::WindowEvent::CloseRequested,
                 ..
-            } => *flow = winit::event_loop::ControlFlow::Exit,
+            } => {
+                device.wait_idle();
+                *flow = winit::event_loop::ControlFlow::Exit;
+            }
 
             winit::event::Event::RedrawRequested(_) => (|| -> eyre::Result<()> {
                 let mut image = swapchain.acquire_image(false)?;

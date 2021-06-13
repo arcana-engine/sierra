@@ -1,16 +1,11 @@
 use {
-    super::{AsDescriptors, Descriptors, SamplerDescriptor, TypedDescriptors},
+    super::{DescriptorBindingFlags, TypedDescriptorBinding},
     crate::{sampler::Sampler, Device, OutOfMemory},
 };
 
-impl<const N: usize> TypedDescriptors<SamplerDescriptor> for [Sampler; N] {
-    fn descriptors(&self) -> Descriptors<'_> {
-        Descriptors::Sampler(self)
-    }
-}
-
-impl AsDescriptors for Sampler {
+impl TypedDescriptorBinding for Sampler {
     const COUNT: u32 = 1;
+    const FLAGS: DescriptorBindingFlags = DescriptorBindingFlags::empty();
     type Descriptors = [Sampler; 1];
 
     #[inline]
@@ -24,8 +19,9 @@ impl AsDescriptors for Sampler {
     }
 }
 
-impl<const N: usize> AsDescriptors for [Sampler; N] {
+impl<const N: usize> TypedDescriptorBinding for [Sampler; N] {
     const COUNT: u32 = N as u32;
+    const FLAGS: DescriptorBindingFlags = DescriptorBindingFlags::empty();
     type Descriptors = [Sampler; N];
 
     #[inline]
@@ -35,14 +31,25 @@ impl<const N: usize> AsDescriptors for [Sampler; N] {
 
     #[inline]
     fn get_descriptors(&self, _device: &Device) -> Result<[Sampler; N], OutOfMemory> {
-        let mut result = arrayvec::ArrayVec::new();
+        Ok(self.clone())
+    }
+}
 
-        for me in self {
-            unsafe {
-                result.push_unchecked(me.clone());
-            }
-        }
+impl<const N: usize> TypedDescriptorBinding for arrayvec::ArrayVec<Sampler, N> {
+    const COUNT: u32 = N as u32;
+    const FLAGS: DescriptorBindingFlags = DescriptorBindingFlags::PARTIALLY_BOUND;
+    type Descriptors = arrayvec::ArrayVec<Sampler, N>;
 
-        Ok(result.into_inner().unwrap())
+    #[inline]
+    fn eq(&self, range: &arrayvec::ArrayVec<Sampler, N>) -> bool {
+        *self == *range
+    }
+
+    #[inline]
+    fn get_descriptors(
+        &self,
+        _device: &Device,
+    ) -> Result<arrayvec::ArrayVec<Sampler, N>, OutOfMemory> {
+        Ok(self.clone())
     }
 }

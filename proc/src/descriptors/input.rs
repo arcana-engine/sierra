@@ -103,6 +103,10 @@ fn generate_input_impl(input: &Input) -> TokenStream {
         impl ::sierra::DescriptorsInput for #ident {
             type Layout = #layout_ident;
             type Instance = #instance_ident;
+
+            fn layout(device: &sierra::Device) -> ::std::result::Result<Self::Layout, ::sierra::OutOfMemory> {
+                #layout_ident::new(device)
+            }
         }
     }
 }

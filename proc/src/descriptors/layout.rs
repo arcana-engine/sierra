@@ -1,6 +1,6 @@
 use {
     super::{
-        buffer,
+        buffer, combined_binding_flags_dedup,
         instance::instance_type_name,
         parse::{Descriptor, DescriptorType, Input},
     },
@@ -92,10 +92,6 @@ pub(super) fn generate(input: &Input) -> TokenStream {
         impl ::sierra::DescriptorsLayout for #layout_ident {
             type Instance = #instance_ident;
 
-            fn new(device: &::sierra::Device) -> ::std::result::Result<Self, ::sierra::OutOfMemory> {
-                Self::new(device)
-            }
-
             fn raw(&self) -> &::sierra::DescriptorSetLayout {
                 self.raw()
             }
@@ -137,6 +133,7 @@ fn generate_layout_binding(descriptor: &Descriptor, binding: u32) -> TokenStream
     };
 
     let stages = combined_stages_tokens(descriptor.stages.iter().copied());
+    let flags = combined_binding_flags_dedup(descriptor.flags.iter().copied());
 
     let ty = &descriptor.field.ty;
 
@@ -144,9 +141,9 @@ fn generate_layout_binding(descriptor: &Descriptor, binding: u32) -> TokenStream
         ::sierra::DescriptorSetLayoutBinding {
             binding: #binding,
             ty: ::sierra::DescriptorType::#desc_ty,
-            count: <#ty as ::sierra::AsDescriptors>::COUNT,
+            count: <#ty as ::sierra::TypedDescriptorBinding>::COUNT,
             stages: #stages,
-            flags: ::sierra::DescriptorBindingFlags::empty(),
+            flags: #flags,
         }
     )
 }

@@ -1,29 +1,14 @@
 use {
-    super::{
-        AsDescriptors, Descriptors, StorageBufferDescriptor, TypedDescriptors,
-        UniformBufferDescriptor,
-    },
+    super::{DescriptorBindingFlags, TypedDescriptorBinding},
     crate::{
         buffer::{Buffer, BufferRange},
         Device, OutOfMemory,
     },
 };
 
-impl<const N: usize> TypedDescriptors<UniformBufferDescriptor> for [BufferRange; N] {
-    fn descriptors(&self) -> Descriptors<'_> {
-        Descriptors::UniformBuffer(self)
-    }
-}
-
-/// Interface for all types that can be used as `UniformBuffer` or `StorageBuffer` descriptor.
-impl<const N: usize> TypedDescriptors<StorageBufferDescriptor> for [BufferRange; N] {
-    fn descriptors(&self) -> Descriptors<'_> {
-        Descriptors::StorageBuffer(self)
-    }
-}
-
-impl AsDescriptors for Buffer {
+impl TypedDescriptorBinding for Buffer {
     const COUNT: u32 = 1;
+    const FLAGS: DescriptorBindingFlags = DescriptorBindingFlags::empty();
     type Descriptors = [BufferRange; 1];
 
     #[inline]
@@ -37,8 +22,9 @@ impl AsDescriptors for Buffer {
     }
 }
 
-impl AsDescriptors for BufferRange {
+impl TypedDescriptorBinding for BufferRange {
     const COUNT: u32 = 1;
+    const FLAGS: DescriptorBindingFlags = DescriptorBindingFlags::empty();
     type Descriptors = [BufferRange; 1];
 
     #[inline]
@@ -52,8 +38,9 @@ impl AsDescriptors for BufferRange {
     }
 }
 
-impl<const N: usize> AsDescriptors for [BufferRange; N] {
+impl<const N: usize> TypedDescriptorBinding for [BufferRange; N] {
     const COUNT: u32 = N as u32;
+    const FLAGS: DescriptorBindingFlags = DescriptorBindingFlags::empty();
     type Descriptors = [BufferRange; N];
 
     #[inline]
@@ -63,14 +50,25 @@ impl<const N: usize> AsDescriptors for [BufferRange; N] {
 
     #[inline]
     fn get_descriptors(&self, _device: &Device) -> Result<[BufferRange; N], OutOfMemory> {
-        let mut result = arrayvec::ArrayVec::new();
+        Ok(self.clone())
+    }
+}
 
-        for me in self {
-            unsafe {
-                result.push_unchecked(me.clone());
-            }
-        }
+impl<const N: usize> TypedDescriptorBinding for arrayvec::ArrayVec<BufferRange, N> {
+    const COUNT: u32 = N as u32;
+    const FLAGS: DescriptorBindingFlags = DescriptorBindingFlags::PARTIALLY_BOUND;
+    type Descriptors = arrayvec::ArrayVec<BufferRange, N>;
 
-        Ok(result.into_inner().unwrap())
+    #[inline]
+    fn eq(&self, range: &arrayvec::ArrayVec<BufferRange, N>) -> bool {
+        *self == *range
+    }
+
+    #[inline]
+    fn get_descriptors(
+        &self,
+        _device: &Device,
+    ) -> Result<arrayvec::ArrayVec<BufferRange, N>, OutOfMemory> {
+        Ok(self.clone())
     }
 }
