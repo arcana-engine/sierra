@@ -1,17 +1,15 @@
-//!
 //! Sierra is Vulkan-lite API, focused on ease of use
 //! while maintaining high level of control.
 //!
 //! While resembles Vulkan in most ways,\
-//! sierra does both memory and descriptor allocation.
-//! And tracks resources usage to free them automatically once
-//! no references left.
+//! sierra does both memory and descriptor allocation automatically.
+//! Additionally sierra tracks resources usage to free them once no references left.
 //!
-//! Sierra provides reach proc-macro system for declarative
-//! descriptor sets and render passes.
-//!
+//! Sierra provides rich proc-macro system for declarative descriptor sets and render passes.
 
+// Someday this will be uncommented.
 // #![warn(missing_docs)]
+
 #![warn(missing_debug_implementations)]
 #![warn(missing_copy_implementations)]
 
@@ -531,6 +529,7 @@ where
     }
 }
 
+/// Returns minimal aligned integer not smaller than value.
 pub fn align_up<A, T>(align_mask: A, value: T) -> Option<T>
 where
     A: Align<T>,
@@ -538,6 +537,7 @@ where
     align_mask.align_up(value)
 }
 
+/// Returns maximal aligned integer not greater than value.
 pub fn align_down(align_mask: u64, value: u64) -> u64 {
     value & !align_mask
 }

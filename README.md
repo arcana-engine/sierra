@@ -11,12 +11,10 @@ Sierra is Vulkan-lite API, focused on ease of use
 while maintaining high level of control.
 
 While resembles Vulkan in most ways,\
-sierra does both memory and descriptor allocation.
-And tracks resources usage to free them automatically once
-no references left.
+sierra does both memory and descriptor allocation automatically.
+Additionally sierra tracks resources usage to free them once no references left.
 
-Sierra provides rich proc-macro system for declarative
-descriptor sets and render passes.
+Sierra provides rich proc-macro system for declarative descriptor sets and render passes.
 
 
 ## License

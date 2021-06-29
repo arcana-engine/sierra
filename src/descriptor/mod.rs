@@ -2,10 +2,10 @@ mod buffer;
 mod image;
 mod layout;
 mod sampler;
-mod sparse;
+// mod sparse;
 
 pub use {
-    self::{buffer::*, image::*, layout::*, sparse::*},
+    self::{buffer::*, image::*, layout::* /*, sparse::**/},
     crate::{backend::DescriptorSet, queue::QueueId, stage::PipelineStageFlags},
 };
 

@@ -1,10 +1,10 @@
 [package]
 name = "sierra"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2018"
-authors = ["zaq"]
+authors = ["Zakarum <zakarumych@ya.ru>"]
 license = "MIT OR Apache-2.0"
-documentation = "https://docs.rs/sierra/0.1.0"
+documentation = "https://docs.rs/sierra"
 homepage = "https://github.com/zakarumych/sierra"
 repository = "https://github.com/zakarumych/sierra"
 readme = "README.md"
@@ -17,10 +17,11 @@ serde-1 = ["serde", "serde_bytes", "smallvec/serde", "ordered-float/serde"]
 
 vulkan = ["erupt", "gpu-alloc", "gpu-alloc-erupt"]
 default = ["vulkan"]
+proc-verbose-docs = ["sierra-proc/verbose-docs"]
 
 [dependencies]
-sierra-proc = { version = "0.1.0", path = "proc" }
-layered-bitset = { version = "0.1.0", git = "https://github.com/zakarumych/layered-bitset.git" }
+sierra-proc = { version = "0.2.0", path = "proc" }
+layered-bitset = { version = "0.1.0" }
 bitflags = "1.2"
 raw-window-handle = "0.3"
 serde = { version = "1.0", optional = true, features = ["derive", "rc"] }

@@ -148,6 +148,9 @@ impl Drop for Inner {
     }
 }
 
+/// Weak reference to the device.
+/// Must be upgraded to strong referece before use.
+/// Upgrade will fail if last strong reference to device was dropped.
 #[derive(Clone)]
 #[repr(transparent)]
 pub struct WeakDevice {
@@ -164,10 +167,12 @@ impl Debug for WeakDevice {
 }
 
 impl WeakDevice {
+    /// Upgrades to strong reference.
     pub fn upgrade(&self) -> Option<Device> {
         self.inner.upgrade().map(|inner| Device { inner })
     }
 
+    /// Checks if this reference points to the same device.
     pub fn is(&self, device: &Device) -> bool {
         self.inner.as_ptr() == &*device.inner
     }
@@ -286,6 +291,7 @@ impl Device {
         }
     }
 
+    /// Returns graphics associated with the device instance.
     pub fn graphics(&self) -> &'static Graphics {
         unsafe {
             // Device can be created only via Graphics instance.
@@ -293,7 +299,8 @@ impl Device {
         }
     }
 
-    pub(crate) fn downgrade(&self) -> WeakDevice {
+    /// Returns weak reference to this device.
+    pub fn downgrade(&self) -> WeakDevice {
         WeakDevice {
             inner: Arc::downgrade(&self.inner),
         }
@@ -1432,6 +1439,7 @@ impl Device {
         self.inner.logical.destroy_semaphore(Some(handle), None);
     }
 
+    /// Creates new shader module from shader's code.
     #[tracing::instrument]
     pub fn create_shader_module(
         &self,
@@ -1631,6 +1639,7 @@ impl Device {
         }
     }
 
+    /// Checks if fence is in signalled state.
     #[tracing::instrument]
     pub fn is_fence_signalled(&self, fence: &mut Fence) -> bool {
         assert_owner!(fence, *self);
@@ -1721,6 +1730,7 @@ impl Device {
         }
     }
 
+    /// Returns memory size requirements for accelelration structure build operations.
     #[tracing::instrument]
     pub fn get_acceleration_structure_build_sizes(
         &self,
@@ -1921,6 +1931,7 @@ impl Device {
         }
     }
 
+    /// Returns device address of acceleration strucutre.
     #[tracing::instrument]
     pub fn get_acceleration_structure_device_address(
         &self,
@@ -1930,6 +1941,7 @@ impl Device {
         acceleration_structure.address()
     }
 
+    /// Creates ray-tracing pipeline.
     #[tracing::instrument]
     pub fn create_ray_tracing_pipeline(
         &self,
