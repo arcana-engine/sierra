@@ -58,10 +58,6 @@ impl Surface {
         }
     }
 
-    pub(crate) fn mark_unused(&self) {
-        self.inner.used.fetch_or(false, Ordering::SeqCst);
-    }
-
     pub fn info(&self) -> &SurfaceInfo {
         &self.inner.info
     }
