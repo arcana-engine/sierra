@@ -5,8 +5,8 @@ authors = ["Zakarum <zakarumych@ya.ru>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
 documentation = "https://docs.rs/sierra-proc-demo/0.1.0"
-homepage = "https://github.com/zaq/sierra"
-repository = "https://github.com/zaq/sierra"
+homepage = "https://github.com/zakarumych/sierra"
+repository = "https://github.com/zakarumych/sierra"
 description = "Demonstrates sierra's code generation abilities"
 
 [dependencies]
