@@ -460,6 +460,7 @@ pub fn arith_ge<T>(lhs: impl OrdArith<T>, rhs: T) -> bool {
 
 /// Handles host OOM the same way global allocator does.
 /// This function should be called on host OOM error returned from Vulkan API.
+#[track_caller]
 pub fn out_of_host_memory() -> ! {
     use std::alloc::{handle_alloc_error, Layout};
 

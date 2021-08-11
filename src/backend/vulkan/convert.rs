@@ -595,7 +595,6 @@ impl ToErupt<PresentModeKHR> for PresentMode {
 }
 
 #[track_caller]
-
 pub(crate) fn oom_error_from_erupt(err: vk1_0::Result) -> OutOfMemory {
     match err {
         vk1_0::Result::ERROR_OUT_OF_HOST_MEMORY => out_of_host_memory(),

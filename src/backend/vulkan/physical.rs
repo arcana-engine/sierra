@@ -27,7 +27,7 @@ use {
         vk1_0, vk1_1, vk1_2, DeviceLoader, ExtendableFrom as _, LoaderError,
     },
     smallvec::SmallVec,
-    std::{collections::HashMap, convert::TryInto as _, ffi::CStr, sync::Arc},
+    std::{collections::HashMap, convert::TryInto as _, ffi::CStr, num::NonZeroU32, sync::Arc},
 };
 
 #[derive(Clone, Debug)]
@@ -909,10 +909,20 @@ pub fn surface_capabilities(
         .filter_map(|sf| from_erupt(sf.format))
         .collect::<Vec<_>>();
 
+    assert_ne!(
+        caps.min_image_count, 0,
+        "VkSurfaceCapabilitiesKHR.minImageCount must not be 0"
+    );
+
+    assert!(
+        (caps.max_image_count == 0) || (caps.max_image_count >= caps.min_image_count),
+        "VkSurfaceCapabilitiesKHR.maxImageCount must be 0 or not less than minImageCount"
+    );
+
     Ok(SurfaceCapabilities {
         supported_families,
-        min_image_count: caps.min_image_count,
-        max_image_count: caps.max_image_count,
+        min_image_count: NonZeroU32::new(caps.min_image_count).unwrap(),
+        max_image_count: NonZeroU32::new(caps.max_image_count),
         current_extent: from_erupt(caps.current_extent),
         current_transform: from_erupt(caps.current_transform.bitmask()),
         min_image_extent: from_erupt(caps.min_image_extent),

@@ -23,6 +23,7 @@ use erupt::{
 use std::{
     collections::VecDeque,
     convert::TryInto as _,
+    num::NonZeroU32,
     sync::{
         atomic::{AtomicU32, AtomicU64, Ordering::*},
         Arc,
@@ -120,6 +121,8 @@ impl Swapchain {
         let instance = &device.graphics().instance;
         let surface_capabilities =
             surface_capabilities(instance, device.physical(), surface.handle())?;
+
+        tracing::info!("{:#?}", surface_capabilities);
 
         if surface_capabilities.supported_families.is_empty() {
             return Err(SurfaceError::NotSupported);
@@ -259,7 +262,10 @@ impl Swapchain {
             logical.create_swapchain_khr(
                 &vksw::SwapchainCreateInfoKHRBuilder::new()
                     .surface(surface)
-                    .min_image_count(3.min(caps.max_image_count).max(caps.min_image_count))
+                    .min_image_count(3.clamp(
+                        caps.min_image_count.get(),
+                        caps.max_image_count.map(NonZeroU32::get).unwrap_or(3),
+                    ))
                     .image_format(sf.format)
                     .image_color_space(sf.color_space)
                     .image_extent(caps.current_extent.to_erupt())
@@ -354,7 +360,7 @@ impl Swapchain {
         let index = loop {
             if let Some(inner) = self.inner.as_mut() {
                 if inner.acquired_counter.load(Acquire)
-                    >= (inner.images.len() as u32 - self.surface_capabilities.min_image_count)
+                    >= (inner.images.len() as u32 - self.surface_capabilities.min_image_count.get())
                 {
                     return Err(SurfaceError::TooManyAcquired);
                 }
