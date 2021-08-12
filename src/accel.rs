@@ -237,6 +237,7 @@ impl Default for TransformMatrix {
     }
 }
 
+/// Structure expected by device in buffer range specified by [`AccelerationStructureGeometry::AABBs`].
 #[derive(Clone, Copy, Debug)]
 #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 #[repr(align(8))]
@@ -314,6 +315,7 @@ impl Default for InstanceShaderBindingOffsetAndFlags {
     }
 }
 
+/// Structure expected by device in buffer range specified by [`AccelerationStructureGeometry::Instances`].
 #[derive(Clone, Copy, Debug)]
 #[repr(align(16))]
 #[repr(C)]

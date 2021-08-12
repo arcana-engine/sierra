@@ -7,10 +7,17 @@ use crate::{
     CreateImageError, CreateRenderPassError, Device, Extent2d, OutOfMemory,
 };
 
+/// Defines [`Framebuffer`] state.
+/// Can be used to [`Device::create_framebuffer`].
 #[derive(Clone, Debug, Hash)]
 pub struct FramebufferInfo {
+    /// [`RenderPass`] with which framebuffer can be used.
     pub render_pass: RenderPass,
+
+    /// [`ImageView`]s that will be used as attachments for render pass started with framebuffer.
     pub attachments: Vec<ImageView>,
+
+    /// Specifies dimensions of the rendering operations over framebuffer.
     pub extent: Extent2d,
 }
 
@@ -23,10 +30,21 @@ pub trait Attachment {
     /// Format for this attachment.
     fn format(&self) -> Format;
 
+    /// Returns if this attachment is equivalent to image view.
+    ///
+    /// They are considered equivalent if replacing image
+    /// view with new one from this attachment will make no difference.
+    ///
+    /// Mainly there are thee possibilities:
+    /// 1. Attachment is `ImageView`, in which case they equivalent only if same.
+    /// 2. Attachment is `Image`, in which case any `ImageView` with same sub-resource from this image is equivalent.
+    /// 3. Attachment is just bunch of properties (e.g. `Format`), in which case any `ImageView` with matching properties is equivalent.
     fn eq(&self, view: &ImageView) -> bool;
 
+    /// Maximum extend of the image view that can be make for this attachment.
     fn max_extent(&self) -> Extent2d;
 
+    /// Returns image view with specified usage and extent for this attachment.
     fn get_view(
         &self,
         device: &Device,

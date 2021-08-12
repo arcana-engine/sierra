@@ -87,6 +87,7 @@ impl SwapchainImage<'_> {
 }
 
 impl Drop for SwapchainImage<'_> {
+    #[track_caller]
     fn drop(&mut self) {
         // Report usage error unless this happens due to unwinding.
         if !std::thread::panicking() {
@@ -199,7 +200,7 @@ impl Swapchain {
                 }
             }
 
-            tracing::trace!("Destroying retired swapchain. {} left", self.retired.len());
+            tracing::debug!("Destroying retired swapchain. {} left", self.retired.len());
             unsafe {
                 // This swapchain and its images are no longer in use.
                 device.destroy_swapchain(inner.index)
@@ -298,7 +299,6 @@ impl Swapchain {
                     .composite_alpha(vks::CompositeAlphaFlagBitsKHR(composite_alpha.bits()))
                     .present_mode(erupt_mode)
                     .old_swapchain(old_swapchain),
-                None,
                 None,
             )
         }
@@ -409,7 +409,6 @@ impl Swapchain {
                     !0, /* wait indefinitely. This is OK as we never try to
                          * acquire more images than there is in swapchain. */
                     Some(wait.handle()),
-                    None,
                     None,
                 )
             };

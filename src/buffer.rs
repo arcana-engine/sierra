@@ -8,25 +8,52 @@ use crate::{
 };
 
 bitflags::bitflags! {
+    /// Flags to specify allowed usages for buffer.
     #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
     pub struct BufferUsage: u32 {
+        /// Buffer with this usage flag can be used as source for various transfer operations.
         const TRANSFER_SRC = 0x00000001;
+
+        /// Buffer with this usage flag can be used as destination for various transfer operations.
         const TRANSFER_DST = 0x00000002;
+
+        /// Buffer with this usage flag can used as `UniformTexel` descriptor.
         const UNIFORM_TEXEL = 0x00000004;
+
+        /// Buffer with this usage flag can used as `StorageTexel` descriptor.
         const STORAGE_TEXEL = 0x00000008;
+
+        /// Buffer with this usage flag can used as `Uniform` descriptor.
         const UNIFORM = 0x00000010;
+
+        /// Buffer with this usage flag can used as `Storage` descriptor.
         const STORAGE = 0x00000020;
+
+        /// Buffer with this usage flag can used in `bind_index_buffer` encoder method.
         const INDEX = 0x00000040;
+
+        /// Buffer with this usage flag can used in `bind_vertex_buffers` encoder method.
         const VERTEX = 0x00000080;
+
+        /// Buffer with this usage flag can used for indirect drawing.
         const INDIRECT = 0x00000100;
+
+        /// Buffer with this usage flag can used for conditional rendering.
         const CONDITIONAL_RENDERING = 0x00000200;
+
+        /// Buffer with this usage flag can used as input for acceleration structure build.
         const ACCELERATION_STRUCTURE_BUILD_INPUT = 0x00000400;
+
+        /// Buffer with this usage flag can used to store acceleration structure.
         const ACCELERATION_STRUCTURE_STORAGE = 0x00000800;
+
+        /// Buffer with this usage flag can used to specify shader binding table.
         const SHADER_BINDING_TABLE = 0x00001000;
         const TRANSFORM_FEEDBACK = 0x00002000;
         const TRANSFORM_FEEDBACK_COUNTER = 0x00004000;
+
+        /// Buffer with this usage flag can be used to retrieve a buffer device address.
         const DEVICE_ADDRESS = 0x0008000;
-        const TRANSIENT = 0x0010000;
     }
 }
 

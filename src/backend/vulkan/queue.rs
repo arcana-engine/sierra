@@ -80,7 +80,6 @@ impl Queue {
                                 .flags(vk1_0::CommandPoolCreateFlags::RESET_COMMAND_BUFFER)
                                 .queue_family_index(self.id.family as u32),
                             None,
-                            None,
                         )
                     }
                     .result()

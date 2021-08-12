@@ -374,9 +374,9 @@ impl FromErupt<vk1_0::ImageUsageFlags> for ImageUsage {
             result |= ImageUsage::DEPTH_STENCIL_ATTACHMENT;
         }
 
-        if usage.contains(vk1_0::ImageUsageFlags::TRANSIENT_ATTACHMENT) {
-            result |= ImageUsage::TRANSIENT_ATTACHMENT;
-        }
+        // if usage.contains(vk1_0::ImageUsageFlags::TRANSIENT_ATTACHMENT) {
+        //     result |= ImageUsage::TRANSIENT_ATTACHMENT;
+        // }
 
         if usage.contains(vk1_0::ImageUsageFlags::INPUT_ATTACHMENT) {
             result |= ImageUsage::INPUT_ATTACHMENT;
@@ -414,9 +414,9 @@ impl ToErupt<vk1_0::ImageUsageFlags> for ImageUsage {
             result |= vk1_0::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT;
         }
 
-        if self.contains(ImageUsage::TRANSIENT_ATTACHMENT) {
-            result |= vk1_0::ImageUsageFlags::TRANSIENT_ATTACHMENT;
-        }
+        // if self.contains(ImageUsage::TRANSIENT_ATTACHMENT) {
+        //     result |= vk1_0::ImageUsageFlags::TRANSIENT_ATTACHMENT;
+        // }
 
         if self.contains(ImageUsage::INPUT_ATTACHMENT) {
             result |= vk1_0::ImageUsageFlags::INPUT_ATTACHMENT;
@@ -1053,12 +1053,6 @@ impl ToErupt<vk1_0::SampleCountFlagBits> for Samples {
     }
 }
 
-// pub(crate) fn memory_usage_to_tvma(
-//     usage: MemoryUsage,
-// ) -> tvma::UsageFlags {
-//     tvma::UsageFlags::from_bits_truncate(usage.bits())
-// }
-
 pub(crate) fn buffer_memory_usage_to_gpu_alloc(
     buffer_usage: BufferUsage,
     memory_usage: Option<MemoryUsage>,
@@ -1067,9 +1061,6 @@ pub(crate) fn buffer_memory_usage_to_gpu_alloc(
 
     let mut result = gpu_alloc::UsageFlags::empty();
 
-    if buffer_usage.contains(BufferUsage::TRANSIENT) {
-        result |= UsageFlags::TRANSIENT;
-    }
     if buffer_usage.contains(BufferUsage::DEVICE_ADDRESS) {
         result |= UsageFlags::DEVICE_ADDRESS;
     }
@@ -1084,17 +1075,9 @@ pub(crate) fn buffer_memory_usage_to_gpu_alloc(
         if memory_usage.contains(MemoryUsage::FAST_DEVICE_ACCESS) {
             result |= UsageFlags::FAST_DEVICE_ACCESS;
         }
-    }
-    result
-}
-
-pub(crate) fn image_memory_usage_to_gpu_alloc(image_usage: ImageUsage) -> gpu_alloc::UsageFlags {
-    use gpu_alloc::UsageFlags;
-
-    let mut result = gpu_alloc::UsageFlags::empty();
-
-    if image_usage.contains(ImageUsage::TRANSIENT) {
-        result |= UsageFlags::TRANSIENT;
+        if memory_usage.contains(MemoryUsage::TRANSIENT) {
+            result |= UsageFlags::TRANSIENT;
+        }
     }
     result
 }

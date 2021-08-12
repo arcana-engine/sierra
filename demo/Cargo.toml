@@ -10,7 +10,7 @@ repository = "https://github.com/zakarumych/sierra"
 description = "Demonstrates sierra's code generation abilities"
 
 [dependencies]
-sierra = { version = "0.2.0", path = "..", features = ["proc-verbose-docs"] }
+sierra = { version = "0.3.0", path = "..", features = ["proc-verbose-docs"] }
 bumpalo = "3.6"
 eyre = "0.6"
 color-eyre = "0.5"

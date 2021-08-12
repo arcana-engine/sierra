@@ -17,25 +17,40 @@ use {
 };
 
 bitflags::bitflags! {
+    /// Flags to specify allowed usages for image.
     #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
     pub struct ImageUsage: u32 {
+        /// Image with this usage flag can be used as source for various transfer operations.
         const TRANSFER_SRC =                0x001;
+
+        /// Image with this usage flag can be used as destination for various transfer operations.
         const TRANSFER_DST =                0x002;
+
+        /// Image with this usage flag can be used as `SampledImage` descriptor.
         const SAMPLED =                     0x004;
+
+        /// Image with this usage flag can be used as `StorageImage` descriptor.
         const STORAGE =                     0x008;
+
+        /// Image with this usage flag can be used as color attachment in render passes.
         const COLOR_ATTACHMENT =            0x010;
+
+        /// Image with this usage flag can be used as depth-stencil attachment in render passes.
         const DEPTH_STENCIL_ATTACHMENT =    0x020;
-        const TRANSIENT_ATTACHMENT =        0x040;
+
+        /// Image with this usage flag can be used as input attachment in render passes.
         const INPUT_ATTACHMENT =            0x080;
-        const TRANSIENT =                   0x100;
     }
 }
 
 impl ImageUsage {
+    /// Returns `true` if image with this usage flags can be used as render target, either color or depth.
     pub fn is_render_target(self) -> bool {
         self.intersects(Self::COLOR_ATTACHMENT | Self::DEPTH_STENCIL_ATTACHMENT)
     }
 
+    /// Returns `true` if image with this usage flags can be used as render target, either color or depth,
+    /// and no other usage is allowed.
     pub fn is_render_target_only(self) -> bool {
         self.is_render_target()
             && !self.intersects(
@@ -47,6 +62,8 @@ impl ImageUsage {
             )
     }
 
+    /// Returns `true` if no mutable usages allowed.
+    /// Content still can be modified through memory mapping.
     pub fn is_read_only(self) -> bool {
         !self.intersects(
             Self::TRANSFER_DST

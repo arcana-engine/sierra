@@ -24,7 +24,8 @@ use {
             khr_surface as vks,
             khr_swapchain::KHR_SWAPCHAIN_EXTENSION_NAME,
         },
-        vk1_0, vk1_1, vk1_2, DeviceLoader, ExtendableFrom as _, LoaderError,
+        vk1_0, vk1_1, vk1_2, DeviceLoader, ExtendableFromConst as _, ExtendableFromMut as _,
+        LoaderError,
     },
     smallvec::SmallVec,
     std::{collections::HashMap, convert::TryInto as _, ffi::CStr, num::NonZeroU32, sync::Arc},
@@ -90,14 +91,14 @@ unsafe fn collect_propeties_and_features(
     let mut features_acc = vkacc::PhysicalDeviceAccelerationStructureFeaturesKHRBuilder::new();
     let mut features_rt = vkrt::PhysicalDeviceRayTracingPipelineFeaturesKHRBuilder::new();
 
-    if graphics.version >= vk1_0::make_version(1, 1, 0) {
+    if graphics.version >= vk1_0::make_api_version(0, 1, 1, 0) {
         let mut properties2 = vk1_1::PhysicalDeviceProperties2Builder::new();
         let mut features2 = vk1_1::PhysicalDeviceFeatures2Builder::new();
 
         properties2 = properties2.extend_from(&mut properties11);
         features2 = features2.extend_from(&mut features11);
 
-        if graphics.version >= vk1_0::make_version(1, 2, 0) {
+        if graphics.version >= vk1_0::make_api_version(0, 1, 2, 0) {
             properties2 = properties2.extend_from(&mut properties12);
             features2 = features2.extend_from(&mut features12);
         }
@@ -123,13 +124,9 @@ unsafe fn collect_propeties_and_features(
         properties10 = properties2.properties;
         features10 = features2.features;
     } else {
-        properties10 = graphics
-            .instance
-            .get_physical_device_properties(physical, None);
+        properties10 = graphics.instance.get_physical_device_properties(physical);
 
-        features10 = graphics
-            .instance
-            .get_physical_device_features(physical, None);
+        features10 = graphics.instance.get_physical_device_features(physical);
     }
 
     let family_properties = graphics
@@ -138,7 +135,7 @@ unsafe fn collect_propeties_and_features(
 
     let memory_properties = graphics
         .instance
-        .get_physical_device_memory_properties(physical, None);
+        .get_physical_device_memory_properties(physical);
 
     let mut properties = Properties {
         extension: extension_properties,
@@ -701,13 +698,13 @@ impl PhysicalDevice {
 
         let version = self.graphics().version;
 
-        if version < vk1_0::make_version(1, 1, 0) {
+        if version < vk1_0::make_api_version(0, 1, 1, 0) {
             device_create_info = device_create_info.enabled_features(&features2.features);
             assert!(!include_features11);
             assert!(!include_features12);
             assert!(!include_features_rt);
         } else {
-            if version < vk1_0::make_version(1, 2, 0) {
+            if version < vk1_0::make_api_version(0, 1, 2, 0) {
                 assert!(!include_features12);
             }
 
@@ -736,7 +733,8 @@ impl PhysicalDevice {
 
         let instance = &self.graphics().instance;
 
-        let result = DeviceLoader::new(instance, self.physical, &device_create_info, None);
+        let result =
+            unsafe { DeviceLoader::new(instance, self.physical, &device_create_info, None) };
 
         let logical = match result {
             Err(LoaderError::SymbolNotAvailable) => {
@@ -788,8 +786,7 @@ impl PhysicalDevice {
                         .map(|index| {
                             let index = index.try_into().unwrap();
                             let family = family.try_into().unwrap();
-                            let queue =
-                                unsafe { device.logical().get_device_queue(index, family, None) };
+                            let queue = unsafe { device.logical().get_device_queue(index, family) };
 
                             Queue::new(
                                 queue,
@@ -868,7 +865,6 @@ pub fn surface_capabilities(
                     physical,
                     f.try_into().unwrap(),
                     surface,
-                    None,
                 )
             }
             .result()
@@ -894,10 +890,9 @@ pub fn surface_capabilities(
         .filter_map(from_erupt)
         .collect::<Vec<_>>();
 
-    let caps =
-        unsafe { instance.get_physical_device_surface_capabilities_khr(physical, surface, None) }
-            .result()
-            .map_err(surface_error_from_erupt)?;
+    let caps = unsafe { instance.get_physical_device_surface_capabilities_khr(physical, surface) }
+        .result()
+        .map_err(surface_error_from_erupt)?;
 
     let formats =
         unsafe { instance.get_physical_device_surface_formats_khr(physical, surface, None) }

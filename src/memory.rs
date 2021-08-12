@@ -17,8 +17,11 @@ bitflags::bitflags! {
         /// Implies `HOST_ACCESS` flag.
         const UPLOAD = 0x08;
 
-        /// Hints for device to find memory with fast device access.
+        /// Hints allocator to find memory with fast device access.
         const FAST_DEVICE_ACCESS = 0x10;
+
+        /// Hits allocator that memory will be released shortly.
+        const TRANSIENT = 0x20;
     }
 }
 

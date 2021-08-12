@@ -2,8 +2,7 @@ use {
     super::{
         access::supported_access,
         convert::{
-            buffer_memory_usage_to_gpu_alloc, from_erupt, image_memory_usage_to_gpu_alloc,
-            oom_error_from_erupt, ToErupt as _,
+            buffer_memory_usage_to_gpu_alloc, from_erupt, oom_error_from_erupt, ToErupt as _,
         },
         device_lost,
         epochs::Epochs,
@@ -59,7 +58,7 @@ use {
             khr_acceleration_structure as vkacc, khr_ray_tracing_pipeline as vkrt,
             khr_swapchain as vksw,
         },
-        vk1_0, vk1_2, DeviceLoader, ExtendableFrom as _,
+        vk1_0, vk1_2, DeviceLoader, ExtendableFromConst as _,
     },
     gpu_alloc::{GpuAllocator, MemoryBlock},
     gpu_alloc_erupt::EruptMemoryDevice,
@@ -149,7 +148,7 @@ impl Drop for Inner {
 }
 
 /// Weak reference to the device.
-/// Must be upgraded to strong referece before use.
+/// Must be upgraded to strong reference before use.
 /// Upgrade will fail if last strong reference to device was dropped.
 #[derive(Clone)]
 #[repr(transparent)]
@@ -202,9 +201,7 @@ impl PartialEq<WeakDevice> for &'_ Device {
     }
 }
 
-/// Opaque value that represents graphics API device.
-/// It is used to manage (create, destroy, check state) most of the device
-/// resources.
+/// Handle to abstract device that can execute graphics, compute and ray-tracing pipelines.
 #[derive(Clone)]
 #[repr(transparent)]
 pub struct Device {
@@ -291,7 +288,7 @@ impl Device {
         }
     }
 
-    /// Returns graphics associated with the device instance.
+    /// Returns [`Graphics`] associated with the device instance.
     pub fn graphics(&self) -> &'static Graphics {
         unsafe {
             // Device can be created only via Graphics instance.
@@ -338,17 +335,12 @@ impl Device {
                     .usage(info.usage.to_erupt())
                     .sharing_mode(vk1_0::SharingMode::EXCLUSIVE),
                 None,
-                None,
             )
         }
         .result()
         .map_err(oom_error_from_erupt)?;
 
-        let reqs = unsafe {
-            self.inner
-                .logical
-                .get_buffer_memory_requirements(handle, None)
-        };
+        let reqs = unsafe { self.inner.logical.get_buffer_memory_requirements(handle) };
 
         debug_assert!(reqs.alignment.is_power_of_two());
 
@@ -414,13 +406,13 @@ impl Device {
         ))
     }
 
-    /// Creates static buffer with preinitialized content from `data`.
+    /// Creates static buffer pre-initialized with content from [`data`].
     /// Implies `MemoryUsage::Device`.
     ///
     /// # Panics
     ///
-    /// Function will panic if creating buffer size does not equal data size.
-    /// E.g. if `info.size != std::mem::size_of(data)`.
+    /// Function will panic if specified buffer size does not equal data size.
+    /// i.e. if `info.size != std::mem::size_of(data)`.
     #[tracing::instrument(skip(data))]
     pub fn create_buffer_static<T: 'static>(
         &self,
@@ -431,6 +423,7 @@ impl Device {
         T: Pod,
     {
         assert!(info.is_valid());
+
         if arith_ne(info.size, size_of_val(data)) {
             panic!(
                 "Buffer size {} does not match data size {}",
@@ -485,14 +478,14 @@ impl Device {
         self.inner.logical.destroy_buffer(Some(handle), None);
     }
 
-    /// Creates a fence.
-    /// Fences are create in unsignaled state.
+    /// Returns handle to newly created [`Fence`].
+    /// Fences are create in un-signaled state.
     #[tracing::instrument]
     pub fn create_fence(&self) -> Result<Fence, OutOfMemory> {
         let fence = unsafe {
             self.inner
                 .logical
-                .create_fence(&vk1_0::FenceCreateInfoBuilder::new(), None, None)
+                .create_fence(&vk1_0::FenceCreateInfoBuilder::new(), None)
         }
         .result()
         .map_err(oom_error_from_erupt)?;
@@ -508,7 +501,7 @@ impl Device {
         self.inner.logical.destroy_fence(Some(handle), None);
     }
 
-    /// Creates framebuffer for specified render pass from views.
+    /// Returns handle to newly created [`Framebuffer`].
     #[tracing::instrument]
     pub fn create_framebuffer(&self, info: FramebufferInfo) -> Result<Framebuffer, OutOfMemory> {
         for view in &info.attachments {
@@ -547,7 +540,6 @@ impl Device {
                     .width(info.extent.width)
                     .height(info.extent.height)
                     .layers(1),
-                None,
                 None,
             )
         }
@@ -969,17 +961,12 @@ impl Device {
                     .sharing_mode(vk1_0::SharingMode::EXCLUSIVE)
                     .initial_layout(vk1_0::ImageLayout::UNDEFINED),
                 None,
-                None,
             )
         }
         .result()
         .map_err(oom_error_from_erupt)?;
 
-        let reqs = unsafe {
-            self.inner
-                .logical
-                .get_image_memory_requirements(image, None)
-        };
+        let reqs = unsafe { self.inner.logical.get_image_memory_requirements(image) };
 
         debug_assert!(reqs.alignment.is_power_of_two());
 
@@ -993,7 +980,7 @@ impl Device {
                         size: reqs.size,
                         align_mask: reqs.alignment - 1,
                         memory_types: reqs.memory_type_bits,
-                        usage: image_memory_usage_to_gpu_alloc(info.usage),
+                        usage: gpu_alloc::UsageFlags::empty(),
                     },
                 )
                 .map_err(|err| {
@@ -1196,7 +1183,6 @@ impl Device {
                             .build(),
                     ),
                 None,
-                None,
             )
         }
         .result()
@@ -1245,7 +1231,6 @@ impl Device {
                             })
                             .collect::<SmallVec<[_; 16]>>(),
                     ),
-                None,
                 None,
             )
         }
@@ -1394,7 +1379,7 @@ impl Device {
         let render_pass = unsafe {
             self.inner
                 .logical
-                .create_render_pass(&render_passs_create_info, None, None)
+                .create_render_pass(&render_passs_create_info, None)
         }
         .result()
         .map_err(create_render_pass_error_from_erupt)?;
@@ -1412,11 +1397,9 @@ impl Device {
 
     pub(crate) fn create_semaphore_raw(&self) -> Result<(vk1_0::Semaphore, usize), vk1_0::Result> {
         let semaphore = unsafe {
-            self.inner.logical.create_semaphore(
-                &vk1_0::SemaphoreCreateInfoBuilder::new(),
-                None,
-                None,
-            )
+            self.inner
+                .logical
+                .create_semaphore(&vk1_0::SemaphoreCreateInfoBuilder::new(), None)
         }
         .result()?;
 
@@ -1578,7 +1561,6 @@ impl Device {
             // Othewise adheres to valid usage described in spec.
             self.inner.logical.create_shader_module(
                 &vk1_0::ShaderModuleCreateInfoBuilder::new().code(code_slice),
-                None,
                 None,
             )
         }
@@ -1838,7 +1820,6 @@ impl Device {
                     vkacc::AccelerationStructureBuildTypeKHR::DEVICE_KHR,
                     &build_info,
                     &max_primitive_counts,
-                    None,
                 )
         };
 
@@ -1873,7 +1854,6 @@ impl Device {
                     .offset(info.region.offset)
                     .size(info.region.size)
                     .buffer(info.region.buffer.handle()),
-                None,
                 None,
             )
         }
@@ -2121,7 +2101,7 @@ impl Device {
         &self,
         info: DescriptorSetLayoutInfo,
     ) -> Result<DescriptorSetLayout, OutOfMemory> {
-        let handle = if vk1_0::make_version(1, 2, 0) > self.inner.version {
+        let handle = if vk1_0::make_api_version(0, 1, 2, 0) > self.inner.version {
             assert!(
                 info.bindings.iter().all(|binding| binding.flags.is_empty()),
                 "Vulkan 1.2 is required for non-empty `DescriptorBindingFlags`",
@@ -2163,7 +2143,6 @@ impl Device {
                         )
                         .flags(info.flags.to_erupt()),
                     None,
-                    None,
                 )
             }
         } else {
@@ -2196,7 +2175,7 @@ impl Device {
 
                 self.inner
                     .logical
-                    .create_descriptor_set_layout(&create_info, None, None)
+                    .create_descriptor_set_layout(&create_info, None)
             }
         }
         .result()
@@ -2569,7 +2548,6 @@ impl Device {
                             .max_lod(info.max_lod.into_inner())
                             .border_color(info.border_color.to_erupt())
                             .unnormalized_coordinates(info.unnormalized_coordinates),
-                        None,
                         None,
                     )
                 }

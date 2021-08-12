@@ -15,7 +15,7 @@ use {
             ext_debug_utils::EXT_DEBUG_UTILS_EXTENSION_NAME,
             khr_surface::KHR_SURFACE_EXTENSION_NAME,
         },
-        utils::loading::{DefaultEntryLoader, EntryLoaderError},
+        utils::loading::{EntryLoader, EntryLoaderError},
         vk1_0, InstanceLoader, LoaderError,
     },
     once_cell::sync::OnceCell,
@@ -61,7 +61,7 @@ use erupt::extensions::ext_metal_surface::{
 pub struct Graphics {
     pub(crate) instance: InstanceLoader,
     pub(crate) version: u32,
-    _entry: DefaultEntryLoader,
+    _entry: EntryLoader,
 }
 
 static GLOBAL_GRAPHICS: OnceCell<Graphics> = OnceCell::new();
@@ -110,7 +110,7 @@ impl Graphics {
     fn new() -> Result<Self, InitError> {
         tracing::trace!("Init erupt graphisc implementation");
 
-        let entry = DefaultEntryLoader::new()?;
+        let entry = EntryLoader::new()?;
 
         let version = entry.instance_version();
 
@@ -230,21 +230,23 @@ impl Graphics {
             }
         }
 
-        let result = InstanceLoader::new(
-            &entry,
-            &vk1_0::InstanceCreateInfoBuilder::new()
-                .application_info(
-                    &vk1_0::ApplicationInfoBuilder::new()
-                        .engine_name(CStr::from_bytes_with_nul(b"Illume\0").unwrap())
-                        .engine_version(1)
-                        .application_name(CStr::from_bytes_with_nul(b"IllumeApp\0").unwrap())
-                        .application_version(1)
-                        .api_version(version),
-                )
-                .enabled_layer_names(&enable_layers)
-                .enabled_extension_names(&enable_exts),
-            None,
-        );
+        let result = unsafe {
+            InstanceLoader::new(
+                &entry,
+                &vk1_0::InstanceCreateInfoBuilder::new()
+                    .application_info(
+                        &vk1_0::ApplicationInfoBuilder::new()
+                            .engine_name(CStr::from_bytes_with_nul(b"Illume\0").unwrap())
+                            .engine_version(1)
+                            .application_name(CStr::from_bytes_with_nul(b"IllumeApp\0").unwrap())
+                            .application_version(1)
+                            .api_version(version),
+                    )
+                    .enabled_layer_names(&enable_layers)
+                    .enabled_extension_names(&enable_exts),
+                None,
+            )
+        };
 
         let instance = match result {
             Err(LoaderError::SymbolNotAvailable) => {
@@ -262,7 +264,6 @@ impl Graphics {
                     &DebugReportCallbackCreateInfoEXTBuilder::new()
                         .flags(DebugReportFlagsEXT::all())
                         .pfn_callback(Some(debug_report_callback)),
-                    None,
                     None,
                 )
             }
@@ -328,12 +329,13 @@ impl Graphics {
                     });
                 }
 
-                let result =
-                    self.instance
-                        .create_android_surface_khr(&AndroidSurfaceCreateInfoKHR {
-                            window: handle.a_native_window,
-                            ..AndroidSurfaceCreateInfoKHR::default()
-                        });
+                let result = self.instance.create_android_surface_khr(
+                    &AndroidSurfaceCreateInfoKHR {
+                        window: handle.a_native_window,
+                        ..AndroidSurfaceCreateInfoKHR::default()
+                    },
+                    None,
+                );
 
                 todo!()
             }
@@ -368,7 +370,6 @@ impl Graphics {
                             .surface(handle.surface)
                             .display(handle.display),
                         None,
-                        None,
                     )
                 }
                 .result();
@@ -398,7 +399,7 @@ impl Graphics {
                     let mut info = Win32SurfaceCreateInfoKHR::default();
                     info.hinstance = handle.hinstance;
                     info.hwnd = handle.hwnd;
-                    self.instance.create_win32_surface_khr(&info, None, None)
+                    self.instance.create_win32_surface_khr(&info, None)
                 }
                 .result()
                 .map_err(|err| match err {
@@ -431,7 +432,6 @@ impl Graphics {
                             .into_builder()
                             .window(handle.window)
                             .connection(handle.connection),
-                        None,
                         None,
                     )
                 }
@@ -471,7 +471,6 @@ impl Graphics {
                             dpy: handle.display,
                             ..XlibSurfaceCreateInfoKHR::default()
                         },
-                        None,
                         None,
                     )
                 }

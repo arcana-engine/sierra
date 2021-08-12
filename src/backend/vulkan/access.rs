@@ -1,16 +1,5 @@
 use erupt::vk1_0;
 
-// pub(crate) fn supported_stages(access: AccessFlags) ->
-// PipelineStageFlags {     let mut result =
-// PipelineStageFlags::empty();     let mut bits = access.as_raw();
-//     while bits != 0 {
-//         let bit = 1 << bits.trailing_zeros();
-//         bits &= !bit;
-//         result |= supported_stages_inner(AccessFlags::from_raw(bit));
-//     }
-//     result
-// }
-
 fn supported_stages_inner(access: vk1_0::AccessFlags) -> vk1_0::PipelineStageFlags {
     type AF = vk1_0::AccessFlags;
     type PS = vk1_0::PipelineStageFlags;
