@@ -42,6 +42,7 @@ pub struct SwapchainImage<'a> {
     supported_families: Arc<[bool]>,
     acquired_counter: &'a AtomicU32,
     index: u32,
+    optimal: bool,
 }
 
 impl SwapchainImage<'_> {
@@ -59,6 +60,14 @@ impl SwapchainImage<'_> {
         [&mut *self.wait, &mut *self.signal]
     }
 
+    /// Returns true of this swapchain image is optimal for the surface.
+    /// If image is not optimal, user still can render to it and must present.
+    ///
+    /// For most users this is the hint that swapchain should be reconfigured.
+    pub fn is_optimal(&self) -> bool {
+        self.optimal
+    }
+
     pub(super) fn index(&self) -> u32 {
         self.index
     }
@@ -73,6 +82,16 @@ impl SwapchainImage<'_> {
 
     pub(super) fn presented(self) {
         self.acquired_counter.fetch_sub(1, Release);
+        std::mem::forget(self);
+    }
+}
+
+impl Drop for SwapchainImage<'_> {
+    fn drop(&mut self) {
+        // Report usage error unless this happens due to unwinding.
+        if !std::thread::panicking() {
+            tracing::error!("Swapchain image is dropped. Swapchain images MUST be presented")
+        }
     }
 }
 
@@ -93,6 +112,7 @@ struct SwapchainInner {
     extent: Extent2d,
     usage: ImageUsage,
     mode: PresentMode,
+    optimal: bool,
 }
 
 #[derive(Debug)]
@@ -329,7 +349,9 @@ impl Swapchain {
                         },
                         self.device.clone(),
                         i,
-                        UID.fetch_add(1, Relaxed).try_into().unwrap(),
+                        UID.fetch_add(1, Relaxed)
+                            .try_into()
+                            .expect("u64 increment overflows"),
                     ),
                     acquire: a,
                     release: r,
@@ -340,6 +362,7 @@ impl Swapchain {
             format,
             usage,
             mode,
+            optimal: true,
         });
 
         tracing::debug!("Swapchain configured");
@@ -358,70 +381,75 @@ impl Swapchain {
         );
 
         let index = loop {
-            if let Some(inner) = self.inner.as_mut() {
-                if inner.acquired_counter.load(Acquire)
-                    >= (inner.images.len() as u32 - self.surface_capabilities.min_image_count.get())
-                {
-                    return Err(SurfaceError::TooManyAcquired);
-                }
+            let inner = self.inner.as_mut().ok_or(SurfaceError::NotConfigured)?;
 
-                // FIXME: Use fences to know that acquire semaphore is unused.
-                let wait = &self.free_semaphore;
-
-                let result = unsafe {
-                    device.logical().acquire_next_image_khr(
-                        inner.handle,
-                        !0, /* wait indefinitely. This is OK as we never try to
-                             * acquire more images than there is in swapchain. */
-                        Some(wait.handle()),
-                        None,
-                        None,
-                    )
-                };
-
-                match result.raw {
-                    vk1_0::Result::SUCCESS => {}
-                    vk1_0::Result::ERROR_OUT_OF_HOST_MEMORY => out_of_host_memory(),
-                    vk1_0::Result::ERROR_OUT_OF_DEVICE_MEMORY => {
-                        return Err(SurfaceError::OutOfMemory {
-                            source: OutOfMemory,
-                        });
-                    }
-                    vk1_0::Result::ERROR_SURFACE_LOST_KHR => {
-                        return Err(SurfaceError::SurfaceLost);
-                    }
-                    vk1_0::Result::SUBOPTIMAL_KHR => {
-                        if optimal {
-                            let usage = inner.usage;
-                            let format = inner.format;
-                            let mode = inner.mode;
-
-                            self.configure(usage, format, mode)?;
-                            continue;
-                        }
-                    }
-                    vk1_0::Result::ERROR_OUT_OF_DATE_KHR => {
-                        let usage = inner.usage;
-                        let format = inner.format;
-                        let mode = inner.mode;
-
-                        self.configure(usage, format, mode)?;
-                        continue;
-                    }
-                    raw => unexpected_result(raw),
-                }
-
-                let index = result.unwrap();
-                let image_and_semaphores = &mut inner.images[index as usize];
-
-                std::mem::swap(&mut image_and_semaphores.acquire, &mut self.free_semaphore);
-
-                inner.acquired_counter.fetch_add(1, Acquire);
-
-                break index;
-            } else {
-                return Err(SurfaceError::NotConfigured);
+            if inner.acquired_counter.load(Acquire)
+                >= (inner.images.len() as u32 - self.surface_capabilities.min_image_count.get())
+            {
+                return Err(SurfaceError::TooManyAcquired);
             }
+
+            if optimal && !inner.optimal {
+                // If swapchain is not optimal and optimal is requested
+                // swapchain should be recreated.
+                let usage = inner.usage;
+                let format = inner.format;
+                let mode = inner.mode;
+
+                self.configure(usage, format, mode)?;
+                continue;
+            }
+
+            // FIXME: Use fences to know that acquire semaphore is unused.
+            let wait = &self.free_semaphore;
+
+            let result = unsafe {
+                device.logical().acquire_next_image_khr(
+                    inner.handle,
+                    !0, /* wait indefinitely. This is OK as we never try to
+                         * acquire more images than there is in swapchain. */
+                    Some(wait.handle()),
+                    None,
+                    None,
+                )
+            };
+
+            match result.raw {
+                vk1_0::Result::SUCCESS => {}
+                vk1_0::Result::ERROR_OUT_OF_HOST_MEMORY => out_of_host_memory(),
+                vk1_0::Result::ERROR_OUT_OF_DEVICE_MEMORY => {
+                    return Err(SurfaceError::OutOfMemory {
+                        source: OutOfMemory,
+                    });
+                }
+                vk1_0::Result::ERROR_SURFACE_LOST_KHR => {
+                    return Err(SurfaceError::SurfaceLost);
+                }
+                vk1_0::Result::SUBOPTIMAL_KHR => {
+                    // Image acquired, but it is suboptimal.
+                    // It must be presented either way.
+                    inner.optimal = false;
+                }
+                vk1_0::Result::ERROR_OUT_OF_DATE_KHR => {
+                    // No image acquired. Reconfigure.
+                    let usage = inner.usage;
+                    let format = inner.format;
+                    let mode = inner.mode;
+
+                    self.configure(usage, format, mode)?;
+                    continue;
+                }
+                raw => unexpected_result(raw),
+            }
+
+            let index = result.unwrap();
+            let image_and_semaphores = &mut inner.images[index as usize];
+
+            std::mem::swap(&mut image_and_semaphores.acquire, &mut self.free_semaphore);
+
+            inner.acquired_counter.fetch_add(1, Acquire);
+
+            break index;
         };
 
         let inner = self.inner.as_mut().unwrap();
@@ -438,6 +466,7 @@ impl Swapchain {
             supported_families: self.surface_capabilities.supported_families.clone(),
             acquired_counter: &inner.acquired_counter,
             index,
+            optimal: inner.optimal,
         })
     }
 }
