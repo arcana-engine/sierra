@@ -279,14 +279,16 @@ impl Swapchain {
             vksw::SwapchainKHR::null()
         };
 
+        let image_count = 3.clamp(
+            caps.min_image_count.get(),
+            caps.max_image_count.map_or(!0, NonZeroU32::get),
+        );
+
         let handle = unsafe {
             logical.create_swapchain_khr(
                 &vksw::SwapchainCreateInfoKHRBuilder::new()
                     .surface(surface)
-                    .min_image_count(3.clamp(
-                        caps.min_image_count.get(),
-                        caps.max_image_count.map(NonZeroU32::get).unwrap_or(3),
-                    ))
+                    .min_image_count(image_count)
                     .image_format(sf.format)
                     .image_color_space(sf.color_space)
                     .image_extent(caps.current_extent.to_erupt())
@@ -384,7 +386,7 @@ impl Swapchain {
             let inner = self.inner.as_mut().ok_or(SurfaceError::NotConfigured)?;
 
             if inner.acquired_counter.load(Acquire)
-                >= (inner.images.len() as u32 - self.surface_capabilities.min_image_count.get())
+                > (inner.images.len() as u32 - self.surface_capabilities.min_image_count.get())
             {
                 return Err(SurfaceError::TooManyAcquired);
             }
