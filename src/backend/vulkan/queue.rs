@@ -15,8 +15,9 @@ use {
         stage::PipelineStageFlags,
         OutOfMemory,
     },
-    bumpalo::{collections::Vec as BVec, Bump},
+    arrayvec::ArrayVec,
     erupt::{extensions::khr_swapchain::PresentInfoKHRBuilder, vk1_0},
+    scoped_arena::Scope,
     std::fmt::{self, Debug},
 };
 
@@ -69,9 +70,9 @@ impl Queue {
     }
 
     #[tracing::instrument]
-    pub fn create_encoder<'a>(&mut self, bump: &'a Bump) -> Result<Encoder<'a>, OutOfMemory> {
+    pub fn create_encoder<'a>(&mut self, scope: &'a Scope<'a>) -> Result<Encoder<'a>, OutOfMemory> {
         match self.cbufs.pop() {
-            Some(cbuf) => Ok(Encoder::new(cbuf, self.capabilities, bump)),
+            Some(cbuf) => Ok(Encoder::new(cbuf, self.capabilities, scope)),
             None => {
                 if self.pool == vk1_0::CommandPool::null() {
                     self.pool = unsafe {
@@ -101,7 +102,7 @@ impl Queue {
 
                 let cbuf = CommandBuffer::new(buffers.remove(0), self.id, self.device.downgrade());
 
-                Ok(Encoder::new(cbuf, self.capabilities, bump))
+                Ok(Encoder::new(cbuf, self.capabilities, scope))
             }
         }
     }
@@ -110,21 +111,20 @@ impl Queue {
     pub fn submit(
         &mut self,
         wait: &mut [(PipelineStageFlags, &mut Semaphore)],
-        cbufs: impl IntoIterator<IntoIter = impl ExactSizeIterator<Item = CommandBuffer>>,
+        cbufs: impl IntoIterator<Item = CommandBuffer>,
         signal: &mut [&mut Semaphore],
         mut fence: Option<&mut Fence>,
-        bump: &Bump,
+        scope: &Scope<'_>,
     ) {
-        let cbufs = cbufs.into_iter();
-        let mut handles = BVec::with_capacity_in(cbufs.len(), bump);
-        let mut array = BVec::with_capacity_in(cbufs.len(), bump);
+        let array = scope.to_scope_with(ArrayVec::<_, 64>::new);
 
-        cbufs.for_each(|cbuf| {
+        let handles = scope.to_scope_from_iter(cbufs.into_iter().map(|cbuf| {
             assert_owner!(cbuf, self.device);
             assert_eq!(self.id, cbuf.queue());
-            handles.push(cbuf.handle());
+            let handle = cbuf.handle();
             array.push(cbuf);
-        });
+            handle
+        }));
 
         for (_, semaphore) in wait.iter_mut() {
             assert_owner!(semaphore, self.device);
@@ -141,9 +141,9 @@ impl Queue {
         }
 
         // FIXME: Check semaphore states.
-        let wait_stages = bump.alloc_slice_fill_iter(wait.iter().map(|(ps, _)| ps.to_erupt()));
-        let wait_semaphores = bump.alloc_slice_fill_iter(wait.iter().map(|(_, sem)| sem.handle()));
-        let signal_semaphores = bump.alloc_slice_fill_iter(signal.iter().map(|sem| sem.handle()));
+        let wait_stages = scope.to_scope_from_iter(wait.iter().map(|(ps, _)| ps.to_erupt()));
+        let wait_semaphores = scope.to_scope_from_iter(wait.iter().map(|(_, sem)| sem.handle()));
+        let signal_semaphores = scope.to_scope_from_iter(signal.iter().map(|sem| sem.handle()));
 
         unsafe {
             self.device
@@ -154,13 +154,13 @@ impl Queue {
                         .wait_semaphores(&wait_semaphores)
                         .wait_dst_stage_mask(&wait_stages)
                         .signal_semaphores(&signal_semaphores)
-                        .command_buffers(&handles)],
+                        .command_buffers(&*handles)],
                     fence.map(|f| f.handle()),
                 )
                 .expect("TODO: Handle queue submit error")
         };
 
-        self.device.epochs().submit(self.id, array.into_iter());
+        self.device.epochs().submit(self.id, array.drain(..));
     }
 
     #[tracing::instrument]

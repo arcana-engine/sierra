@@ -75,9 +75,9 @@ pub use self::{
 
 pub use sierra_proc::{descriptors, graphics_pipeline_desc, pass, pipeline, shader_repr};
 
-/// Re-exporting bumpalo for code-gen.
+/// Re-exporting scoped_arena for code-gen.
 #[doc(hidden)]
-pub use bumpalo;
+pub use scoped_arena;
 
 /// Re-exporting OrderedFloat for code-gen.
 #[doc(hidden)]

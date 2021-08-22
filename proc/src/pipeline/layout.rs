@@ -116,7 +116,7 @@ pub(super) fn generate(input: &Input) -> TokenStream {
                 encoder.bind_graphics_descriptor_sets(
                     &self.pipeline_layout,
                     D::N,
-                    &[::sierra::UpdatedDescriptors::raw(updated_descriptors)],
+                    encoder.scope().to_scope([::sierra::UpdatedDescriptors::raw(updated_descriptors)]),
                     &[],
                 )
             }
@@ -128,7 +128,7 @@ pub(super) fn generate(input: &Input) -> TokenStream {
                 encoder.bind_compute_descriptor_sets(
                     &self.pipeline_layout,
                     D::N,
-                    &[::sierra::UpdatedDescriptors::raw(updated_descriptors)],
+                    encoder.scope().to_scope([::sierra::UpdatedDescriptors::raw(updated_descriptors)]),
                     &[],
                 )
             }
@@ -140,7 +140,7 @@ pub(super) fn generate(input: &Input) -> TokenStream {
                 encoder.bind_ray_tracing_descriptor_sets(
                     &self.pipeline_layout,
                     D::N,
-                    &[::sierra::UpdatedDescriptors::raw(updated_descriptors)],
+                    encoder.scope().to_scope([::sierra::UpdatedDescriptors::raw(updated_descriptors)]),
                     &[],
                 )
             }

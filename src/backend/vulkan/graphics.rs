@@ -282,7 +282,7 @@ impl Graphics {
     }
 
     pub fn name(&self) -> &str {
-        "Erupt"
+        "Vulkan"
     }
 
     #[tracing::instrument]

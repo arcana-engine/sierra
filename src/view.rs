@@ -111,7 +111,7 @@ impl ImageViewState {
             Ownership::NotOwned => encoder.image_barriers(
                 self.stages,
                 stages,
-                &[ImageMemoryBarrier {
+                encoder.scope().to_scope([ImageMemoryBarrier {
                     image: &self.view.info().image,
                     old_access: self.access,
                     new_access: access,
@@ -119,7 +119,7 @@ impl ImageViewState {
                     new_layout: layout,
                     family_transfer: None,
                     range: self.view.info().range,
-                }],
+                }]),
             ),
             Ownership::Owned { family } => {
                 assert_eq!(family, queue.family, "Wrong queue family owns the buffer");
@@ -127,7 +127,7 @@ impl ImageViewState {
                 encoder.image_barriers(
                     self.stages,
                     stages,
-                    &[ImageMemoryBarrier {
+                    encoder.scope().to_scope([ImageMemoryBarrier {
                         image: &self.view.info().image,
                         old_access: self.access,
                         new_access: access,
@@ -135,7 +135,7 @@ impl ImageViewState {
                         new_layout: layout,
                         family_transfer: None,
                         range: self.view.info().range,
-                    }],
+                    }]),
                 )
             }
             Ownership::Transition { from, to } => {
@@ -147,7 +147,7 @@ impl ImageViewState {
                 encoder.image_barriers(
                     self.stages,
                     stages,
-                    &[ImageMemoryBarrier {
+                    encoder.scope().to_scope([ImageMemoryBarrier {
                         image: &self.view.info().image,
                         old_access: self.access,
                         new_access: access,
@@ -155,7 +155,7 @@ impl ImageViewState {
                         new_layout: layout,
                         family_transfer: Some((from, to)),
                         range: self.view.info().range,
-                    }],
+                    }]),
                 )
             }
         }
@@ -180,7 +180,7 @@ impl ImageViewState {
         encoder.image_barriers(
             self.stages,
             stages,
-            &[ImageMemoryBarrier {
+            encoder.scope().to_scope([ImageMemoryBarrier {
                 image: &self.view.info().image,
                 old_access: AccessFlags::empty(),
                 new_access: access,
@@ -188,7 +188,7 @@ impl ImageViewState {
                 new_layout: layout,
                 family_transfer: None,
                 range: self.view.info().range,
-            }],
+            }]),
         );
         self.family = Ownership::Owned {
             family: queue.family,

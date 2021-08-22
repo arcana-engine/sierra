@@ -339,8 +339,7 @@ pub enum CreateShaderModuleError {
 
     #[error("Failed to parse GLSL shader")]
     NagaGlslParseError {
-        #[from]
-        source: naga::front::glsl::ParseError,
+        errors: Vec<naga::front::glsl::Error>,
     },
 
     #[error("Failed to parse WGSL shader")]

@@ -21,7 +21,7 @@ pub struct Main {
 }
 
 fn main() -> eyre::Result<()> {
-    let bump = bumpalo::Bump::new();
+    let mut scope = scoped_arena::Scope::new();
     let event_loop = winit::event_loop::EventLoop::new();
     let window = winit::window::Window::new(&event_loop)?;
 
@@ -90,7 +90,7 @@ fn fs_main() -> [[location(0)]] vec4<f32> {
             winit::event::Event::RedrawRequested(_) => (|| -> eyre::Result<()> {
                 let mut image = swapchain.acquire_image(false)?;
 
-                let mut encoder = queue.create_encoder(&bump)?;
+                let mut encoder = queue.create_encoder(&scope)?;
                 let mut render_pass_encoder = encoder.with_render_pass(
                     &mut main,
                     &Main {
@@ -111,9 +111,11 @@ fn fs_main() -> [[location(0)]] vec4<f32> {
                     Some(encoder.finish()),
                     &mut [signal],
                     None,
-                    &bump,
+                    &scope,
                 );
                 queue.present(image)?;
+
+                scope.reset();
                 Ok(())
             })()
             .unwrap(),

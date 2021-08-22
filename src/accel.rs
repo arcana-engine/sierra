@@ -159,7 +159,7 @@ bitflags::bitflags! {
 }
 
 /// Data provided to acceleration structure build operation.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct AccelerationStructureBuildGeometryInfo<'a> {
     /// Source acceleration structure to copy from.
     pub src: Option<&'a AccelerationStructure>,

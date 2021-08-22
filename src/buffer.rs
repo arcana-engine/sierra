@@ -152,14 +152,14 @@ impl BufferRangeState {
             Ownership::NotOwned => encoder.buffer_barriers(
                 self.stages,
                 stages,
-                &[BufferMemoryBarrier {
+                encoder.scope().to_scope([BufferMemoryBarrier {
                     buffer: &self.range.buffer,
                     old_access: self.access,
                     new_access: access,
                     family_transfer: None,
                     offset: self.range.offset,
                     size: self.range.size,
-                }],
+                }]),
             ),
             Ownership::Owned { family } => {
                 assert_eq!(family, queue.family, "Wrong queue family owns the buffer");
@@ -167,14 +167,14 @@ impl BufferRangeState {
                 encoder.buffer_barriers(
                     self.stages,
                     stages,
-                    &[BufferMemoryBarrier {
+                    encoder.scope().to_scope([BufferMemoryBarrier {
                         buffer: &self.range.buffer,
                         old_access: self.access,
                         new_access: access,
                         family_transfer: None,
                         offset: self.range.offset,
                         size: self.range.size,
-                    }],
+                    }]),
                 )
             }
             Ownership::Transition { from, to } => {
@@ -186,14 +186,14 @@ impl BufferRangeState {
                 encoder.buffer_barriers(
                     self.stages,
                     stages,
-                    &[BufferMemoryBarrier {
+                    encoder.scope().to_scope([BufferMemoryBarrier {
                         buffer: &self.range.buffer,
                         old_access: self.access,
                         new_access: access,
                         family_transfer: Some((from, to)),
                         offset: self.range.offset,
                         size: self.range.size,
-                    }],
+                    }]),
                 )
             }
         }
@@ -215,14 +215,14 @@ impl BufferRangeState {
         encoder.buffer_barriers(
             self.stages,
             stages,
-            &[BufferMemoryBarrier {
+            encoder.scope().to_scope([BufferMemoryBarrier {
                 buffer: &self.range.buffer,
                 old_access: AccessFlags::empty(),
                 new_access: access,
                 family_transfer: None,
                 offset: self.range.offset,
                 size: self.range.size,
-            }],
+            }]),
         );
         self.family = Ownership::Owned {
             family: queue.family,

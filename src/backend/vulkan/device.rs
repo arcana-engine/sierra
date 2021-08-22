@@ -51,7 +51,6 @@ use {
         view::{ImageView, ImageViewInfo, ImageViewKind},
         CreateImageError, DeviceAddress, IndexType, MapError, OutOfMemory,
     },
-    bumpalo::{collections::Vec as BVec, Bump},
     bytemuck::Pod,
     erupt::{
         extensions::{
@@ -574,11 +573,10 @@ impl Device {
             assert_owner!(fragment_shader.module(), self);
         }
 
-        let bump = Bump::new();
         let vertex_shader_entry: CString;
         let fragment_shader_entry: CString;
-        let mut shader_stages = BVec::with_capacity_in(2, &bump);
-        let mut dynamic_states = BVec::with_capacity_in(7, &bump);
+        let mut shader_stages = Vec::with_capacity(2);
+        let mut dynamic_states = Vec::with_capacity(7);
 
         let vertex_binding_descriptions = info
             .vertex_bindings
@@ -626,6 +624,8 @@ impl Device {
         let viewport;
 
         let scissor;
+
+        let attachments;
 
         let mut viewport_state = None;
 
@@ -786,36 +786,36 @@ impl Device {
                     constants,
                 } => {
                     builder = builder.logic_op_enable(false).attachments({
-                        bump.alloc_slice_fill_iter(
-                            (0..info.render_pass.info().subpasses
-                                [usize::try_from(info.subpass).unwrap()]
-                            .colors
-                            .len())
-                                .map(|_| {
-                                    if let Some(blending) = blending {
-                                        vk1_0::PipelineColorBlendAttachmentStateBuilder::new()
-                                            .blend_enable(true)
-                                            .src_color_blend_factor(
-                                                blending.color_src_factor.to_erupt(),
-                                            )
-                                            .dst_color_blend_factor(
-                                                blending.color_dst_factor.to_erupt(),
-                                            )
-                                            .color_blend_op(blending.color_op.to_erupt())
-                                            .src_alpha_blend_factor(
-                                                blending.alpha_src_factor.to_erupt(),
-                                            )
-                                            .dst_alpha_blend_factor(
-                                                blending.alpha_dst_factor.to_erupt(),
-                                            )
-                                            .alpha_blend_op(blending.alpha_op.to_erupt())
-                                    } else {
-                                        vk1_0::PipelineColorBlendAttachmentStateBuilder::new()
-                                            .blend_enable(false)
-                                    }
-                                    .color_write_mask(write_mask.to_erupt())
-                                }),
-                        )
+                        attachments = (0..info.render_pass.info().subpasses
+                            [usize::try_from(info.subpass).unwrap()]
+                        .colors
+                        .len())
+                            .map(|_| {
+                                if let Some(blending) = blending {
+                                    vk1_0::PipelineColorBlendAttachmentStateBuilder::new()
+                                        .blend_enable(true)
+                                        .src_color_blend_factor(
+                                            blending.color_src_factor.to_erupt(),
+                                        )
+                                        .dst_color_blend_factor(
+                                            blending.color_dst_factor.to_erupt(),
+                                        )
+                                        .color_blend_op(blending.color_op.to_erupt())
+                                        .src_alpha_blend_factor(
+                                            blending.alpha_src_factor.to_erupt(),
+                                        )
+                                        .dst_alpha_blend_factor(
+                                            blending.alpha_dst_factor.to_erupt(),
+                                        )
+                                        .alpha_blend_op(blending.alpha_op.to_erupt())
+                                } else {
+                                    vk1_0::PipelineColorBlendAttachmentStateBuilder::new()
+                                        .blend_enable(false)
+                                }
+                                .color_write_mask(write_mask.to_erupt())
+                            })
+                            .collect::<Vec<_>>();
+                        &attachments
                     });
 
                     match constants {
@@ -1446,17 +1446,15 @@ impl Device {
 
                 let code = from_utf8(&info.code)?;
 
-                let module = naga::front::glsl::parse_str(
-                    code,
-                    &naga::front::glsl::Options {
-                        entry_points: {
-                            let mut map = HashMap::default();
-                            map.insert("main".to_owned(), stage);
-                            map
+                let module = naga::front::glsl::Parser::default()
+                    .parse(
+                        &naga::front::glsl::Options {
+                            stage,
+                            defines: Default::default(),
                         },
-                        defines: Default::default(),
-                    },
-                )?;
+                        code,
+                    )
+                    .map_err(|errors| CreateShaderModuleError::NagaGlslParseError { errors })?;
 
                 let info = naga::valid::Validator::new(
                     naga::valid::ValidationFlags::all(),

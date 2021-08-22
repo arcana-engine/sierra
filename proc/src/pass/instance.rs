@@ -342,7 +342,7 @@ pub(super) fn generate(input: &Input) -> TokenStream {
 
             fn begin_render_pass<'a, 'b>(&'a mut self, input: &#ident, device: &::sierra::Device, encoder: &'b mut ::sierra::Encoder<'a>) -> ::std::result::Result<::sierra::RenderPassEncoder<'b, 'a>, ::sierra::FramebufferError> {
                 let fb = self.update_framebuffer(input, device)?;
-                Ok(encoder.with_framebuffer(fb, &[#clear_values]))
+                Ok(encoder.with_framebuffer(fb, encoder.scope().to_scope([#clear_values])))
             }
         }
     )
