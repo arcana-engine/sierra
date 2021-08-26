@@ -52,9 +52,15 @@ use erupt::extensions::khr_win32_surface::{
     Win32SurfaceCreateInfoKHR, KHR_WIN32_SURFACE_EXTENSION_NAME,
 };
 
-#[cfg(any(target_os = "ios", target_os = "macos"))]
-use erupt::extensions::ext_metal_surface::{
-    MetalSurfaceCreateInfoEXT, EXT_METAL_SURFACE_EXTENSION_NAME,
+#[cfg(target_os = "ios")]
+use erupt::{
+    extensions::mvk_ios_surface::MVK_IOS_SURFACE_EXTENSION_NAME, vk::IOSSurfaceCreateInfoMVKBuilder,
+};
+
+#[cfg(target_os = "macos")]
+use erupt::{
+    extensions::mvk_macos_surface::MVK_MACOS_SURFACE_EXTENSION_NAME,
+    vk::MacOSSurfaceCreateInfoMVKBuilder,
 };
 
 /// Root object of the erupt graphics system.
@@ -224,9 +230,14 @@ impl Graphics {
                 push_ext(KHR_WIN32_SURFACE_EXTENSION_NAME);
             }
 
-            #[cfg(any(target_os = "ios", target_os = "macos"))]
+            #[cfg(target_os = "ios")]
             {
-                push_ext(EXT_METAL_SURFACE_EXTENSION_NAME);
+                push_ext(MVK_IOS_SURFACE_EXTENSION_NAME);
+            }
+
+            #[cfg(target_os = "macos")]
+            {
+                push_ext(MVK_MACOS_SURFACE_EXTENSION_NAME);
             }
         }
 
@@ -341,10 +352,76 @@ impl Graphics {
             }
 
             #[cfg(target_os = "ios")]
-            RawWindowHandle::IOS(handle) => todo!(),
+            RawWindowHandle::IOS(handle) => {
+                todo!()
+            }
 
             #[cfg(target_os = "macos")]
-            RawWindowHandle::MacOS(handle) => todo!(),
+            RawWindowHandle::MacOS(handle) => {
+                use core_graphics_types::{base::CGFloat, geometry::CGRect};
+                use objc::{
+                    class, msg_send,
+                    runtime::{Object, BOOL, YES},
+                    sel, sel_impl,
+                };
+
+                if !self.instance.enabled().mvk_macos_surface {
+                    return Err(CreateSurfaceError::UnsupportedWindow {
+                        window: RawWindowHandleKind::Windows,
+                        source: Some(Box::new(RequiredExtensionIsNotAvailable {
+                            extension: "VK_MVK_macos_surface",
+                        })),
+                    });
+                }
+
+                let class = class!(CAMetalLayer);
+
+                unsafe {
+                    let view = handle.ns_view as *mut Object;
+                    if view.is_null() {
+                        panic!("window does not have a valid contentView");
+                    }
+
+                    let existing: *mut Object = msg_send![view, layer];
+                    let use_current = if existing.is_null() {
+                        false
+                    } else {
+                        let result: BOOL = msg_send![existing, isKindOfClass: class];
+                        result == YES
+                    };
+
+                    if !use_current {
+                        let layer: mtl::MetalLayer = msg_send![class, new];
+                        let () = msg_send![view, setLayer: layer.as_ref()];
+                        let () = msg_send![view, setWantsLayer: YES];
+                        let bounds: CGRect = msg_send![view, bounds];
+                        let () = msg_send![layer.as_ref(), setBounds: bounds];
+
+                        let window: *mut Object = msg_send![view, window];
+                        if !window.is_null() {
+                            let scale_factor: CGFloat = msg_send![window, backingScaleFactor];
+                            let () = msg_send![layer, setContentsScale: scale_factor];
+                        }
+                    };
+                }
+
+                let result = unsafe {
+                    self.instance.create_mac_os_surface_mvk(
+                        &MacOSSurfaceCreateInfoMVKBuilder::new().view(handle.ns_view),
+                        None,
+                    )
+                }
+                .result();
+
+                match result {
+                    Ok(surface) => surface,
+                    Err(vk1_0::Result::ERROR_OUT_OF_HOST_MEMORY) => out_of_host_memory(),
+                    Err(vk1_0::Result::ERROR_OUT_OF_DEVICE_MEMORY) => {
+                        return Err(OutOfMemory.into())
+                    }
+                    Err(err) => unexpected_result(err),
+                }
+            }
 
             #[cfg(any(
                 target_os = "linux",

@@ -43,11 +43,16 @@ gpu-descriptor-erupt = { version = "0.2", optional = true, features = ["tracing"
 slab = "0.4"
 libloading = "0.7"
 lazy_static = "1.4"
-scoped-arena = { version = "0.2.1", features = ["alloc"] }
+scoped-arena = { version = "0.3", features = ["alloc"] }
 parking_lot = "0.11"
 once_cell = "1.5"
 naga = { version = "0.6", features = ["glsl-in", "wgsl-in", "spv-out"] }
 arrayvec = "0.7"
+
+[target.'cfg(any(target_os="macos", target_os="ios"))'.dependencies]
+mtl = { package = "metal", version = "0.23.1" }
+objc = "0.2.5"
+core-graphics-types = "0.1"
 
 [workspace]
 members = ["demo"]
