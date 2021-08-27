@@ -36,8 +36,6 @@ fn build_molten_vk() {
 
     let lib_path = lib_dir.join("libvulkan.dylib");
 
-    println!("cargo:rerun-if-changed={}", lib_path.display());
-
     let out_dir = var_os("OUT_DIR").expect("Failed to find OUT_DIR");
     let mvk_checkout_dir = Path::new(&out_dir).join("mvk");
 
