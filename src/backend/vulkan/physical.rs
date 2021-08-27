@@ -106,7 +106,9 @@ unsafe fn collect_propeties_and_features(
         if graphics.version >= vk1_0::make_api_version(0, 1, 2, 0) {
             properties2 = properties2.extend_from(&mut properties12);
             features2 = features2.extend_from(&mut features12);
-        } else {
+            // } else {
+        }
+        {
             if has_extension(EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME) {
                 features2 = features2.extend_from(&mut features_edi);
                 properties2 = properties2.extend_from(&mut properties_edi);
@@ -246,70 +248,72 @@ impl PhysicalDevice {
                 features.push(Feature::ScalarBlockLayout);
             }
 
-            if self.features.v12.runtime_descriptor_array > 0 {
-                features.push(Feature::RuntimeDescriptorArray);
-            }
+            // if self.features.v12.runtime_descriptor_array > 0 {
+            //     features.push(Feature::RuntimeDescriptorArray);
+            // }
 
-            if self
-                .features
-                .v12
-                .descriptor_binding_uniform_buffer_update_after_bind
-                > 0
-            {
-                features.push(Feature::DescriptorBindingUniformBufferUpdateAfterBind);
-            }
-            if self
-                .features
-                .v12
-                .descriptor_binding_sampled_image_update_after_bind
-                > 0
-            {
-                features.push(Feature::DescriptorBindingSampledImageUpdateAfterBind);
-            }
-            if self
-                .features
-                .v12
-                .descriptor_binding_storage_image_update_after_bind
-                > 0
-            {
-                features.push(Feature::DescriptorBindingStorageImageUpdateAfterBind);
-            }
-            if self
-                .features
-                .v12
-                .descriptor_binding_storage_buffer_update_after_bind
-                > 0
-            {
-                features.push(Feature::DescriptorBindingStorageBufferUpdateAfterBind);
-            }
-            if self
-                .features
-                .v12
-                .descriptor_binding_uniform_texel_buffer_update_after_bind
-                > 0
-            {
-                features.push(Feature::DescriptorBindingUniformTexelBufferUpdateAfterBind);
-            }
-            if self
-                .features
-                .v12
-                .descriptor_binding_storage_texel_buffer_update_after_bind
-                > 0
-            {
-                features.push(Feature::DescriptorBindingStorageTexelBufferUpdateAfterBind);
-            }
-            if self
-                .features
-                .v12
-                .descriptor_binding_update_unused_while_pending
-                > 0
-            {
-                features.push(Feature::DescriptorBindingUpdateUnusedWhilePending);
-            }
-            if self.features.v12.descriptor_binding_partially_bound > 0 {
-                features.push(Feature::DescriptorBindingPartiallyBound);
-            }
-        } else {
+            // if self
+            //     .features
+            //     .v12
+            //     .descriptor_binding_uniform_buffer_update_after_bind
+            //     > 0
+            // {
+            //     features.push(Feature::DescriptorBindingUniformBufferUpdateAfterBind);
+            // }
+            // if self
+            //     .features
+            //     .v12
+            //     .descriptor_binding_sampled_image_update_after_bind
+            //     > 0
+            // {
+            //     features.push(Feature::DescriptorBindingSampledImageUpdateAfterBind);
+            // }
+            // if self
+            //     .features
+            //     .v12
+            //     .descriptor_binding_storage_image_update_after_bind
+            //     > 0
+            // {
+            //     features.push(Feature::DescriptorBindingStorageImageUpdateAfterBind);
+            // }
+            // if self
+            //     .features
+            //     .v12
+            //     .descriptor_binding_storage_buffer_update_after_bind
+            //     > 0
+            // {
+            //     features.push(Feature::DescriptorBindingStorageBufferUpdateAfterBind);
+            // }
+            // if self
+            //     .features
+            //     .v12
+            //     .descriptor_binding_uniform_texel_buffer_update_after_bind
+            //     > 0
+            // {
+            //     features.push(Feature::DescriptorBindingUniformTexelBufferUpdateAfterBind);
+            // }
+            // if self
+            //     .features
+            //     .v12
+            //     .descriptor_binding_storage_texel_buffer_update_after_bind
+            //     > 0
+            // {
+            //     features.push(Feature::DescriptorBindingStorageTexelBufferUpdateAfterBind);
+            // }
+            // if self
+            //     .features
+            //     .v12
+            //     .descriptor_binding_update_unused_while_pending
+            //     > 0
+            // {
+            //     features.push(Feature::DescriptorBindingUpdateUnusedWhilePending);
+            // }
+            // if self.features.v12.descriptor_binding_partially_bound > 0 {
+            //     features.push(Feature::DescriptorBindingPartiallyBound);
+            // }
+            // } else {
+        }
+        {
             if self
                 .properties
                 .has_extension(unsafe { CStr::from_ptr(EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME) })
@@ -921,7 +925,7 @@ impl PhysicalDevice {
             if version < vk1_0::make_api_version(0, 1, 2, 0) {
                 assert!(!include_features12);
             } else {
-                assert!(!include_features_edi);
+                // assert!(!include_features_edi);
             }
 
             // Push structure to the list if at least one feature is enabled.
