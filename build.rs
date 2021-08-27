@@ -36,24 +36,42 @@ fn build_molten_vk() {
 
     let lib_path = lib_dir.join("libvulkan.dylib");
 
-    if lib_path.exists() {
-        return;
-    }
+    println!("cargo:rerun-if-changed={}", lib_path.display());
 
     let out_dir = var_os("OUT_DIR").expect("Failed to find OUT_DIR");
     let mvk_checkout_dir = Path::new(&out_dir).join("mvk");
 
-    let status = Command::new("git")
-        .arg("clone")
-        .args(["--depth", "1"])
-        .arg("https://github.com/KhronosGroup/MoltenVK.git")
-        .arg(&mvk_checkout_dir)
-        .spawn()
-        .expect("Failed to run git")
-        .wait()
-        .expect("Failed to clone MoltenVK repo");
+    if !mvk_checkout_dir.exists() {
+        let status = Command::new("git")
+            .arg("clone")
+            .args(["--depth", "1"])
+            .arg("https://github.com/KhronosGroup/MoltenVK.git")
+            .arg(&mvk_checkout_dir)
+            .spawn()
+            .expect("Failed to run git")
+            .wait()
+            .expect("Failed to clone MoltenVK repo");
 
-    assert!(status.success(), "Failed to clone MoltenVK repo");
+        assert!(status.success(), "Failed to clone MoltenVK repo");
+    } else {
+        let result = Command::new("git")
+            .arg("pull")
+            .args(["--ff-only"])
+            .current_dir(&mvk_checkout_dir)
+            .spawn()
+            .expect("Failed to run git")
+            .wait();
+
+        match result {
+            Ok(status) if !status.success() => {
+                println!("cargo:warning=Failed to update MoltenVK repo");
+            }
+            Err(_) => {
+                println!("cargo:warning=Failed to update MoltenVK repo");
+            }
+            Ok(_) => {}
+        }
+    }
 
     let (target_name, dylib_dir) = match std::env::var("CARGO_CFG_TARGET_OS") {
         Ok(target) => match target.as_ref() {
@@ -63,6 +81,12 @@ fn build_molten_vk() {
         },
         Err(e) => panic!("Failed to determinte target os '{}'", e),
     };
+
+    let dylib_path = mvk_checkout_dir
+        .join("MoltenVK")
+        .join("dylib")
+        .join(dylib_dir)
+        .join("libMoltenVK.dylib");
 
     let status = Command::new("sh")
         .current_dir(&mvk_checkout_dir)
@@ -85,11 +109,6 @@ fn build_molten_vk() {
 
     assert!(status.success(), "Failed to build MoltenVK");
 
-    let dylib_path = mvk_checkout_dir
-        .join("MoltenVK")
-        .join("dylib")
-        .join(dylib_dir)
-        .join("libMoltenVK.dylib");
-
+    std::fs::create_dir_all(&lib_dir).expect("Failed to create lib directory");
     std::fs::copy(&dylib_path, &lib_path).expect("Failed to copy MoltenVK dylib");
 }
