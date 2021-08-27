@@ -13,6 +13,7 @@ use {
                 DebugReportObjectTypeEXT, EXT_DEBUG_REPORT_EXTENSION_NAME,
             },
             ext_debug_utils::EXT_DEBUG_UTILS_EXTENSION_NAME,
+            khr_get_physical_device_properties2::KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,
             khr_surface::KHR_SURFACE_EXTENSION_NAME,
         },
         utils::loading::{EntryLoader, EntryLoaderError},
@@ -199,6 +200,8 @@ impl Graphics {
                 false
             }
         };
+
+        push_ext(KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
 
         if cfg!(debug_assertions) {
             // Enable debug utils and report extensions in debug build.
