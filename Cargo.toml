@@ -1,6 +1,6 @@
 [package]
 name = "sierra"
-version = "0.3.3"
+version = "0.3.4"
 edition = "2018"
 authors = ["Zakarum <zakarumych@ya.ru>"]
 license = "MIT OR Apache-2.0"
@@ -53,6 +53,7 @@ arrayvec = "0.7"
 mtl = { package = "metal", version = "0.23.1" }
 objc = "0.2.5"
 core-graphics-types = "0.1"
+moltenvk-sys = { version = "0.1" }
 
 [workspace]
 members = ["demo"]
