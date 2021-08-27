@@ -1,6 +1,6 @@
 [package]
 name = "sierra"
-version = "0.3.0"
+version = "0.3.1"
 edition = "2018"
 authors = ["Zakarum <zakarumych@ya.ru>"]
 license = "MIT OR Apache-2.0"
@@ -21,7 +21,7 @@ default = ["vulkan"]
 proc-verbose-docs = ["sierra-proc/verbose-docs"]
 
 [dependencies]
-sierra-proc = { version = "0.2.0", path = "proc" }
+sierra-proc = { version = "0.3.0", path = "proc" }
 layered-bitset = { version = "0.1.0" }
 bitflags = "1.2"
 raw-window-handle = "0.3"
