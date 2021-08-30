@@ -18,7 +18,7 @@ use {
         extensions::{khr_acceleration_structure as vkacc, khr_ray_tracing_pipeline as vkrt},
         vk1_0,
     },
-    smallvec::SmallVec,
+    scoped_arena::Scope,
     std::{
         convert::TryFrom as _,
         fmt::{self, Debug},
@@ -96,6 +96,7 @@ impl CommandBuffer {
     pub fn write<'a>(
         &mut self,
         commands: impl IntoIterator<Item = Command<'a>>,
+        scope: &Scope<'_>,
     ) -> Result<(), OutOfMemory> {
         let device = match self.owner.upgrade() {
             Some(device) => device,
@@ -126,7 +127,8 @@ impl CommandBuffer {
                     let pass = &framebuffer.info().render_pass;
 
                     let mut clears = clears.into_iter();
-                    let clear_values = pass
+                    let clear_values = scope.to_scope_from_iter(
+                        pass
                             .info()
                             .attachments
                             .iter()
@@ -162,7 +164,7 @@ impl CommandBuffer {
                                     }
                                 }
                             })
-                            .collect::<SmallVec<[_; 8]>>();
+                        );
 
                     assert!(clears.next().is_none(), "Too many clear values");
 
@@ -177,7 +179,7 @@ impl CommandBuffer {
                                     offset: vk1_0::Offset2D { x: 0, y: 0 },
                                     extent: framebuffer.info().extent.to_erupt(),
                                 })
-                                .clear_values(&clear_values),
+                                .clear_values(clear_values),
                             vk1_0::SubpassContents::INLINE,
                         )
                     }
@@ -263,13 +265,13 @@ impl CommandBuffer {
                         self.references.add_buffer(buffer.clone());
                     }
 
-                    let offsets: SmallVec<[_; 8]> =
-                        buffers.iter().map(|&(_, offset)| offset).collect();
+                    let offsets =
+                        scope.to_scope_from_iter(buffers.iter().map(|&(_, offset)| offset));
 
-                    let buffers: SmallVec<[_; 8]> =
-                        buffers.iter().map(|(buffer, _)| buffer.handle()).collect();
+                    let buffers =
+                        scope.to_scope_from_iter(buffers.iter().map(|(buffer, _)| buffer.handle()));
 
-                    logical.cmd_bind_vertex_buffers(self.handle, first, &buffers, &offsets);
+                    logical.cmd_bind_vertex_buffers(self.handle, first, buffers, offsets);
                 },
                 Command::BuildAccelerationStructure { infos } => {
                     assert!(
@@ -296,21 +298,14 @@ impl CommandBuffer {
                         );
                     }
 
-                    // Collect geometries.
-                    let mut geometries = SmallVec::<[_; 32]>::new();
-
-                    let mut offsets = SmallVec::<[_; 32]>::new();
-
-                    let ranges: SmallVec<[_; 32]> = infos.iter().map(|info| {
+                    let geometries_per_info = &*scope.to_scope_from_iter(infos.iter().map(|info| {
                             if let Some(src) = info.src {
                                 self.references.add_acceleration_strucutre(src.clone());
                             }
                             self.references.add_acceleration_strucutre(info.dst.clone());
-
                             let mut total_primitive_count = 0u64;
-                            let offset = geometries.len();
 
-                            for geometry in info.geometries {
+                            let geometries = &*scope.to_scope_from_iter( info.geometries.iter().map(|geometry| {
                                 match geometry {
                                     AccelerationStructureGeometry::Triangles {
                                         flags,
@@ -318,13 +313,13 @@ impl CommandBuffer {
                                         vertex_data,
                                         vertex_stride,
                                         vertex_count,
-                                        first_vertex,
                                         primitive_count,
                                         index_data,
                                         transform_data,
+                                        ..
                                     } => {
                                         total_primitive_count += (*primitive_count) as u64;
-                                        geometries.push(vkacc::AccelerationStructureGeometryKHRBuilder::new()
+                                        vkacc::AccelerationStructureGeometryKHRBuilder::new()
                                             .flags(flags.to_erupt())
                                             .geometry_type(vkacc::GeometryTypeKHR::TRIANGLES_KHR)
                                             .geometry(vkacc::AccelerationStructureGeometryDataKHR {
@@ -345,16 +340,11 @@ impl CommandBuffer {
                                                 })
                                                 .transform_data(transform_data.as_ref().map(|da| buffer_range_to_device_address(da, &mut self.references)).unwrap_or_default())
                                                 .build()
-                                            }));
-
-                                        offsets.push(vkacc::AccelerationStructureBuildRangeInfoKHRBuilder::new()
-                                            .primitive_count(*primitive_count)
-                                            .first_vertex(*first_vertex)
-                                        );
+                                            })
                                     }
                                     AccelerationStructureGeometry::AABBs { flags, data, stride, primitive_count } => {
                                         total_primitive_count += (*primitive_count) as u64;
-                                        geometries.push(vkacc::AccelerationStructureGeometryKHRBuilder::new()
+                                        vkacc::AccelerationStructureGeometryKHRBuilder::new()
                                             .flags(flags.to_erupt())
                                             .geometry_type(vkacc::GeometryTypeKHR::AABBS_KHR)
                                             .geometry(vkacc::AccelerationStructureGeometryDataKHR {
@@ -362,71 +352,89 @@ impl CommandBuffer {
                                                     .data(buffer_range_to_device_address(data, &mut self.references))
                                                     .stride(*stride)
                                                     .build()
-                                            }));
-
-                                        offsets.push(vkacc::AccelerationStructureBuildRangeInfoKHRBuilder::new()
-                                            .primitive_count(*primitive_count)
-                                        );
+                                            })
                                     }
-                                    AccelerationStructureGeometry::Instances { flags, data, primitive_count } => {
-                                        geometries.push(vkacc::AccelerationStructureGeometryKHRBuilder::new()
+                                    AccelerationStructureGeometry::Instances { flags, data, .. } => {
+                                        vkacc::AccelerationStructureGeometryKHRBuilder::new()
                                             .flags(flags.to_erupt())
                                             .geometry_type(vkacc::GeometryTypeKHR::INSTANCES_KHR)
                                             .geometry(vkacc::AccelerationStructureGeometryDataKHR {
                                                 instances: vkacc::AccelerationStructureGeometryInstancesDataKHRBuilder::new()
                                                     .data(buffer_range_to_device_address(data, &mut self.references))
                                                     .build()
-                                            }));
-
-                                        offsets.push(vkacc::AccelerationStructureBuildRangeInfoKHRBuilder::new()
-                                            .primitive_count(*primitive_count)
-                                        );
+                                            })
                                     }
                                 }
-                            }
+                            }));
 
                             if let AccelerationStructureLevel::Bottom = info.dst.info().level {
                                 assert!(total_primitive_count <= device.properties().acc.max_primitive_count);
                             }
 
-                            offset .. geometries.len()
-                        }).collect();
+                            geometries
+                        }));
 
-                    let build_infos: SmallVec<[_; 32]> = infos
-                        .iter()
-                        .zip(&ranges)
-                        .map(|(info, range)| {
-                            let src = info
-                                .src
-                                .as_ref()
-                                .map(|src| src.handle())
-                                .unwrap_or_default();
+                    let offsets_per_info = &*scope.to_scope_from_iter(infos.iter().map(|info| {
+                        &*scope.to_scope_from_iter(info.geometries.iter().map(|geometry| {
+                            match geometry {
+                                AccelerationStructureGeometry::Triangles {
+                                    first_vertex,
+                                    primitive_count,
+                                    ..
+                                } => vkacc::AccelerationStructureBuildRangeInfoKHRBuilder::new()
+                                    .primitive_count(*primitive_count)
+                                    .first_vertex(*first_vertex)
+                                    .build(),
+                                AccelerationStructureGeometry::AABBs {
+                                    primitive_count, ..
+                                } => vkacc::AccelerationStructureBuildRangeInfoKHRBuilder::new()
+                                    .primitive_count(*primitive_count)
+                                    .build(),
+                                AccelerationStructureGeometry::Instances {
+                                    primitive_count,
+                                    ..
+                                } => vkacc::AccelerationStructureBuildRangeInfoKHRBuilder::new()
+                                    .primitive_count(*primitive_count)
+                                    .build(),
+                            }
+                        }))
+                    }));
 
-                            vkacc::AccelerationStructureBuildGeometryInfoKHRBuilder::new()
-                                ._type(info.dst.info().level.to_erupt())
-                                .flags(info.flags.to_erupt())
-                                .mode(if info.src.is_some() {
-                                    vkacc::BuildAccelerationStructureModeKHR::UPDATE_KHR
-                                } else {
-                                    vkacc::BuildAccelerationStructureModeKHR::BUILD_KHR
-                                })
-                                .src_acceleration_structure(src)
-                                .dst_acceleration_structure(info.dst.handle())
-                                .scratch_data(info.scratch.to_erupt()) // TODO: Validate this one.
-                                .geometries(&geometries[range.clone()])
-                        })
-                        .collect();
+                    let build_infos =
+                        scope.to_scope_from_iter(infos.iter().zip(geometries_per_info).map(
+                            |(info, &geometries)| {
+                                let src = info
+                                    .src
+                                    .as_ref()
+                                    .map(|src| src.handle())
+                                    .unwrap_or_default();
 
-                    let build_offsets: SmallVec<[_; 32]> = ranges
-                        .into_iter()
-                        .map(|range| &*offsets[range][0] as *const _)
-                        .collect();
+                                vkacc::AccelerationStructureBuildGeometryInfoKHRBuilder::new()
+                                    ._type(info.dst.info().level.to_erupt())
+                                    .flags(info.flags.to_erupt())
+                                    .mode(if info.src.is_some() {
+                                        vkacc::BuildAccelerationStructureModeKHR::UPDATE_KHR
+                                    } else {
+                                        vkacc::BuildAccelerationStructureModeKHR::BUILD_KHR
+                                    })
+                                    .src_acceleration_structure(src)
+                                    .dst_acceleration_structure(info.dst.handle())
+                                    .scratch_data(info.scratch.to_erupt()) // TODO: Validate this one.
+                                    .geometries(geometries)
+                            },
+                        ));
+
+                    let build_offsets = &*scope.to_scope_from_iter(
+                        offsets_per_info
+                            .into_iter()
+                            .map(|&offsets| offsets.as_ptr()),
+                    );
 
                     unsafe {
                         device.logical().cmd_build_acceleration_structures_khr(
                             self.handle,
                             &build_infos,
-                            &build_offsets,
+                            build_offsets,
                         )
                     }
                 }
@@ -479,10 +487,7 @@ impl CommandBuffer {
                         vk1_0::PipelineBindPoint::GRAPHICS,
                         layout.handle(),
                         first_set,
-                        &sets
-                            .iter()
-                            .map(|set| set.handle())
-                            .collect::<SmallVec<[_; 8]>>(),
+                        scope.to_scope_from_iter(sets.iter().map(|set| set.handle())),
                         dynamic_offsets,
                     )
                 },
@@ -506,10 +511,7 @@ impl CommandBuffer {
                         vk1_0::PipelineBindPoint::COMPUTE,
                         layout.handle(),
                         first_set,
-                        &sets
-                            .iter()
-                            .map(|set| set.handle())
-                            .collect::<SmallVec<[_; 8]>>(),
+                        scope.to_scope_from_iter(sets.iter().map(|set| set.handle())),
                         dynamic_offsets,
                     )
                 },
@@ -533,10 +535,7 @@ impl CommandBuffer {
                         vk1_0::PipelineBindPoint::RAY_TRACING_KHR,
                         layout.handle(),
                         first_set,
-                        &sets
-                            .iter()
-                            .map(|set| set.handle())
-                            .collect::<SmallVec<[_; 8]>>(),
+                        scope.to_scope_from_iter(sets.iter().map(|set| set.handle())),
                         dynamic_offsets,
                     )
                 },
@@ -601,10 +600,11 @@ impl CommandBuffer {
                         src_layout.to_erupt(),
                         dst_image.handle(),
                         dst_layout.to_erupt(),
-                        &regions
-                            .iter()
-                            .map(|region| region.to_erupt().into_builder())
-                            .collect::<SmallVec<[_; 4]>>(),
+                        scope.to_scope_from_iter(
+                            regions
+                                .iter()
+                                .map(|region| region.to_erupt().into_builder()),
+                        ),
                     );
                 },
 
@@ -623,10 +623,11 @@ impl CommandBuffer {
                         self.handle,
                         src_buffer.handle(),
                         dst_buffer.handle(),
-                        &regions
-                            .iter()
-                            .map(|region| region.to_erupt().into_builder())
-                            .collect::<SmallVec<[_; 4]>>(),
+                        scope.to_scope_from_iter(
+                            regions
+                                .iter()
+                                .map(|region| region.to_erupt().into_builder()),
+                        ),
                     );
                 },
                 Command::CopyBufferImage {
@@ -646,10 +647,11 @@ impl CommandBuffer {
                         src_buffer.handle(),
                         dst_image.handle(),
                         dst_layout.to_erupt(),
-                        &regions
-                            .iter()
-                            .map(|region| region.to_erupt().into_builder())
-                            .collect::<SmallVec<[_; 4]>>(),
+                        scope.to_scope_from_iter(
+                            regions
+                                .iter()
+                                .map(|region| region.to_erupt().into_builder()),
+                        ),
                     );
                 },
 
@@ -673,10 +675,11 @@ impl CommandBuffer {
                         src_layout.to_erupt(),
                         dst_image.handle(),
                         dst_layout.to_erupt(),
-                        &regions
-                            .iter()
-                            .map(|region| region.to_erupt().into_builder())
-                            .collect::<SmallVec<[_; 4]>>(),
+                        scope.to_scope_from_iter(
+                            regions
+                                .iter()
+                                .map(|region| region.to_erupt().into_builder()),
+                        ),
                         filter.to_erupt(),
                     );
                 },
@@ -713,57 +716,51 @@ impl CommandBuffer {
                                     .as_ref()
                                     .map_or(supported_access(dst.to_erupt()), |m| m.dst.to_erupt()),
                             )],
-                        &buffers
-                            .iter()
-                            .map(|buffer| {
-                                vk1_0::BufferMemoryBarrierBuilder::new()
-                                    .buffer(buffer.buffer.handle())
-                                    .offset(buffer.offset)
-                                    .size(buffer.size)
-                                    .src_access_mask(buffer.old_access.to_erupt())
-                                    .dst_access_mask(buffer.new_access.to_erupt())
-                                    .src_queue_family_index(
-                                        buffer
-                                            .family_transfer
-                                            .as_ref()
-                                            .map(|r| r.0)
-                                            .unwrap_or(vk1_0::QUEUE_FAMILY_IGNORED),
-                                    )
-                                    .dst_queue_family_index(
-                                        buffer
-                                            .family_transfer
-                                            .as_ref()
-                                            .map(|r| r.1)
-                                            .unwrap_or(vk1_0::QUEUE_FAMILY_IGNORED),
-                                    )
-                            })
-                            .collect::<SmallVec<[_; 8]>>(),
-                        &images
-                            .iter()
-                            .map(|image| {
-                                vk1_0::ImageMemoryBarrierBuilder::new()
-                                    .image(image.image.handle())
-                                    .subresource_range(image.range.to_erupt())
-                                    .src_access_mask(image.old_access.to_erupt())
-                                    .dst_access_mask(image.new_access.to_erupt())
-                                    .old_layout(image.old_layout.to_erupt())
-                                    .new_layout(image.new_layout.to_erupt())
-                                    .src_queue_family_index(
-                                        image
-                                            .family_transfer
-                                            .as_ref()
-                                            .map(|r| r.0)
-                                            .unwrap_or(vk1_0::QUEUE_FAMILY_IGNORED),
-                                    )
-                                    .dst_queue_family_index(
-                                        image
-                                            .family_transfer
-                                            .as_ref()
-                                            .map(|r| r.1)
-                                            .unwrap_or(vk1_0::QUEUE_FAMILY_IGNORED),
-                                    )
-                            })
-                            .collect::<SmallVec<[_; 8]>>(),
+                        scope.to_scope_from_iter(buffers.iter().map(|buffer| {
+                            vk1_0::BufferMemoryBarrierBuilder::new()
+                                .buffer(buffer.buffer.handle())
+                                .offset(buffer.offset)
+                                .size(buffer.size)
+                                .src_access_mask(buffer.old_access.to_erupt())
+                                .dst_access_mask(buffer.new_access.to_erupt())
+                                .src_queue_family_index(
+                                    buffer
+                                        .family_transfer
+                                        .as_ref()
+                                        .map(|r| r.0)
+                                        .unwrap_or(vk1_0::QUEUE_FAMILY_IGNORED),
+                                )
+                                .dst_queue_family_index(
+                                    buffer
+                                        .family_transfer
+                                        .as_ref()
+                                        .map(|r| r.1)
+                                        .unwrap_or(vk1_0::QUEUE_FAMILY_IGNORED),
+                                )
+                        })),
+                        scope.to_scope_from_iter(images.iter().map(|image| {
+                            vk1_0::ImageMemoryBarrierBuilder::new()
+                                .image(image.image.handle())
+                                .subresource_range(image.range.to_erupt())
+                                .src_access_mask(image.old_access.to_erupt())
+                                .dst_access_mask(image.new_access.to_erupt())
+                                .old_layout(image.old_layout.to_erupt())
+                                .new_layout(image.new_layout.to_erupt())
+                                .src_queue_family_index(
+                                    image
+                                        .family_transfer
+                                        .as_ref()
+                                        .map(|r| r.0)
+                                        .unwrap_or(vk1_0::QUEUE_FAMILY_IGNORED),
+                                )
+                                .dst_queue_family_index(
+                                    image
+                                        .family_transfer
+                                        .as_ref()
+                                        .map(|r| r.1)
+                                        .unwrap_or(vk1_0::QUEUE_FAMILY_IGNORED),
+                                )
+                        })),
                     )
                 },
                 Command::PushConstants {
