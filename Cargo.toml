@@ -15,7 +15,7 @@ keywords = ["vulkan"]
 [features]
 serde-1 = ["serde", "serde_bytes", "smallvec/serde", "ordered-float/serde"]
 
-vulkan = ["erupt", "gpu-alloc", "gpu-alloc-erupt", "gpu-descriptor", "gpu-descriptor-erupt"]
+vulkan = ["erupt", "gpu-alloc", "gpu-alloc-erupt", "gpu-descriptor", "gpu-descriptor-erupt", "mtl", "objc", "core-graphics-types", "moltenvk-sys"]
 
 default = ["vulkan"]
 proc-verbose-docs = ["sierra-proc/verbose-docs"]
@@ -42,7 +42,6 @@ gpu-descriptor-erupt = { version = "0.2", optional = true, features = ["tracing"
 
 slab = "0.4"
 libloading = "0.7"
-lazy_static = "1.4"
 scoped-arena = { version = "0.3", features = ["alloc"] }
 parking_lot = "0.11"
 once_cell = "1.5"
@@ -50,10 +49,10 @@ naga = { version = "0.6", features = ["glsl-in", "wgsl-in", "spv-out"] }
 arrayvec = "0.7"
 
 [target.'cfg(any(target_os="macos", target_os="ios"))'.dependencies]
-mtl = { package = "metal", version = "0.23.1" }
-objc = "0.2.5"
-core-graphics-types = "0.1"
-moltenvk-sys = { version = "0.1" }
+mtl = { package = "metal", version = "0.23.1", optional = true }
+objc = { version = "0.2.5", optional = true }
+core-graphics-types = { version = "0.1", optional = true }
+moltenvk-sys = { version = "0.1", path = "../moltenvk-sys", optional = true }
 
 [workspace]
 members = ["demo"]
