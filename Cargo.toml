@@ -52,7 +52,7 @@ arrayvec = "0.7"
 mtl = { package = "metal", version = "0.23.1", optional = true }
 objc = { version = "0.2.5", optional = true }
 core-graphics-types = { version = "0.1", optional = true }
-moltenvk-sys = { version = "0.1", path = "../moltenvk-sys", optional = true }
+moltenvk-sys = { version = "0.1", optional = true }
 
 [workspace]
 members = ["demo"]
