@@ -589,6 +589,14 @@ impl<'a> Encoder<'a> {
         dst_buffer: &'a Buffer,
         regions: &'a [BufferCopy],
     ) {
+        #[cfg(debug_assertions)]
+        {
+            for region in regions {
+                assert!(src_buffer.info().size >= region.src_offset + region.size);
+                assert!(dst_buffer.info().size >= region.dst_offset + region.size);
+            }
+        }
+
         self.inner.commands.push(
             self.inner.scope,
             Command::CopyBuffer {
