@@ -1,7 +1,7 @@
 use {
     super::{DescriptorBindingFlags, ImageViewDescriptor, TypedDescriptorBinding},
     crate::{
-        image::{Image, Layout},
+        image::{Image, RawLayout},
         view::{ImageView, ImageViewInfo},
         Device, OutOfMemory,
     },
@@ -20,7 +20,7 @@ impl TypedDescriptorBinding for Image {
         let view = device.create_image_view(ImageViewInfo::new(self.clone()))?;
         Ok([ImageViewDescriptor {
             view,
-            layout: Layout::ShaderReadOnlyOptimal,
+            layout: RawLayout::ShaderReadOnlyOptimal,
         }])
     }
 }
@@ -37,7 +37,7 @@ impl TypedDescriptorBinding for ImageView {
     fn get_descriptors(&self, _device: &Device) -> Result<[ImageViewDescriptor; 1], OutOfMemory> {
         Ok([ImageViewDescriptor {
             view: self.clone(),
-            layout: Layout::ShaderReadOnlyOptimal,
+            layout: RawLayout::ShaderReadOnlyOptimal,
         }])
     }
 }
@@ -74,7 +74,7 @@ impl<const N: usize> TypedDescriptorBinding for [ImageView; N] {
             unsafe {
                 result.push_unchecked(ImageViewDescriptor {
                     view: me.clone(),
-                    layout: Layout::ShaderReadOnlyOptimal,
+                    layout: RawLayout::ShaderReadOnlyOptimal,
                 });
             }
         }
@@ -120,7 +120,7 @@ impl<const N: usize> TypedDescriptorBinding for arrayvec::ArrayVec<ImageView, N>
             unsafe {
                 result.push_unchecked(ImageViewDescriptor {
                     view: me.clone(),
-                    layout: Layout::ShaderReadOnlyOptimal,
+                    layout: RawLayout::ShaderReadOnlyOptimal,
                 });
             }
         }

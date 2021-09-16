@@ -18,7 +18,7 @@ pub(super) fn generate(input: &Input) -> TokenStream {
 
             let initial_layout = initial_layout(&a.load_op);
             let check_final_layout = final_layout(&a.store_op).map(|final_layout| {
-                quote::quote!(else if a.final_layout != ::sierra::Layout::from(#final_layout) {
+                quote::quote!(else if a.final_layout != ::sierra::RawLayout::from(#final_layout) {
                     tracing::debug!("Final layout is incompatible. Old {:?}, new {:?}", a.final_layout, #final_layout);
                     render_pass_compatible = false;
                 } )
@@ -34,8 +34,8 @@ pub(super) fn generate(input: &Input) -> TokenStream {
                         tracing::debug!("Samples count is incompatible. Old {:?}, new {:?}", a.samples, ::sierra::Attachment::samples(&input.#member));
                         render_pass_compatible = false;
                     }
-                } else if a.initial_layout != ::std::option::Option::map(#initial_layout, ::sierra::Layout::from) {
-                    tracing::debug!("Initial layout is incompatible. Old {:?}, new {:?}", a.initial_layout, ::std::option::Option::map(#initial_layout, ::sierra::Layout::from));
+                } else if a.initial_layout != ::std::option::Option::map(#initial_layout, ::sierra::RawLayout::from) {
+                    tracing::debug!("Initial layout is incompatible. Old {:?}, new {:?}", a.initial_layout, ::std::option::Option::map(#initial_layout, ::sierra::RawLayout::from));
                     render_pass_compatible = false;
                 } #check_final_layout
             )
@@ -65,10 +65,10 @@ pub(super) fn generate(input: &Input) -> TokenStream {
                         .iter()
                         .filter_map(|s| {
                             if s.colors.iter().any(|&c| c == index) {
-                                Some(quote::quote!(::sierra::Layout::ColorAttachmentOptimal))
+                                Some(quote::quote!(::sierra::RawLayout::ColorAttachmentOptimal))
                             } else if s.depth == Some(index) {
                                 Some(quote::quote!(
-                                    ::sierra::Layout::DepthStencilAttachmentOptimal
+                                    ::sierra::RawLayout::DepthStencilAttachmentOptimal
                                 ))
                             } else {
                                 None
@@ -76,7 +76,7 @@ pub(super) fn generate(input: &Input) -> TokenStream {
                         })
                         .rev()
                         .next()
-                        .unwrap_or_else(|| quote::quote!(::sierra::Layout::General))
+                        .unwrap_or_else(|| quote::quote!(::sierra::RawLayout::General))
                 }
                 Some(layout) => layout,
             };
@@ -107,7 +107,7 @@ pub(super) fn generate(input: &Input) -> TokenStream {
                 .colors
                 .iter()
                 .map(
-                    |&c| quote::quote!(colors.push((#c, ::sierra::Layout::ColorAttachmentOptimal));),
+                    |&c| quote::quote!(colors.push((#c, ::sierra::RawLayout::ColorAttachmentOptimal));),
                 )
                 .collect::<TokenStream>();
 
@@ -122,7 +122,7 @@ pub(super) fn generate(input: &Input) -> TokenStream {
                                 #push_colors
                                 colors
                             },
-                            depth: Some((#depth, ::sierra::Layout::DepthStencilAttachmentOptimal)),
+                            depth: Some((#depth, ::sierra::RawLayout::DepthStencilAttachmentOptimal)),
                         });
                     )
                 }

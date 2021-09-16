@@ -3,7 +3,7 @@ use crate::{
     encode::{Encoder, RenderPassEncoder},
     format::Format,
     framebuffer::FramebufferError,
-    image::{Layout, Samples},
+    image::{RawLayout, Samples},
     stage::PipelineStageFlags,
     Device, OutOfMemory,
 };
@@ -58,13 +58,13 @@ pub struct AttachmentInfo {
         feature = "serde-1",
         serde(skip_serializing_if = "Option::is_none", default)
     )]
-    pub initial_layout: Option<Layout>,
+    pub initial_layout: Option<RawLayout>,
 
     #[cfg_attr(
         feature = "serde-1",
         serde(skip_serializing_if = "is_default", default)
     )]
-    pub final_layout: Layout,
+    pub final_layout: RawLayout,
 }
 
 /// Specifies how render pass treats attachment content at the beginning.
@@ -128,7 +128,7 @@ pub struct Subpass {
         feature = "serde-1",
         serde(skip_serializing_if = "Vec::is_empty", default)
     )]
-    pub colors: Vec<(u32, Layout)>,
+    pub colors: Vec<(u32, RawLayout)>,
 
     /// Index of an attachment that is used as depth attachment in this
     /// subpass.
@@ -136,7 +136,7 @@ pub struct Subpass {
         feature = "serde-1",
         serde(skip_serializing_if = "Option::is_none", default)
     )]
-    pub depth: Option<(u32, Layout)>,
+    pub depth: Option<(u32, RawLayout)>,
 }
 
 /// Defines memory dependency between two subpasses

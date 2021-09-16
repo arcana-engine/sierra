@@ -2,13 +2,13 @@ pub use crate::backend::CommandBuffer;
 use {
     crate::{
         accel::AccelerationStructureBuildGeometryInfo,
-        access::AccessFlags,
+        access::Access,
         arith_le,
         buffer::{Buffer, BufferMemoryBarrier},
         descriptor::{DescriptorSet, UpdatedPipelineDescriptors},
         framebuffer::{Framebuffer, FramebufferError},
-        image::{Image, ImageBlit, ImageMemoryBarrier, Layout, SubresourceLayers},
-        memory::MemoryBarrier,
+        image::{Image, ImageBlit, ImageMemoryBarrier, RawLayout, SubresourceLayers},
+        memory::GlobalMemoryBarrier,
         pipeline::{
             ComputePipeline, DynamicGraphicsPipeline, GraphicsPipeline, PipelineLayout,
             RayTracingPipeline, ShaderBindingTable, TypedPipelineLayout, Viewport,
@@ -17,7 +17,6 @@ use {
         render_pass::{ClearValue, RenderPass, RenderPassInstance},
         sampler::Filter,
         shader::ShaderStageFlags,
-        stage::PipelineStageFlags,
         Device, Extent3d, IndexType, Offset3d, OutOfMemory, Rect2d,
     },
     arrayvec::ArrayVec,
@@ -149,34 +148,32 @@ pub enum Command<'a> {
 
     CopyImage {
         src_image: &'a Image,
-        src_layout: Layout,
+        src_layout: RawLayout,
         dst_image: &'a Image,
-        dst_layout: Layout,
+        dst_layout: RawLayout,
         regions: &'a [ImageCopy],
     },
 
     CopyBufferImage {
         src_buffer: &'a Buffer,
         dst_image: &'a Image,
-        dst_layout: Layout,
+        dst_layout: RawLayout,
         regions: &'a [BufferImageCopy],
     },
 
     BlitImage {
         src_image: &'a Image,
-        src_layout: Layout,
+        src_layout: RawLayout,
         dst_image: &'a Image,
-        dst_layout: Layout,
+        dst_layout: RawLayout,
         regions: &'a [ImageBlit],
         filter: Filter,
     },
 
     PipelineBarrier {
-        src: PipelineStageFlags,
-        dst: PipelineStageFlags,
+        global: Option<GlobalMemoryBarrier<'a>>,
         images: &'a [ImageMemoryBarrier<'a>],
         buffers: &'a [BufferMemoryBarrier<'a>],
-        memory: Option<MemoryBarrier>,
     },
 
     PushConstants {
@@ -610,9 +607,9 @@ impl<'a> Encoder<'a> {
     pub fn copy_image(
         &mut self,
         src_image: &'a Image,
-        src_layout: Layout,
+        src_layout: RawLayout,
         dst_image: &'a Image,
-        dst_layout: Layout,
+        dst_layout: RawLayout,
         regions: &'a [ImageCopy],
     ) {
         self.inner.commands.push(
@@ -631,7 +628,7 @@ impl<'a> Encoder<'a> {
         &mut self,
         src_buffer: &'a Buffer,
         dst_image: &'a Image,
-        dst_layout: Layout,
+        dst_layout: RawLayout,
         regions: &'a [BufferImageCopy],
     ) {
         self.inner.commands.push(
@@ -648,9 +645,9 @@ impl<'a> Encoder<'a> {
     pub fn blit_image(
         &mut self,
         src_image: &'a Image,
-        src_layout: Layout,
+        src_layout: RawLayout,
         dst_image: &'a Image,
-        dst_layout: Layout,
+        dst_layout: RawLayout,
         regions: &'a [ImageBlit],
         filter: Filter,
     ) {
@@ -677,23 +674,35 @@ impl<'a> Encoder<'a> {
             .push(self.inner.scope, Command::Dispatch { x, y, z });
     }
 
-    pub fn memory_barrier(
+    pub fn pipeline_barrier(
         &mut self,
-        src: PipelineStageFlags,
-        src_acc: AccessFlags,
-        dst: PipelineStageFlags,
-        dst_acc: AccessFlags,
+        global: Option<GlobalMemoryBarrier<'a>>,
+        images: &'a [ImageMemoryBarrier<'a>],
+        buffers: &'a [BufferMemoryBarrier<'a>],
     ) {
         self.inner.commands.push(
             self.inner.scope,
             Command::PipelineBarrier {
-                src,
-                dst,
+                images,
+                buffers,
+                global,
+            }
+        )
+    }
+
+    pub fn global_barrier(
+        &mut self,
+        prev_accesses: &'a [Access],
+        next_accesses: &'a [Access],
+    ) {
+        self.inner.commands.push(
+            self.inner.scope,
+            Command::PipelineBarrier {
                 images: &[],
                 buffers: &[],
-                memory: Some(MemoryBarrier {
-                    src: src_acc,
-                    dst: dst_acc,
+                global: Some(GlobalMemoryBarrier {
+                    prev_accesses,
+                    next_accesses,
                 }),
             },
         );
@@ -701,36 +710,28 @@ impl<'a> Encoder<'a> {
 
     pub fn image_barriers(
         &mut self,
-        src: PipelineStageFlags,
-        dst: PipelineStageFlags,
         images: &'a [ImageMemoryBarrier<'a>],
     ) {
         self.inner.commands.push(
             self.inner.scope,
             Command::PipelineBarrier {
-                src,
-                dst,
                 images,
                 buffers: &[],
-                memory: None,
+                global: None,
             },
         );
     }
 
     pub fn buffer_barriers(
         &mut self,
-        src: PipelineStageFlags,
-        dst: PipelineStageFlags,
         buffers: &'a [BufferMemoryBarrier<'a>],
     ) {
         self.inner.commands.push(
             self.inner.scope,
             Command::PipelineBarrier {
-                src,
-                dst,
                 images: &[],
                 buffers,
-                memory: None,
+                global: None,
             },
         );
     }
