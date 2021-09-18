@@ -10,7 +10,7 @@ use {
         buffer::{BufferRange, BufferUsage, StridedBufferRange},
         encode::*,
         format::{FormatDescription, FormatRepr, FormatType},
-        queue::QueueId,
+        queue::{QueueCapabilityFlags, QueueId},
         render_pass::{ClearValue, LoadOp},
         IndexType, OutOfMemory,
     },
@@ -36,6 +36,7 @@ pub struct CommandBuffer {
     queue: QueueId,
     owner: WeakDevice,
     references: References,
+    capabilities: QueueCapabilityFlags,
 }
 
 impl Debug for CommandBuffer {
@@ -45,6 +46,7 @@ impl Debug for CommandBuffer {
                 .field("handle", &self.handle)
                 .field("owner", &self.owner)
                 .field("queue", &self.queue)
+                .field("capabilities", &self.capabilities)
                 .finish()
         } else {
             Debug::fmt(&self.handle, fmt)
@@ -60,7 +62,12 @@ impl Drop for CommandBuffer {
 }
 
 impl CommandBuffer {
-    pub(super) fn new(handle: vk1_0::CommandBuffer, queue: QueueId, owner: WeakDevice) -> Self {
+    pub(super) fn new(
+        handle: vk1_0::CommandBuffer,
+        queue: QueueId,
+        capabilities: QueueCapabilityFlags,
+        owner: WeakDevice
+    ) -> Self {
         #[cfg(feature = "leak-detection")]
         let allocated = 1 + COMMAND_BUFFER_ALLOCATED.fetch_add(1, Relaxed);
 
@@ -73,6 +80,7 @@ impl CommandBuffer {
             handle,
             queue,
             owner,
+            capabilities,
             references: References::new(),
         }
     }
@@ -91,6 +99,10 @@ impl CommandBuffer {
 
     pub fn queue(&self) -> QueueId {
         self.queue
+    }
+
+    pub(crate) fn capabilities(&self) -> QueueCapabilityFlags {
+        self.capabilities
     }
 
     pub fn write<'a>(
@@ -116,6 +128,12 @@ impl CommandBuffer {
         let logical = &device.logical();
 
         for command in commands {
+            #[cfg(debug_assertions)]
+            {
+                let required_capabilities = command.required_capabilities();
+                assert!(self.capabilities.supports_all(required_capabilities));
+            }
+
             match command {
                 Command::BeginRenderPass {
                     framebuffer,

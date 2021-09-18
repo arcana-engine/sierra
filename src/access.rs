@@ -1,3 +1,5 @@
+use crate::PipelineStageFlags;
+
 // Modified from vk-sync-rs, originally Copyright 2019 Graham Wihlidal
 // licensed under MIT license.
 //
@@ -144,5 +146,94 @@ impl Access {
 
     pub fn is_read_only(self) -> bool {
         !self.is_write()
+    }
+
+    pub fn stage_flags(self) -> crate::PipelineStageFlags {
+        match self {
+            Access::None => PipelineStageFlags::empty(),
+            Access::IndirectBuffer => PipelineStageFlags::DRAW_INDIRECT,
+            Access::IndexBuffer => PipelineStageFlags::VERTEX_INPUT,
+            Access::VertexBuffer => PipelineStageFlags::VERTEX_INPUT,
+            Access::VertexShaderReadUniformBuffer => PipelineStageFlags::VERTEX_SHADER,
+            Access::VertexShaderReadSampledImageOrUniformTexelBuffer => {
+                PipelineStageFlags::VERTEX_SHADER
+            }
+
+            Access::VertexShaderReadOther => PipelineStageFlags::VERTEX_SHADER,
+
+            Access::FragmentShaderReadUniformBuffer => PipelineStageFlags::FRAGMENT_SHADER,
+
+            Access::FragmentShaderReadSampledImageOrUniformTexelBuffer => {
+                PipelineStageFlags::FRAGMENT_SHADER
+            }
+
+            Access::FragmentShaderReadColorInputAttachment => PipelineStageFlags::FRAGMENT_SHADER,
+
+            Access::FragmentShaderReadDepthStencilInputAttachment => {
+                PipelineStageFlags::FRAGMENT_SHADER
+            }
+
+            Access::FragmentShaderReadOther => PipelineStageFlags::FRAGMENT_SHADER,
+
+            Access::ColorAttachmentRead => PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
+
+            Access::DepthStencilAttachmentRead => {
+                PipelineStageFlags::EARLY_FRAGMENT_TESTS | PipelineStageFlags::LATE_FRAGMENT_TESTS
+            }
+
+            Access::ComputeShaderReadUniformBuffer => PipelineStageFlags::COMPUTE_SHADER,
+
+            Access::ComputeShaderReadSampledImageOrUniformTexelBuffer => {
+                PipelineStageFlags::COMPUTE_SHADER
+            }
+
+            Access::ComputeShaderReadOther => PipelineStageFlags::COMPUTE_SHADER,
+
+            Access::AnyShaderReadUniformBuffer => PipelineStageFlags::ALL_COMMANDS,
+
+            Access::AnyShaderReadUniformBufferOrVertexBuffer => PipelineStageFlags::ALL_COMMANDS,
+
+            Access::AnyShaderReadSampledImageOrUniformTexelBuffer => {
+                PipelineStageFlags::ALL_COMMANDS
+            }
+
+            Access::AnyShaderReadOther => PipelineStageFlags::ALL_COMMANDS,
+
+            Access::TransferRead => PipelineStageFlags::TRANSFER,
+
+            Access::HostRead => PipelineStageFlags::HOST,
+
+            Access::Present => PipelineStageFlags::empty(),
+
+            Access::VertexShaderWrite => PipelineStageFlags::VERTEX_SHADER,
+
+            Access::FragmentShaderWrite => PipelineStageFlags::FRAGMENT_SHADER,
+
+            Access::ColorAttachmentWrite => PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
+
+            Access::DepthStencilAttachmentWrite => {
+                PipelineStageFlags::EARLY_FRAGMENT_TESTS | PipelineStageFlags::LATE_FRAGMENT_TESTS
+            }
+
+            Access::DepthAttachmentWriteStencilReadOnly => {
+                PipelineStageFlags::EARLY_FRAGMENT_TESTS | PipelineStageFlags::LATE_FRAGMENT_TESTS
+            }
+
+            Access::StencilAttachmentWriteDepthReadOnly => {
+                PipelineStageFlags::EARLY_FRAGMENT_TESTS | PipelineStageFlags::LATE_FRAGMENT_TESTS
+            }
+
+            Access::ComputeShaderWrite => PipelineStageFlags::COMPUTE_SHADER,
+
+            Access::AnyShaderWrite => PipelineStageFlags::ALL_COMMANDS,
+
+            Access::TransferWrite => PipelineStageFlags::TRANSFER,
+
+            Access::HostWrite => PipelineStageFlags::HOST,
+
+            Access::ColorAttachmentReadWrite => PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
+
+            Access::General => PipelineStageFlags::ALL_COMMANDS,
+        }
     }
 }

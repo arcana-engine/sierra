@@ -35,5 +35,4 @@ bitflags::bitflags! {
 pub struct GlobalMemoryBarrier<'a> {
     pub prev_accesses: &'a [Access],
     pub next_accesses: &'a [Access],
-
 }
