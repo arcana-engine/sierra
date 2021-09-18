@@ -3,7 +3,7 @@ use crate::{
     access::Access,
     backend::Device,
     encode::Encoder,
-    image::{Image, ImageExtent, ImageMemoryBarrier, Layout, SubresourceRange},
+    image::{Image, ImageExtent, ImageMemoryBarrier, SyncLayout, SubresourceRange},
     queue::{Ownership, QueueId},
     OutOfMemory,
 };
@@ -91,7 +91,7 @@ impl MakeImageView for Image {
 pub struct ImageViewState {
     pub view: ImageView,
     pub prev_access: Access,
-    pub old_layout: Option<Layout>,
+    pub old_layout: Option<SyncLayout>,
     pub family: Ownership,
 }
 
@@ -100,7 +100,7 @@ impl ImageViewState {
     pub fn access<'a>(
         &'a mut self,
         next_access: Access,
-        new_layout: Layout,
+        new_layout: SyncLayout,
         queue: QueueId,
         encoder: &mut Encoder<'a>,
     ) -> &'a ImageView {
@@ -162,7 +162,7 @@ impl ImageViewState {
     pub fn overwrite<'a>(
         &'a mut self,
         next_access: Access,
-        new_layout: Layout,
+        new_layout: SyncLayout,
         queue: QueueId,
         encoder: &mut Encoder<'a>,
     ) -> &'a ImageView {

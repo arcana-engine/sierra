@@ -7,7 +7,7 @@ use {
         buffer::{Buffer, BufferMemoryBarrier},
         descriptor::{DescriptorSet, UpdatedPipelineDescriptors},
         framebuffer::{Framebuffer, FramebufferError},
-        image::{Image, ImageBlit, ImageMemoryBarrier, RawLayout, SubresourceLayers},
+        image::{Image, ImageBlit, ImageMemoryBarrier, Layout, SubresourceLayers},
         memory::GlobalMemoryBarrier,
         pipeline::{
             ComputePipeline, DynamicGraphicsPipeline, GraphicsPipeline, PipelineLayout,
@@ -148,24 +148,24 @@ pub enum Command<'a> {
 
     CopyImage {
         src_image: &'a Image,
-        src_layout: RawLayout,
+        src_layout: Layout,
         dst_image: &'a Image,
-        dst_layout: RawLayout,
+        dst_layout: Layout,
         regions: &'a [ImageCopy],
     },
 
     CopyBufferImage {
         src_buffer: &'a Buffer,
         dst_image: &'a Image,
-        dst_layout: RawLayout,
+        dst_layout: Layout,
         regions: &'a [BufferImageCopy],
     },
 
     BlitImage {
         src_image: &'a Image,
-        src_layout: RawLayout,
+        src_layout: Layout,
         dst_image: &'a Image,
-        dst_layout: RawLayout,
+        dst_layout: Layout,
         regions: &'a [ImageBlit],
         filter: Filter,
     },
@@ -607,9 +607,9 @@ impl<'a> Encoder<'a> {
     pub fn copy_image(
         &mut self,
         src_image: &'a Image,
-        src_layout: RawLayout,
+        src_layout: Layout,
         dst_image: &'a Image,
-        dst_layout: RawLayout,
+        dst_layout: Layout,
         regions: &'a [ImageCopy],
     ) {
         self.inner.commands.push(
@@ -628,7 +628,7 @@ impl<'a> Encoder<'a> {
         &mut self,
         src_buffer: &'a Buffer,
         dst_image: &'a Image,
-        dst_layout: RawLayout,
+        dst_layout: Layout,
         regions: &'a [BufferImageCopy],
     ) {
         self.inner.commands.push(
@@ -645,9 +645,9 @@ impl<'a> Encoder<'a> {
     pub fn blit_image(
         &mut self,
         src_image: &'a Image,
-        src_layout: RawLayout,
+        src_layout: Layout,
         dst_image: &'a Image,
-        dst_layout: RawLayout,
+        dst_layout: Layout,
         regions: &'a [ImageBlit],
         filter: Filter,
     ) {

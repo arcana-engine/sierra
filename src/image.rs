@@ -74,24 +74,26 @@ impl ImageUsage {
     }
 }
 
-/// Defines a handful of layout options for images.
-/// Rather than a list of all possible image layouts, this reduced list is
-/// correlated with the access types to map to the correct actual layouts.
+/// When performing a synchronization operation which may transition
+/// an image's layout, chooses whether to automatically compute the optimal
+/// layout based on specified [`Access`]es or whether to transition manually
+/// to a specified [`Layout`].
+///
 /// `Optimal` is usually preferred.
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
-pub enum Layout {
-	/// Choose the most optimal layout for each usage. Performs layout transitions as appropriate for the access.
-	Optimal,
+pub enum SyncLayout {
+    /// Choose the most optimal layout for each usage. Performs layout transitions as appropriate for the access.
+    Optimal,
 
     /// Manually choose a RawLayout regardless of usage or access provided.
-    Manual(RawLayout),
+    Manual(Layout),
 }
 
-impl Default for Layout {
-	fn default() -> Self {
-		Layout::Optimal
-	}
+impl Default for SyncLayout {
+    fn default() -> Self {
+        SyncLayout::Optimal
+    }
 }
 
 /// Image layout defines how texel are placed in memory.
@@ -102,7 +104,7 @@ impl Default for Layout {
 /// Additionally render pass can change layout of its attachments.
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
-pub enum RawLayout {
+pub enum Layout {
     /// Can be used with all device operations.
     /// Only presentation is not possible in this layout.
     /// Operations may perform slower in this layout.
@@ -135,7 +137,7 @@ pub enum RawLayout {
     Present,
 }
 
-impl Default for RawLayout {
+impl Default for Layout {
     fn default() -> Self {
         Self::General
     }
@@ -501,8 +503,8 @@ pub struct LayoutTransition<'a> {
     pub image: &'a Image,
     pub prev_access: Access,
     pub next_access: Access,
-    pub old_layout: Option<Layout>,
-    pub new_layout: Layout,
+    pub old_layout: Option<SyncLayout>,
+    pub new_layout: SyncLayout,
     pub range: SubresourceRange,
 }
 
@@ -510,7 +512,7 @@ impl<'a> LayoutTransition<'a> {
     pub fn transition_whole(
         image: &'a Image,
         access: Range<Access>,
-        layout: Range<Layout>,
+        layout: Range<SyncLayout>,
     ) -> Self {
         LayoutTransition {
             range: SubresourceRange::whole(image.info()),
@@ -522,7 +524,7 @@ impl<'a> LayoutTransition<'a> {
         }
     }
 
-    pub fn initialize_whole(image: &'a Image, next_access: Access, layout: Layout) -> Self {
+    pub fn initialize_whole(image: &'a Image, next_access: Access, layout: SyncLayout) -> Self {
         LayoutTransition {
             range: SubresourceRange::whole(image.info()),
             image,
@@ -562,8 +564,8 @@ pub struct ImageMemoryBarrier<'a> {
     pub image: &'a Image,
     pub prev_access: Access,
     pub next_access: Access,
-    pub old_layout: Option<Layout>,
-    pub new_layout: Layout,
+    pub old_layout: Option<SyncLayout>,
+    pub new_layout: SyncLayout,
     pub family_transfer: Option<(u32, u32)>,
     pub range: SubresourceRange,
 }
@@ -599,7 +601,7 @@ pub struct ImageSubresourceRange {
 pub struct ImageSubresourceState {
     pub subresource: ImageSubresourceRange,
     pub prev_access: Access,
-    pub old_layout: Option<Layout>,
+    pub old_layout: Option<SyncLayout>,
     pub family: Ownership,
 }
 
@@ -608,13 +610,13 @@ impl ImageSubresourceState {
     pub fn access<'a>(
         &'a mut self,
         next_access: Access,
-        new_layout: Layout,
+        new_layout: SyncLayout,
         queue: QueueId,
         encoder: &mut Encoder<'a>,
     ) -> &'a Self {
         match self.family {
-            Ownership::NotOwned => encoder.image_barriers(
-                encoder.scope().to_scope([ImageMemoryBarrier {
+            Ownership::NotOwned => {
+                encoder.image_barriers(encoder.scope().to_scope([ImageMemoryBarrier {
                     image: &self.subresource.image,
                     prev_access: self.prev_access,
                     next_access,
@@ -622,22 +624,20 @@ impl ImageSubresourceState {
                     new_layout,
                     family_transfer: None,
                     range: self.subresource.range,
-                }]),
-            ),
+                }]))
+            }
             Ownership::Owned { family } => {
                 assert_eq!(family, queue.family, "Wrong queue family owns the buffer");
 
-                encoder.image_barriers(
-                    encoder.scope().to_scope([ImageMemoryBarrier {
-                        image: &self.subresource.image,
-                        prev_access: self.prev_access,
-                        next_access,
-                        old_layout: self.old_layout,
-                        new_layout,
-                        family_transfer: None,
-                        range: self.subresource.range,
-                    }]),
-                )
+                encoder.image_barriers(encoder.scope().to_scope([ImageMemoryBarrier {
+                    image: &self.subresource.image,
+                    prev_access: self.prev_access,
+                    next_access,
+                    old_layout: self.old_layout,
+                    new_layout,
+                    family_transfer: None,
+                    range: self.subresource.range,
+                }]))
             }
             Ownership::Transition { from, to } => {
                 assert_eq!(
@@ -645,17 +645,15 @@ impl ImageSubresourceState {
                     "Image is being transitioned to wrong queue family"
                 );
 
-                encoder.image_barriers(
-                    encoder.scope().to_scope([ImageMemoryBarrier {
-                        image: &self.subresource.image,
-                        prev_access: self.prev_access,
-                        next_access,
-                        old_layout: self.old_layout,
-                        new_layout,
-                        family_transfer: Some((from, to)),
-                        range: self.subresource.range,
-                    }]),
-                )
+                encoder.image_barriers(encoder.scope().to_scope([ImageMemoryBarrier {
+                    image: &self.subresource.image,
+                    prev_access: self.prev_access,
+                    next_access,
+                    old_layout: self.old_layout,
+                    new_layout,
+                    family_transfer: Some((from, to)),
+                    range: self.subresource.range,
+                }]))
             }
         }
         self.prev_access = next_access;
@@ -667,21 +665,19 @@ impl ImageSubresourceState {
     pub fn overwrite<'a>(
         &'a mut self,
         next_access: Access,
-        new_layout: Layout,
+        new_layout: SyncLayout,
         queue: QueueId,
         encoder: &mut Encoder<'a>,
     ) -> &'a ImageSubresourceRange {
-        encoder.image_barriers(
-            encoder.scope().to_scope([ImageMemoryBarrier {
-                image: &self.subresource.image,
-                prev_access: Access::None,
-                next_access,
-                old_layout: None,
-                new_layout,
-                family_transfer: None,
-                range: self.subresource.range,
-            }]),
-        );
+        encoder.image_barriers(encoder.scope().to_scope([ImageMemoryBarrier {
+            image: &self.subresource.image,
+            prev_access: Access::None,
+            next_access,
+            old_layout: None,
+            new_layout,
+            family_transfer: None,
+            range: self.subresource.range,
+        }]));
         self.family = Ownership::Owned {
             family: queue.family,
         };

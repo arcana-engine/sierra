@@ -4,7 +4,7 @@ use crate::{
     CompareOp, ComponentMask, CompositeAlphaFlags, Culling, DescriptorBindingFlags,
     DescriptorSetLayoutFlags, DescriptorType, DeviceAddress, Extent2d, Extent3d, Filter, Format,
     FrontFace, GeometryFlags, ImageBlit, ImageCopy, ImageExtent, ImageUsage, ImageViewKind,
-    IndexType, RawLayout, LoadOp, LogicOp, MemoryUsage, MipmapMode, Offset2d, Offset3d, OutOfMemory,
+    IndexType, Layout, LoadOp, LogicOp, MemoryUsage, MipmapMode, Offset2d, Offset3d, OutOfMemory,
     PipelineStageFlags, PolygonMode, PresentMode, PrimitiveTopology, QueueCapabilityFlags, Rect2d,
     SamplerAddressMode, Samples, ShaderStage, ShaderStageFlags, StencilOp, StoreOp, Subresource,
     SubresourceLayers, SubresourceRange, SurfaceTransformFlags, VertexInputRate, Viewport,
@@ -990,26 +990,26 @@ impl ToErupt<vk1_0::ColorComponentFlags> for ComponentMask {
     }
 }
 
-impl ToErupt<vk1_0::ImageLayout> for RawLayout {
+impl ToErupt<vk1_0::ImageLayout> for Layout {
     fn to_erupt(self) -> vk1_0::ImageLayout {
         match self {
-            RawLayout::General => vk1_0::ImageLayout::GENERAL,
-            RawLayout::ColorAttachmentOptimal => vk1_0::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-            RawLayout::DepthStencilAttachmentOptimal => {
+            Layout::General => vk1_0::ImageLayout::GENERAL,
+            Layout::ColorAttachmentOptimal => vk1_0::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+            Layout::DepthStencilAttachmentOptimal => {
                 vk1_0::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL
             }
-            RawLayout::DepthStencilReadOnlyOptimal => {
+            Layout::DepthStencilReadOnlyOptimal => {
                 vk1_0::ImageLayout::DEPTH_STENCIL_READ_ONLY_OPTIMAL
             }
-            RawLayout::ShaderReadOnlyOptimal => vk1_0::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-            RawLayout::TransferSrcOptimal => vk1_0::ImageLayout::TRANSFER_SRC_OPTIMAL,
-            RawLayout::TransferDstOptimal => vk1_0::ImageLayout::TRANSFER_DST_OPTIMAL,
-            RawLayout::Present => vk1_0::ImageLayout::PRESENT_SRC_KHR,
+            Layout::ShaderReadOnlyOptimal => vk1_0::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+            Layout::TransferSrcOptimal => vk1_0::ImageLayout::TRANSFER_SRC_OPTIMAL,
+            Layout::TransferDstOptimal => vk1_0::ImageLayout::TRANSFER_DST_OPTIMAL,
+            Layout::Present => vk1_0::ImageLayout::PRESENT_SRC_KHR,
         }
     }
 }
 
-impl ToErupt<vk1_0::ImageLayout> for Option<RawLayout> {
+impl ToErupt<vk1_0::ImageLayout> for Option<Layout> {
     fn to_erupt(self) -> vk1_0::ImageLayout {
         match self {
             None => vk1_0::ImageLayout::UNDEFINED,

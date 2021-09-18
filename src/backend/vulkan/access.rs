@@ -72,9 +72,9 @@ pub(crate) fn supported_access(stages: vk1_0::PipelineStageFlags) -> vk1_0::Acce
 }
 
 pub(crate) struct AccessInfo {
-	pub(crate) stage_mask: vk1_0::PipelineStageFlags,
-	pub(crate) access_mask: vk1_0::AccessFlags,
-	pub(crate) image_layout: vk1_0::ImageLayout,
+    pub(crate) stage_mask: vk1_0::PipelineStageFlags,
+    pub(crate) access_mask: vk1_0::AccessFlags,
+    pub(crate) image_layout: vk1_0::ImageLayout,
 }
 
 pub(crate) trait GetAccessInfo {
@@ -82,7 +82,7 @@ pub(crate) trait GetAccessInfo {
 }
 
 impl GetAccessInfo for Access {
-	fn access_info(self) -> AccessInfo {
+    fn access_info(self) -> AccessInfo {
         match self {
             Access::None => AccessInfo {
                 stage_mask: vk1_0::PipelineStageFlags::empty(),
@@ -273,5 +273,5 @@ impl GetAccessInfo for Access {
                 image_layout: vk1_0::ImageLayout::GENERAL,
             },
         }
-	}
+    }
 }

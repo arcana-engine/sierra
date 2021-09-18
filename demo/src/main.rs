@@ -16,7 +16,7 @@ pub struct Pipeline {
 #[sierra::pass]
 #[subpass(color = target)]
 pub struct Main {
-    #[attachment(clear(const sierra::ClearColor(0.3, 0.1, 0.8, 1.0)), store(const sierra::RawLayout::Present))]
+    #[attachment(clear(const sierra::ClearColor(0.3, 0.1, 0.8, 1.0)), store(const sierra::Layout::Present))]
     target: sierra::Image,
 }
 

@@ -15,7 +15,7 @@ use crate::{
     buffer::BufferRange,
     encode::Encoder,
     // image::Image,
-    image::RawLayout,
+    image::Layout,
     // image::{ImageExtent, SubresourceRange},
     sampler::Sampler,
     view::ImageView,
@@ -74,7 +74,7 @@ pub struct ImageViewDescriptor {
     pub view: ImageView,
 
     /// View's layout when descriptor is accessed.
-    pub layout: RawLayout,
+    pub layout: Layout,
 }
 
 /// Image view, layout and sampler.\
@@ -86,7 +86,7 @@ pub struct CombinedImageSampler {
     pub view: ImageView,
 
     /// View's layout when descriptor is accessed.
-    pub layout: RawLayout,
+    pub layout: Layout,
 
     /// Descriptor sampler resource.
     pub sampler: Sampler,
