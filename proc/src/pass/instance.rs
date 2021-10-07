@@ -234,7 +234,11 @@ pub(super) fn generate(input: &Input) -> TokenStream {
                 }
 
                 if !render_pass_compatible {
-                    tracing::debug!("Render pass is not compatible with cached instance");
+                    if self.render_pass.is_some() {
+                        tracing::debug!("Recreating render pass");
+                    } else {
+                        tracing::debug!("Creating render pass");
+                    }
 
                     self.render_pass = None;
 

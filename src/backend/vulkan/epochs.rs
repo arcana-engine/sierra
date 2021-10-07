@@ -86,9 +86,8 @@ impl Epochs {
     }
 
     pub fn drain_cbuf(&self, queue: QueueId, cbufs: &mut Vec<CommandBuffer>) {
-        debug_assert!(cbufs.is_empty());
         let mut queue = self.queues[&queue].lock();
-        std::mem::swap(&mut queue.cbufs, cbufs);
+        cbufs.append(&mut queue.cbufs);
     }
 
     pub fn submit(&self, queue: QueueId, cbufs: impl Iterator<Item = CommandBuffer>) {
@@ -114,8 +113,10 @@ impl Drop for QueueEpochs {
             .cbufs
             .iter_mut()
             .all(|cbuf| cbuf.references().is_empty()));
-        assert!(self.cache.iter().all(|e| e.cbufs.is_empty()));
-        assert!(self.epochs.iter().all(|e| e.cbufs.is_empty()) || std::thread::panicking());
+        assert!(
+            std::thread::panicking() || self.epochs.iter().all(|e| e.cbufs.is_empty()),
+            "All epochs must be flushed"
+        );
 
         self.cbufs.clear();
         self.epochs.clear();
