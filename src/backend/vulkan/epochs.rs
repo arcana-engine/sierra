@@ -109,14 +109,18 @@ struct QueueEpochs {
 
 impl Drop for QueueEpochs {
     fn drop(&mut self) {
-        assert!(self
-            .cbufs
-            .iter_mut()
-            .all(|cbuf| cbuf.references().is_empty()));
-        assert!(
-            std::thread::panicking() || self.epochs.iter().all(|e| e.cbufs.is_empty()),
-            "All epochs must be flushed"
-        );
+        if !std::thread::panicking() {
+            assert!(
+                self.cbufs
+                    .iter_mut()
+                    .all(|cbuf| cbuf.references().is_empty()),
+                "All cbufs must be flushed"
+            );
+            assert!(
+                self.epochs.iter().all(|e| e.cbufs.is_empty()),
+                "All epochs must be flushed"
+            );
+        }
 
         self.cbufs.clear();
         self.epochs.clear();

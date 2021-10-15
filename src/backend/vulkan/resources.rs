@@ -1207,7 +1207,7 @@ impl Drop for DescriptorSetInner {
 
         if let Some(device) = self.owner.upgrade() {
             unsafe { device.destroy_descriptor_set(ManuallyDrop::take(&mut self.set)) }
-        } else {
+        } else if !std::thread::panicking() {
             panic!("Device already dropped")
         }
     }
