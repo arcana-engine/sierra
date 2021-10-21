@@ -519,18 +519,6 @@ impl<'a> Encoder<'a> {
         )
     }
 
-    /// Updates a buffer's contents from host memory
-    pub fn update_buffer_alloc<T>(&mut self, buffer: &'a Buffer, offset: u64, data: &'a [T])
-    where
-        T: Pod,
-    {
-        if data.is_empty() {
-            return;
-        }
-
-        self.update_buffer(buffer, offset, data);
-    }
-
     /// Builds acceleration structures.
     pub fn build_acceleration_structure(
         &mut self,
