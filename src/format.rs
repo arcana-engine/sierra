@@ -174,15 +174,15 @@ impl Format {
     }
 
     pub fn is_color(&self) -> bool {
-        match self {
+        !matches!(
+            self,
             Self::D16Unorm
-            | Self::D32Sfloat
-            | Self::S8Uint
-            | Self::D16UnormS8Uint
-            | Self::D24UnormS8Uint
-            | Self::D32SfloatS8Uint => false,
-            _ => true,
-        }
+                | Self::D32Sfloat
+                | Self::S8Uint
+                | Self::D16UnormS8Uint
+                | Self::D24UnormS8Uint
+                | Self::D32SfloatS8Uint
+        )
     }
 
     pub fn color_type(&self) -> Option<FormatType> {
@@ -198,14 +198,14 @@ impl Format {
     }
 
     pub fn is_depth(&self) -> bool {
-        match self {
+        matches!(
+            self,
             Self::D16Unorm
-            | Self::D32Sfloat
-            | Self::D16UnormS8Uint
-            | Self::D24UnormS8Uint
-            | Self::D32SfloatS8Uint => true,
-            _ => false,
-        }
+                | Self::D32Sfloat
+                | Self::D16UnormS8Uint
+                | Self::D24UnormS8Uint
+                | Self::D32SfloatS8Uint
+        )
     }
 
     pub fn is_stencil(&self) -> bool {

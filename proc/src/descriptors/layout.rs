@@ -101,7 +101,6 @@ pub(super) fn generate(input: &Input) -> TokenStream {
             }
         }
     )
-    .into()
 }
 
 fn generate_layout_binding(descriptor: &Descriptor, binding: u32) -> TokenStream {

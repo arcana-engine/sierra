@@ -40,8 +40,8 @@ pub(super) fn parse_combined_image_sampler_attr(
     })?;
 
     let sampler = get_unique(
-        args.iter().filter_map(|arg| match arg {
-            AttributeArgument::SeparateSampler { member } => Some(member.clone()),
+        args.iter().map(|arg| match arg {
+            AttributeArgument::SeparateSampler { member } => member.clone(),
         }),
         attr,
         "Argument with sampler member must be specified",

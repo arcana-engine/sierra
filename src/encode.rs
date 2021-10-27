@@ -798,7 +798,7 @@ impl<'a, 'b> RenderPassEncoder<'a, 'b> {
                 .set_viewport(self.framebuffer.info().extent.into());
         }
 
-        let gp = pipeline.get(&self.render_pass, self.subpass, device)?;
+        let gp = pipeline.get(self.render_pass, self.subpass, device)?;
         self.inner.bind_graphics_pipeline(gp);
         Ok(())
     }

@@ -196,7 +196,7 @@ impl Spirv {
 impl From<Spirv> for ShaderModuleInfo {
     fn from(shader: Spirv) -> Self {
         ShaderModuleInfo {
-            code: shader.code.into(),
+            code: shader.code,
             language: ShaderLanguage::SPIRV,
         }
     }

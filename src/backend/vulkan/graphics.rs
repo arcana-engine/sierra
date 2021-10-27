@@ -476,9 +476,11 @@ impl Graphics {
                 }
 
                 unsafe {
-                    let mut info = Win32SurfaceCreateInfoKHR::default();
-                    info.hinstance = handle.hinstance;
-                    info.hwnd = handle.hwnd;
+                    let info = Win32SurfaceCreateInfoKHR {
+                        hinstance: handle.hinstance,
+                        hwnd: handle.hwnd,
+                        ..Default::default()
+                    };
                     self.instance.create_win32_surface_khr(&info, None)
                 }
                 .result()

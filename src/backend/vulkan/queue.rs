@@ -151,9 +151,9 @@ impl Queue {
                 .queue_submit(
                     self.handle,
                     &[vk1_0::SubmitInfoBuilder::new()
-                        .wait_semaphores(&wait_semaphores)
-                        .wait_dst_stage_mask(&wait_stages)
-                        .signal_semaphores(&signal_semaphores)
+                        .wait_semaphores(&*wait_semaphores)
+                        .wait_dst_stage_mask(&*wait_stages)
+                        .signal_semaphores(&*signal_semaphores)
                         .command_buffers(&*handles)],
                     fence.map(|f| f.handle()),
                 )

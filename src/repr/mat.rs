@@ -1,15 +1,11 @@
 use {
-    super::{
-        native::ShaderNative,
-        pad::Padded,
-        repr::{ShaderRepr, Std140, Std430},
-        vec::vec,
-    },
+    super::{native::ShaderNative, pad::Padded, vec::vec, ShaderRepr, Std140, Std430},
     bytemuck::{Pod, Zeroable},
     core::{
         convert::TryFrom,
         mem::{align_of, align_of_val, size_of, size_of_val},
     },
+    std::cmp::Ordering,
 };
 
 /// Generic matrix type.
@@ -42,15 +38,20 @@ impl<T: Pod, const N: usize, const M: usize> TryFrom<&[T]> for mat<T, N, M> {
         debug_assert_eq!(align_of_val(v), align_of::<Self>());
 
         let len = v.len();
-        if len < N * M {
-            debug_assert!(size_of_val(v) < size_of::<Self>());
-            Err(WrongNumberOfElements::NotEnoughElements)
-        } else if len > N * M {
-            debug_assert!(size_of_val(v) > size_of::<Self>());
-            Err(WrongNumberOfElements::TooManyElements)
-        } else {
-            debug_assert_eq!(size_of_val(v), size_of::<Self>());
-            Ok(bytemuck::cast_slice(v)[0])
+
+        match len.cmp(&(N * M)) {
+            Ordering::Less => {
+                debug_assert!(size_of_val(v) < size_of::<Self>());
+                Err(WrongNumberOfElements::NotEnoughElements)
+            }
+            Ordering::Greater => {
+                debug_assert!(size_of_val(v) > size_of::<Self>());
+                Err(WrongNumberOfElements::TooManyElements)
+            }
+            Ordering::Equal => {
+                debug_assert_eq!(size_of_val(v), size_of::<Self>());
+                Ok(bytemuck::cast_slice(v)[0])
+            }
         }
     }
 }

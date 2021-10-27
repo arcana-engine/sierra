@@ -1,7 +1,4 @@
-use super::{
-    pad::Padded,
-    repr::{ShaderRepr, Std140, Std430},
-};
+use super::{pad::Padded, ShaderRepr, Std140, Std430};
 
 macro_rules! impl_unsafe_marker_for_array {
     ($( $n:expr ),*) => {
@@ -17,6 +14,8 @@ macro_rules! impl_unsafe_marker_for_array {
                 type ArrayPadding = [u8; 0];
 
                 fn copy_to_repr(&self, repr: &mut [Padded<T::Type, T::ArrayPadding>; $n]) {
+                    #![allow(clippy::reversed_empty_ranges)]
+
                     for i in 0..$n {
                         self[i].copy_to_repr(&mut repr[i].value);
                     }
@@ -34,6 +33,8 @@ macro_rules! impl_unsafe_marker_for_array {
                 type ArrayPadding = [u8; 0];
 
                 fn copy_to_repr(&self, repr: &mut [Padded<T::Type, T::ArrayPadding>; $n]) {
+                    #![allow(clippy::reversed_empty_ranges)]
+
                     for i in 0..$n {
                         self[i].copy_to_repr(&mut repr[i].value);
                     }

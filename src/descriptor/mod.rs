@@ -175,14 +175,14 @@ pub trait TypedDescriptor {
     const TYPE: DescriptorType;
     type Descriptor: std::hash::Hash + Eq;
 
-    fn descriptors<'a>(slice: &'a [Self::Descriptor]) -> Descriptors<'a>;
+    fn descriptors(slice: &[Self::Descriptor]) -> Descriptors<'_>;
 }
 
 impl TypedDescriptor for SamplerDescriptor {
     const TYPE: DescriptorType = DescriptorType::Sampler;
     type Descriptor = Sampler;
 
-    fn descriptors<'a>(slice: &'a [Sampler]) -> Descriptors<'a> {
+    fn descriptors(slice: &[Sampler]) -> Descriptors<'_> {
         Descriptors::Sampler(slice)
     }
 }
@@ -191,7 +191,7 @@ impl TypedDescriptor for CombinedImageSamplerDescriptor {
     const TYPE: DescriptorType = DescriptorType::CombinedImageSampler;
     type Descriptor = CombinedImageSampler;
 
-    fn descriptors<'a>(slice: &'a [CombinedImageSampler]) -> Descriptors<'a> {
+    fn descriptors(slice: &[CombinedImageSampler]) -> Descriptors<'_> {
         Descriptors::CombinedImageSampler(slice)
     }
 }
@@ -200,7 +200,7 @@ impl TypedDescriptor for SampledImageDescriptor {
     const TYPE: DescriptorType = DescriptorType::SampledImage;
     type Descriptor = ImageViewDescriptor;
 
-    fn descriptors<'a>(slice: &'a [ImageViewDescriptor]) -> Descriptors<'a> {
+    fn descriptors(slice: &[ImageViewDescriptor]) -> Descriptors<'_> {
         Descriptors::SampledImage(slice)
     }
 }
@@ -209,7 +209,7 @@ impl TypedDescriptor for StorageImageDescriptor {
     const TYPE: DescriptorType = DescriptorType::StorageImage;
     type Descriptor = ImageViewDescriptor;
 
-    fn descriptors<'a>(slice: &'a [ImageViewDescriptor]) -> Descriptors<'a> {
+    fn descriptors(slice: &[ImageViewDescriptor]) -> Descriptors<'_> {
         Descriptors::StorageImage(slice)
     }
 }
@@ -218,7 +218,7 @@ impl TypedDescriptor for UniformBufferDescriptor {
     const TYPE: DescriptorType = DescriptorType::UniformBuffer;
     type Descriptor = BufferRange;
 
-    fn descriptors<'a>(slice: &'a [BufferRange]) -> Descriptors<'a> {
+    fn descriptors(slice: &[BufferRange]) -> Descriptors<'_> {
         Descriptors::UniformBuffer(slice)
     }
 }
@@ -227,7 +227,7 @@ impl TypedDescriptor for StorageBufferDescriptor {
     const TYPE: DescriptorType = DescriptorType::StorageBuffer;
     type Descriptor = BufferRange;
 
-    fn descriptors<'a>(slice: &'a [BufferRange]) -> Descriptors<'a> {
+    fn descriptors(slice: &[BufferRange]) -> Descriptors<'_> {
         Descriptors::StorageBuffer(slice)
     }
 }
@@ -236,7 +236,7 @@ impl TypedDescriptor for UniformBufferDynamicDescriptor {
     const TYPE: DescriptorType = DescriptorType::UniformBufferDynamic;
     type Descriptor = BufferRange;
 
-    fn descriptors<'a>(slice: &'a [BufferRange]) -> Descriptors<'a> {
+    fn descriptors(slice: &[BufferRange]) -> Descriptors<'_> {
         Descriptors::UniformBufferDynamic(slice)
     }
 }
@@ -245,7 +245,7 @@ impl TypedDescriptor for StorageBufferDynamicDescriptor {
     const TYPE: DescriptorType = DescriptorType::StorageBufferDynamic;
     type Descriptor = BufferRange;
 
-    fn descriptors<'a>(slice: &'a [BufferRange]) -> Descriptors<'a> {
+    fn descriptors(slice: &[BufferRange]) -> Descriptors<'_> {
         Descriptors::StorageBufferDynamic(slice)
     }
 }
@@ -254,7 +254,7 @@ impl TypedDescriptor for InputAttachmentDescriptor {
     const TYPE: DescriptorType = DescriptorType::InputAttachment;
     type Descriptor = ImageViewDescriptor;
 
-    fn descriptors<'a>(slice: &'a [ImageViewDescriptor]) -> Descriptors<'a> {
+    fn descriptors(slice: &[ImageViewDescriptor]) -> Descriptors<'_> {
         Descriptors::InputAttachment(slice)
     }
 }
@@ -263,7 +263,7 @@ impl TypedDescriptor for AccelerationStructureDescriptor {
     const TYPE: DescriptorType = DescriptorType::AccelerationStructure;
     type Descriptor = AccelerationStructure;
 
-    fn descriptors<'a>(slice: &'a [AccelerationStructure]) -> Descriptors<'a> {
+    fn descriptors(slice: &[AccelerationStructure]) -> Descriptors<'_> {
         Descriptors::AccelerationStructure(slice)
     }
 }

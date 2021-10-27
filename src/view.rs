@@ -65,17 +65,17 @@ impl ImageViewInfo {
 
 #[doc(hidden)]
 pub trait MakeImageView {
-    fn make_view<'a>(&'a self, device: &Device) -> Result<ImageView, OutOfMemory>;
+    fn make_view(&self, device: &Device) -> Result<ImageView, OutOfMemory>;
 }
 
 impl MakeImageView for ImageView {
-    fn make_view<'a>(&'a self, _device: &Device) -> Result<ImageView, OutOfMemory> {
+    fn make_view(&self, _device: &Device) -> Result<ImageView, OutOfMemory> {
         Ok(self.clone())
     }
 }
 
 impl MakeImageView for Image {
-    fn make_view<'a>(&'a self, device: &Device) -> Result<ImageView, OutOfMemory> {
+    fn make_view(&self, device: &Device) -> Result<ImageView, OutOfMemory> {
         let view = device.create_image_view(ImageViewInfo::new(self.clone()))?;
         Ok(view)
     }

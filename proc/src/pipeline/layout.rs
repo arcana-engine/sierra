@@ -142,7 +142,7 @@ pub(super) fn generate(input: &Input) -> TokenStream {
                 D: ::sierra::UpdatedPipelineDescriptors<Self>,
             {
                 let raw: &_ = encoder.scope().to_scope(::std::clone::Clone::clone(::sierra::UpdatedDescriptors::raw(updated_descriptors)));
-                
+
                 encoder.bind_ray_tracing_descriptor_sets(
                     &self.pipeline_layout,
                     D::N,
@@ -186,5 +186,4 @@ pub(super) fn generate(input: &Input) -> TokenStream {
         #pipeline_descriptors
 
     )
-    .into()
 }

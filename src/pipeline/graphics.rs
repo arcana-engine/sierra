@@ -30,10 +30,7 @@ pub enum State<T> {
 
 impl<T> State<T> {
     pub fn is_dynamic(&self) -> bool {
-        match self {
-            Self::Dynamic => true,
-            _ => false,
-        }
+        matches!(self, Self::Dynamic)
     }
 
     pub fn dynamic() -> Self {

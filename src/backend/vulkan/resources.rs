@@ -295,19 +295,17 @@ impl Drop for ImageInner {
     fn drop(&mut self) {
         resource_freed();
 
-        match &mut self.flavor {
-            ImageFlavor::DeviceImage {
-                memory_block,
-                index,
-            } => {
-                if let Some(device) = self.owner.upgrade() {
-                    unsafe {
-                        let block = ManuallyDrop::take(memory_block);
-                        device.destroy_image(*index, block);
-                    }
+        if let ImageFlavor::DeviceImage {
+            memory_block,
+            index,
+        } = &mut self.flavor
+        {
+            if let Some(device) = self.owner.upgrade() {
+                unsafe {
+                    let block = ManuallyDrop::take(memory_block);
+                    device.destroy_image(*index, block);
                 }
             }
-            _ => {}
         }
     }
 }
@@ -337,15 +335,13 @@ impl Debug for Image {
                 .field("owner", &self.inner.owner)
                 .field("handle", &self.handle);
 
-            match &self.inner.flavor {
-                ImageFlavor::DeviceImage {
-                    memory_block,
-                    index,
-                } => {
-                    fmt.field("memory_block", &**memory_block)
-                        .field("index", index);
-                }
-                _ => {}
+            if let ImageFlavor::DeviceImage {
+                memory_block,
+                index,
+            } = &self.inner.flavor
+            {
+                fmt.field("memory_block", &**memory_block)
+                    .field("index", index);
             }
 
             fmt.finish()
@@ -534,11 +530,8 @@ impl Drop for Fence {
         resource_freed();
 
         if let Some(device) = self.owner.upgrade() {
-            match self.state {
-                FenceState::Armed { .. } => {
-                    device.wait_fences(&mut [self], true);
-                }
-                _ => {}
+            if let FenceState::Armed { .. } = self.state {
+                device.wait_fences(&mut [self], true);
             }
             unsafe { device.destroy_fence(self.index) }
         }
