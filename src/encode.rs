@@ -315,7 +315,7 @@ impl<'a> EncoderCommon<'a> {
     pub fn bind_graphics_descriptors<P>(
         &mut self,
         layout: &'a P,
-        descriptors: &'a impl UpdatedPipelineDescriptors<P>,
+        descriptors: &impl UpdatedPipelineDescriptors<P>,
     ) where
         P: TypedPipelineLayout,
     {
@@ -345,7 +345,7 @@ impl<'a> EncoderCommon<'a> {
     pub fn bind_compute_descriptors<P>(
         &mut self,
         layout: &'a P,
-        descriptors: &'a impl UpdatedPipelineDescriptors<P>,
+        descriptors: &impl UpdatedPipelineDescriptors<P>,
     ) where
         P: TypedPipelineLayout,
     {
@@ -375,7 +375,7 @@ impl<'a> EncoderCommon<'a> {
     pub fn bind_ray_tracing_descriptors<P>(
         &mut self,
         layout: &'a P,
-        descriptors: &'a impl UpdatedPipelineDescriptors<P>,
+        descriptors: &impl UpdatedPipelineDescriptors<P>,
     ) where
         P: TypedPipelineLayout,
     {

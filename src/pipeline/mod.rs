@@ -36,19 +36,16 @@ pub trait TypedPipelineLayout {
 
     fn raw(&self) -> &PipelineLayout;
 
-    fn bind_graphics<'a, D>(&'a self, updated_descriptors: &'a D, encoder: &mut EncoderCommon<'a>)
+    fn bind_graphics<'a, D>(&'a self, updated_descriptors: &D, encoder: &mut EncoderCommon<'a>)
     where
         D: UpdatedPipelineDescriptors<Self>;
 
-    fn bind_compute<'a, D>(&'a self, updated_descriptors: &'a D, encoder: &mut EncoderCommon<'a>)
+    fn bind_compute<'a, D>(&'a self, updated_descriptors: &D, encoder: &mut EncoderCommon<'a>)
     where
         D: UpdatedPipelineDescriptors<Self>;
 
-    fn bind_ray_tracing<'a, D>(
-        &'a self,
-        updated_descriptors: &'a D,
-        encoder: &mut EncoderCommon<'a>,
-    ) where
+    fn bind_ray_tracing<'a, D>(&'a self, updated_descriptors: &D, encoder: &mut EncoderCommon<'a>)
+    where
         D: UpdatedPipelineDescriptors<Self>;
 }
 
