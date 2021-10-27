@@ -1,9 +1,5 @@
 use {
-    super::{
-        instance::instance_type_name,
-        layout::layout_type_name,
-        parse::{Input},
-    },
+    super::{instance::instance_type_name, layout::layout_type_name, parse::Input},
     proc_macro2::TokenStream,
 };
 
@@ -51,25 +47,30 @@ fn generate_uniform_struct(input: &Input) -> TokenStream {
         })
         .collect();
 
-        let align_mask = input.uniforms
+    let align_mask = input.uniforms
             .iter()
             .fold(quote::quote!(15), |mut tokens, u| {
                 let field_type = &u.field.ty;
-    
+
                 tokens.extend(
                     quote::quote! { | (<#field_type as ::sierra::ShaderRepr<::sierra::Std140>>::ALIGN_MASK) },
                 );
                 tokens
             });
 
-        let pad_size = quote::quote!(::sierra::pad_size(#align_mask, #last_offset));
+    let pad_size = quote::quote!(::sierra::pad_size(#align_mask, #last_offset));
 
     let ident = &input.item_struct.ident;
     let uniforms_ident = quote::format_ident!("{}Uniforms", ident);
     let vis = &input.item_struct.vis;
 
     let doc_attr = if cfg!(feature = "verbose-docs") {
-        format!("#[doc = \"Combined uniforms for descriptors input [`{}`]\"]", ident).parse().unwrap()
+        format!(
+            "#[doc = \"Combined uniforms for descriptors input [`{}`]\"]",
+            ident
+        )
+        .parse()
+        .unwrap()
     } else {
         quote::quote!(#[doc(hidden)])
     };
