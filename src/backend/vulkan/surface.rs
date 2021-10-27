@@ -52,7 +52,7 @@ impl Surface {
 
     pub(crate) fn mark_used(&self) -> Result<(), SurfaceError> {
         if self.inner.used.fetch_or(true, Ordering::SeqCst) {
-            return Err(SurfaceError::AlreadyUsed);
+            Err(SurfaceError::AlreadyUsed)
         } else {
             Ok(())
         }

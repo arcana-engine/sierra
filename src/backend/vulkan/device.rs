@@ -1,3 +1,5 @@
+use ordered_float::OrderedFloat;
+
 use {
     super::{
         access::supported_access,
@@ -401,7 +403,7 @@ impl Device {
             address,
             buffer_index,
             block,
-            memory_usage.unwrap_or(MemoryUsage::empty()),
+            memory_usage.unwrap_or_else(MemoryUsage::empty),
         ))
     }
 
@@ -878,7 +880,7 @@ impl Device {
                 .create_graphics_pipelines(None, &[builder], None)
         }
         .result()
-        .map_err(|err| oom_error_from_erupt(err))?;
+        .map_err(oom_error_from_erupt)?;
 
         debug_assert_eq!(pipelines.len(), 1);
 
@@ -923,7 +925,7 @@ impl Device {
             )
         }
         .result()
-        .map_err(|err| oom_error_from_erupt(err))?;
+        .map_err(oom_error_from_erupt)?;
 
         debug_assert_eq!(pipelines.len(), 1);
 
@@ -1027,7 +1029,7 @@ impl Device {
         self.inner
             .allocator
             .lock()
-            .dealloc(EruptMemoryDevice::wrap(&self.logical()), block);
+            .dealloc(EruptMemoryDevice::wrap(self.logical()), block);
 
         let handle = self.inner.images.lock().remove(index);
         self.inner.logical.destroy_image(Some(handle), None);
@@ -1280,14 +1282,13 @@ impl Device {
                                 } else {
                                     None
                                 }
-                                .and_then(|c| c.try_into().ok())
-                                .ok_or_else(|| {
+                                .ok_or(
                                     CreateRenderPassError::ColorAttachmentReferenceOutOfBound {
                                         subpass: si,
                                         index: ci,
                                         attachment: c,
                                     }
-                                })?)
+                                )?)
                                 .layout(cl.to_erupt())
                             )
                             })
@@ -1304,13 +1305,12 @@ impl Device {
                                     } else {
                                         None
                                     }
-                                    .and_then(|d| d.try_into().ok())
-                                    .ok_or_else(|| {
+                                    .ok_or(
                                         CreateRenderPassError::DepthAttachmentReferenceOutOfBound {
                                             subpass: si,
                                             attachment: d,
-                                        }
-                                    })?,
+                                        },
+                                    )?,
                                 )
                                 .layout(dl.to_erupt()),
                         );
@@ -1354,16 +1354,8 @@ impl Device {
             .iter()
             .map(|d| {
                 vk1_0::SubpassDependencyBuilder::new()
-                    .src_subpass(
-                        d.src
-                            .map(|s| s.try_into().expect("Subpass index out of bound"))
-                            .unwrap_or(vk1_0::SUBPASS_EXTERNAL),
-                    )
-                    .dst_subpass(
-                        d.dst
-                            .map(|s| s.try_into().expect("Subpass index out of bound"))
-                            .unwrap_or(vk1_0::SUBPASS_EXTERNAL),
-                    )
+                    .src_subpass(d.src.unwrap_or(vk1_0::SUBPASS_EXTERNAL))
+                    .dst_subpass(d.dst.unwrap_or(vk1_0::SUBPASS_EXTERNAL))
                     .src_stage_mask(d.src_stages.to_erupt())
                     .dst_stage_mask(d.dst_stages.to_erupt())
                     .src_access_mask(supported_access(d.src_stages.to_erupt()))
@@ -1499,7 +1491,7 @@ impl Device {
             }
         };
 
-        if code.len() == 0 {
+        if code.is_empty() {
             return Err(CreateShaderModuleError::InvalidShader {
                 source: InvalidShader::EmptySource,
             });
@@ -1582,7 +1574,7 @@ impl Device {
     /// Only one swapchain may be associated with one surface.
     #[tracing::instrument]
     pub fn create_swapchain(&self, surface: &mut Surface) -> Result<Swapchain, SurfaceError> {
-        Ok(Swapchain::new(surface, self)?)
+        Swapchain::new(surface, self)
     }
 
     pub(super) fn insert_swapchain(&self, swapchain: vksw::SwapchainKHR) -> usize {
@@ -2166,10 +2158,10 @@ impl Device {
                     .bindings(&bindings)
                     .flags(info.flags.to_erupt());
 
-                let mut flags = vk1_2::DescriptorSetLayoutBindingFlagsCreateInfoBuilder::new()
+                let flags = vk1_2::DescriptorSetLayoutBindingFlagsCreateInfoBuilder::new()
                     .binding_flags(&flags);
 
-                create_info = create_info.extend_from(&mut flags);
+                create_info = create_info.extend_from(&flags);
 
                 self.inner
                     .logical
@@ -2228,7 +2220,7 @@ impl Device {
                 EruptDescriptorDevice::wrap(&self.inner.logical),
                 &info.layout.handle(),
                 flags,
-                &info.layout.total_count(),
+                info.layout.total_count(),
                 1,
             )
         }
@@ -2510,8 +2502,8 @@ impl Device {
 
                         *acc_structure_write =
                             vkacc::WriteDescriptorSetAccelerationStructureKHRBuilder::new()
-                                .acceleration_structures(&acceleration_structures[range.clone()]);
-                        write.extend_from(&mut *acc_structure_write)
+                                .acceleration_structures(&acceleration_structures[range]);
+                        write.extend_from(&*acc_structure_write)
                     }
                 }
             })
@@ -2536,7 +2528,11 @@ impl Device {
                             .address_mode_w(info.address_mode_w.to_erupt())
                             .mip_lod_bias(info.mip_lod_bias.into_inner())
                             .anisotropy_enable(info.max_anisotropy.is_some())
-                            .max_anisotropy(info.max_anisotropy.unwrap_or(0.0.into()).into_inner())
+                            .max_anisotropy(
+                                info.max_anisotropy
+                                    .unwrap_or(OrderedFloat(0.0))
+                                    .into_inner(),
+                            )
                             .compare_enable(info.compare_op.is_some())
                             .compare_op(match info.compare_op {
                                 Some(compare_op) => compare_op.to_erupt(),

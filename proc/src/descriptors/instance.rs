@@ -33,7 +33,7 @@ pub(super) fn generate(input: &Input) -> TokenStream {
     let update_descriptor_statements: TokenStream = input
         .descriptors
         .iter()
-        .filter_map(|input| {
+        .map(|input| {
             let field = &input.member;
 
             let descriptor_field = quote::format_ident!("descriptor_{}", input.member);
@@ -52,7 +52,7 @@ pub(super) fn generate(input: &Input) -> TokenStream {
                 }
             );
 
-            Some(stream)
+            stream
         })
         .collect();
 

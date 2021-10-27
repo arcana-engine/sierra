@@ -12,14 +12,14 @@ pub struct Input {
 
 #[derive(Clone)]
 pub enum Layout {
-    Expr(syn::Expr),
-    Member(syn::Member),
+    Expr(Box<syn::Expr>),
+    Member(Box<syn::Member>),
 }
 
 #[derive(Clone)]
 pub enum ClearValue {
-    Expr(syn::Expr),
-    Member(syn::Member),
+    Expr(Box<syn::Expr>),
+    Member(Box<syn::Member>),
 }
 
 #[derive(Clone)]
@@ -53,11 +53,8 @@ impl Attachment {
             }
             _ => {}
         }
-        match &self.store_op {
-            StoreOp::Store(Layout::Member(layout)) => {
-                validate_member(layout, item_struct)?;
-            }
-            _ => {}
+        if let StoreOp::Store(Layout::Member(layout)) = &self.store_op {
+            validate_member(layout, item_struct)?;
         }
         Ok(())
     }
@@ -313,10 +310,10 @@ fn parse_attachment_attr(attr: &syn::Attribute) -> syn::Result<Option<Attachment
                         let value = if value.peek(syn::Token![const]) {
                             let _const = value.parse::<syn::Token![const]>()?;
                             let expr = value.parse::<syn::Expr>()?;
-                            ClearValue::Expr(expr)
+                            ClearValue::Expr(Box::new(expr))
                         } else {
                             let member = value.parse::<syn::Member>()?;
-                            ClearValue::Member(member)
+                            ClearValue::Member(Box::new(member))
                         };
 
                         Ok(AttachmentAttributeArgument::LoadOp(LoadOp::Clear(value)))
@@ -328,10 +325,10 @@ fn parse_attachment_attr(attr: &syn::Attribute) -> syn::Result<Option<Attachment
                         let layout = if value.peek(syn::Token![const]) {
                             let _const = value.parse::<syn::Token![const]>()?;
                             let expr = value.parse::<syn::Expr>()?;
-                            Layout::Expr(expr)
+                            Layout::Expr(Box::new(expr))
                         } else {
                             let member = value.parse::<syn::Member>()?;
-                            Layout::Member(member)
+                            Layout::Member(Box::new(member))
                         };
 
                         Ok(AttachmentAttributeArgument::LoadOp(LoadOp::Load(layout)))
@@ -343,10 +340,10 @@ fn parse_attachment_attr(attr: &syn::Attribute) -> syn::Result<Option<Attachment
                         let layout = if value.peek(syn::Token![const]) {
                             let _const = value.parse::<syn::Token![const]>()?;
                             let expr = value.parse::<syn::Expr>()?;
-                            Layout::Expr(expr)
+                            Layout::Expr(Box::new(expr))
                         } else {
                             let member = value.parse::<syn::Member>()?;
-                            Layout::Member(member)
+                            Layout::Member(Box::new(member))
                         };
 
                         Ok(AttachmentAttributeArgument::StoreOp(StoreOp::Store(layout)))

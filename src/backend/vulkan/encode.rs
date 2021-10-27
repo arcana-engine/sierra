@@ -126,7 +126,7 @@ impl CommandBuffer {
 
                     let pass = &framebuffer.info().render_pass;
 
-                    let mut clears = clears.into_iter();
+                    let mut clears = clears.iter();
                     let clear_values = scope.to_scope_from_iter(
                         pass
                             .info()
@@ -137,25 +137,26 @@ impl CommandBuffer {
 
                                 if attachment.load_op == LoadOp::Clear {
                                     let clear = clears.next().expect("Not enough clear values");
-                                    match clear {
-                                        &ClearValue::Color(r, g, b, a) => vk1_0::ClearValue {
-                                        color: match attachment.format.description() {
-                                            R(repr)|RG(repr)|RGB(repr)|RGBA(repr)|BGR(repr)|BGRA(repr) => colors_f32_to_value(r, g, b, a, repr),
-                                            _ => panic!("Attempt to clear depth-stencil attachment with color value"),
+                                    match *clear {
+                                        ClearValue::Color(r, g, b, a) => vk1_0::ClearValue {
+                                            color: match attachment.format.description() {
+                                                R(repr)|RG(repr)|RGB(repr)|RGBA(repr)|BGR(repr)|BGRA(repr) => colors_f32_to_value(r, g, b, a, repr),
+                                                _ => panic!("Attempt to clear depth-stencil attachment with color value"),
+                                            }
+                                        },
+                                        ClearValue::DepthStencil(depth, stencil) => {
+                                            assert!(
+                                                attachment.format.is_depth()
+                                                    || attachment.format.is_stencil()
+                                            );
+                                            vk1_0::ClearValue {
+                                                depth_stencil: vk1_0::ClearDepthStencilValue {
+                                                    depth,
+                                                    stencil,
+                                                },
+                                            }
                                         }
-                                    },
-                                    &ClearValue::DepthStencil(depth, stencil) => {
-                                        assert!(
-                                            attachment.format.is_depth()
-                                                || attachment.format.is_stencil()
-                                        );
-                                        vk1_0::ClearValue {
-                                            depth_stencil: vk1_0::ClearDepthStencilValue {
-                                                depth,
-                                                stencil,
-                                            },
-                                        }
-                                    }}
+                                    }
                                 } else {
                                     vk1_0::ClearValue {
                                         color: vk1_0::ClearColorValue {
@@ -425,15 +426,13 @@ impl CommandBuffer {
                         ));
 
                     let build_offsets = &*scope.to_scope_from_iter(
-                        offsets_per_info
-                            .into_iter()
-                            .map(|&offsets| offsets.as_ptr()),
+                        offsets_per_info.iter().map(|&offsets| offsets.as_ptr()),
                     );
 
                     unsafe {
                         device.logical().cmd_build_acceleration_structures_khr(
                             self.handle,
-                            &build_infos,
+                            &*build_infos,
                             build_offsets,
                         )
                     }

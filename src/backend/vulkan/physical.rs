@@ -253,10 +253,8 @@ impl PhysicalDevice {
             if self.features.sbl.scalar_block_layout > 0 {
                 features.push(Feature::ScalarBlockLayout);
             }
-        } else if graphics.instance.enabled().vk1_2 {
-            if self.features.v12.scalar_block_layout > 0 {
-                features.push(Feature::ScalarBlockLayout);
-            }
+        } else if graphics.instance.enabled().vk1_2 && self.features.v12.scalar_block_layout > 0 {
+            features.push(Feature::ScalarBlockLayout);
         }
 
         if self
@@ -399,10 +397,8 @@ impl PhysicalDevice {
             if self.features.bda.buffer_device_address > 0 {
                 features.push(Feature::BufferDeviceAddress);
             }
-        } else if graphics.instance.enabled().vk1_2 {
-            if self.features.v12.buffer_device_address > 0 {
-                features.push(Feature::BufferDeviceAddress);
-            }
+        } else if graphics.instance.enabled().vk1_2 && self.features.v12.buffer_device_address > 0 {
+            features.push(Feature::BufferDeviceAddress);
         }
 
         if self
@@ -436,7 +432,12 @@ impl PhysicalDevice {
                 vk1_0::PhysicalDeviceType::INTEGRATED_GPU => Some(DeviceKind::Integrated),
                 vk1_0::PhysicalDeviceType::DISCRETE_GPU => Some(DeviceKind::Discrete),
                 vk1_0::PhysicalDeviceType::CPU => Some(DeviceKind::Software),
-                vk1_0::PhysicalDeviceType::OTHER | vk1_0::PhysicalDeviceType::VIRTUAL_GPU | _ => {
+                vk1_0::PhysicalDeviceType::OTHER | vk1_0::PhysicalDeviceType::VIRTUAL_GPU => None,
+                _ => {
+                    tracing::error!(
+                        "Unexpected device type value: {:?}",
+                        self.properties.v10.device_type
+                    );
                     None
                 }
             },
@@ -522,7 +523,7 @@ impl PhysicalDevice {
                 return Err(CreateDeviceError::BadFamiliesRequested);
             }
 
-            let priorities = families_requested.entry(family).or_insert(Vec::new());
+            let priorities = families_requested.entry(family).or_insert_with(Vec::new);
 
             if arith_gt(
                 priorities.len() + count,
@@ -551,7 +552,7 @@ impl PhysicalDevice {
 
         // Collect requested features.
         let mut features2 = vk1_1::PhysicalDeviceFeatures2Builder::new();
-        let mut features11 = vk1_2::PhysicalDeviceVulkan11FeaturesBuilder::new();
+        let features11 = vk1_2::PhysicalDeviceVulkan11FeaturesBuilder::new();
         let mut features12 = vk1_2::PhysicalDeviceVulkan12FeaturesBuilder::new();
         let mut features_sbl = sbl::PhysicalDeviceScalarBlockLayoutFeaturesEXTBuilder::new();
         let mut features_edi = edi::PhysicalDeviceDescriptorIndexingFeaturesEXTBuilder::new();
@@ -977,39 +978,39 @@ impl PhysicalDevice {
             // Push structure to the list if at least one feature is enabled.
             if include_features_sbl {
                 push_ext(EXT_SCALAR_BLOCK_LAYOUT_EXTENSION_NAME);
-                device_create_info = device_create_info.extend_from(&mut features_sbl);
+                device_create_info = device_create_info.extend_from(&features_sbl);
             }
 
             if include_features_edi {
                 push_ext(EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME);
-                device_create_info = device_create_info.extend_from(&mut features_edi);
+                device_create_info = device_create_info.extend_from(&features_edi);
             }
 
             if include_features_bda {
                 push_ext(KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME);
-                device_create_info = device_create_info.extend_from(&mut features_bda);
+                device_create_info = device_create_info.extend_from(&features_bda);
             }
 
             if include_features_acc {
                 push_ext(KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME);
                 push_ext(KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
-                device_create_info = device_create_info.extend_from(&mut features_acc);
+                device_create_info = device_create_info.extend_from(&features_acc);
             }
 
             if include_features_rt {
                 push_ext(KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME);
-                device_create_info = device_create_info.extend_from(&mut features_rt);
+                device_create_info = device_create_info.extend_from(&features_rt);
             }
 
             if include_features12 {
-                device_create_info = device_create_info.extend_from(&mut features12);
+                device_create_info = device_create_info.extend_from(&features12);
             }
 
             if include_features11 {
-                device_create_info = device_create_info.extend_from(&mut features11);
+                device_create_info = device_create_info.extend_from(&features11);
             }
 
-            device_create_info = device_create_info.extend_from(&mut features2);
+            device_create_info = device_create_info.extend_from(&features2);
         }
 
         device_create_info = device_create_info.enabled_extension_names(&enable_exts);

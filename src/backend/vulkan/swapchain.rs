@@ -177,10 +177,7 @@ impl Swapchain {
         format: Format,
         mode: PresentMode,
     ) -> Result<(), SurfaceError> {
-        let device = self
-            .device
-            .upgrade()
-            .ok_or_else(|| SurfaceError::SurfaceLost)?;
+        let device = self.device.upgrade().ok_or(SurfaceError::SurfaceLost)?;
 
         // TODO: Configurable count
         if self.retired.len() > 16 {
@@ -244,7 +241,7 @@ impl Swapchain {
         let sf = formats
             .iter()
             .find(|sf| sf.format == erupt_format)
-            .ok_or_else(|| SurfaceError::FormatUnsupported { format })?;
+            .ok_or(SurfaceError::FormatUnsupported { format })?;
 
         let composite_alpha = {
             let raw = caps.supported_composite_alpha.to_erupt().bits();
@@ -372,10 +369,7 @@ impl Swapchain {
     }
 
     pub fn acquire_image(&mut self, optimal: bool) -> Result<SwapchainImage<'_>, SurfaceError> {
-        let device = self
-            .device
-            .upgrade()
-            .ok_or_else(|| SurfaceError::SurfaceLost)?;
+        let device = self.device.upgrade().ok_or(SurfaceError::SurfaceLost)?;
 
         assert!(
             device.logical().enabled().khr_swapchain,
