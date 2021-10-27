@@ -317,14 +317,14 @@ pub trait UpdatedDescriptors {
 pub trait DescriptorsInstance<I: ?Sized> {
     type Updated: UpdatedDescriptors;
 
-    fn update<'a>(
-        &'a mut self,
+    fn update<'a, 'b: 'a>(
+        &'b mut self,
         input: &I,
         fence: usize,
         device: &Device,
         writes: &mut impl Extend<WriteDescriptorSet<'a>>,
         encoder: &mut Encoder<'a>,
-    ) -> Result<&'a Self::Updated, DescriptorsAllocationError>;
+    ) -> Result<&'b Self::Updated, DescriptorsAllocationError>;
 
     fn raw_layout(&self) -> &DescriptorSetLayout;
 }

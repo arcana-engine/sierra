@@ -109,38 +109,44 @@ pub(super) fn generate(input: &Input) -> TokenStream {
                 &self.pipeline_layout
             }
 
-            pub fn bind_graphics<'a, D>(&'a self, updated_descriptors: &'a D, encoder: &mut ::sierra::EncoderCommon<'a>)
+            pub fn bind_graphics<'a, D>(&'a self, updated_descriptors: &D, encoder: &mut ::sierra::EncoderCommon<'a>)
             where
                 D: ::sierra::UpdatedPipelineDescriptors<Self>,
             {
+                let raw: &_ = encoder.scope().to_scope(::std::clone::Clone::clone(::sierra::UpdatedDescriptors::raw(updated_descriptors)));
+
                 encoder.bind_graphics_descriptor_sets(
                     &self.pipeline_layout,
                     D::N,
-                    encoder.scope().to_scope([::sierra::UpdatedDescriptors::raw(updated_descriptors)]),
+                    encoder.scope().to_scope([raw]),
                     &[],
                 )
             }
 
-            pub fn bind_compute<'a, D>(&'a self, updated_descriptors: &'a D, encoder: &mut ::sierra::EncoderCommon<'a>)
+            pub fn bind_compute<'a, D>(&'a self, updated_descriptors: &D, encoder: &mut ::sierra::EncoderCommon<'a>)
             where
                 D: ::sierra::UpdatedPipelineDescriptors<Self>,
             {
+                let raw: &_ = encoder.scope().to_scope(::std::clone::Clone::clone(::sierra::UpdatedDescriptors::raw(updated_descriptors)));
+
                 encoder.bind_compute_descriptor_sets(
                     &self.pipeline_layout,
                     D::N,
-                    encoder.scope().to_scope([::sierra::UpdatedDescriptors::raw(updated_descriptors)]),
+                    encoder.scope().to_scope([raw]),
                     &[],
                 )
             }
 
-            pub fn bind_ray_tracing<'a, D>(&'a self, updated_descriptors: &'a D, encoder: &mut ::sierra::EncoderCommon<'a>)
+            pub fn bind_ray_tracing<'a, D>(&'a self, updated_descriptors: &D, encoder: &mut ::sierra::EncoderCommon<'a>)
             where
                 D: ::sierra::UpdatedPipelineDescriptors<Self>,
             {
+                let raw: &_ = encoder.scope().to_scope(::std::clone::Clone::clone(::sierra::UpdatedDescriptors::raw(updated_descriptors)));
+                
                 encoder.bind_ray_tracing_descriptor_sets(
                     &self.pipeline_layout,
                     D::N,
-                    encoder.scope().to_scope([::sierra::UpdatedDescriptors::raw(updated_descriptors)]),
+                    encoder.scope().to_scope([raw]),
                     &[],
                 )
             }
@@ -155,21 +161,21 @@ pub(super) fn generate(input: &Input) -> TokenStream {
                 self.raw()
             }
 
-            fn bind_graphics<'a, D>(&'a self, updated_descriptors: &'a D, encoder: &mut ::sierra::EncoderCommon<'a>)
+            fn bind_graphics<'a, D>(&'a self, updated_descriptors: &D, encoder: &mut ::sierra::EncoderCommon<'a>)
             where
                 D: ::sierra::UpdatedPipelineDescriptors<Self>,
             {
                 self.bind_graphics(updated_descriptors, encoder);
             }
 
-            fn bind_compute<'a, D>(&'a self, updated_descriptors: &'a D, encoder: &mut ::sierra::EncoderCommon<'a>)
+            fn bind_compute<'a, D>(&'a self, updated_descriptors: &D, encoder: &mut ::sierra::EncoderCommon<'a>)
             where
                 D: ::sierra::UpdatedPipelineDescriptors<Self>,
             {
                 self.bind_compute(updated_descriptors, encoder);
             }
 
-            fn bind_ray_tracing<'a, D>(&'a self, updated_descriptors: &'a D, encoder: &mut ::sierra::EncoderCommon<'a>)
+            fn bind_ray_tracing<'a, D>(&'a self, updated_descriptors: &D, encoder: &mut ::sierra::EncoderCommon<'a>)
             where
                 D: ::sierra::UpdatedPipelineDescriptors<Self>,
             {

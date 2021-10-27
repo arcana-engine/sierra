@@ -226,14 +226,14 @@ pub(super) fn generate(input: &Input) -> TokenStream {
                 }
             }
 
-            pub fn update<'a>(
-                &'a mut self,
+            pub fn update<'a, 'b: 'a>(
+                &'b mut self,
                 input: &#ident,
                 fence: usize,
                 device: &::sierra::Device,
                 writes: &mut impl ::std::iter::Extend<::sierra::WriteDescriptorSet<'a>>,
                 encoder: &mut ::sierra::Encoder<'a>,
-            ) -> ::std::result::Result<&'a #elem_ident, ::sierra::DescriptorsAllocationError> {
+            ) -> ::std::result::Result<&'b #elem_ident, ::sierra::DescriptorsAllocationError> {
                 while self.cycle.len() <= fence {
                         let new_elem = self.new_cycle_elem(device)?;
                         self.cycle.push(new_elem);
@@ -270,14 +270,14 @@ pub(super) fn generate(input: &Input) -> TokenStream {
         impl ::sierra::DescriptorsInstance<#ident> for #instance_ident {
             type Updated = #elem_ident;
 
-            fn update<'a>(
-                &'a mut self,
+            fn update<'a, 'b: 'a>(
+                &'b mut self,
                 input: &#ident,
                 fence: usize,
                 device: &::sierra::Device,
                 writes: &mut impl ::std::iter::Extend<::sierra::WriteDescriptorSet<'a>>,
                 encoder: &mut ::sierra::Encoder<'a>,
-            ) -> ::std::result::Result<&'a #elem_ident, ::sierra::DescriptorsAllocationError> {
+            ) -> ::std::result::Result<&'b #elem_ident, ::sierra::DescriptorsAllocationError> {
                 self.update(input, fence, device, writes, encoder)
             }
 
