@@ -3,7 +3,7 @@ use crate::{
     format::Format,
     image::{Image, ImageInfo, ImageUsage, Samples, Samples1, SubresourceRange},
     render_pass::RenderPass,
-    view::{ImageView, ImageViewInfo, ImageViewKind},
+    view::{ComponentMapping, ImageView, ImageViewInfo, ImageViewKind},
     CreateImageError, CreateRenderPassError, Device, Extent2d, OutOfMemory,
 };
 
@@ -136,6 +136,7 @@ impl Attachment for Image {
                 layer_count: 1,
             },
             image: self.clone(),
+            mapping: ComponentMapping::default(),
         })?;
 
         Ok(view)
@@ -177,17 +178,7 @@ impl Attachment for Format {
             usage,
         })?;
 
-        let view = device.create_image_view(ImageViewInfo {
-            view_kind: ImageViewKind::D2,
-            range: SubresourceRange {
-                aspect: image.info().format.aspect_flags(),
-                first_level: 0,
-                level_count: 1,
-                first_layer: 0,
-                layer_count: 1,
-            },
-            image: image.clone(),
-        })?;
+        let view = device.create_image_view(ImageViewInfo::new(image))?;
 
         Ok(view)
     }
