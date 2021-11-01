@@ -501,6 +501,9 @@ impl<'a> Encoder<'a> {
     where
         T: Pod,
     {
+        assert_eq!(offset % 4, 0);
+        assert!(size_of_val(data) <= 65_536, "Data length greater than 65536 MUST NOT be uploaded with encoder, consider buffer mapping. Actual data is {} bytes", data.len());
+
         if data.is_empty() {
             return;
         }
