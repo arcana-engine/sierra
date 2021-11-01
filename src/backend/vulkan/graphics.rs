@@ -549,7 +549,7 @@ impl Graphics {
                 unsafe {
                     self.instance.create_xlib_surface_khr(
                         &XlibSurfaceCreateInfoKHR {
-                            window: handle.window.into(),
+                            window: handle.window,
                             dpy: handle.display,
                             ..XlibSurfaceCreateInfoKHR::default()
                         },
