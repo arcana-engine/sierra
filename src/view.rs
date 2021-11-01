@@ -30,6 +30,53 @@ pub enum ImageViewKind {
     Cube,
 }
 
+/// Defines remapping of a color component.
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
+pub enum Swizzle {
+    /// Maps to the same component
+    Identity,
+
+    /// Constant zero
+    Zero,
+
+    /// Constant one
+    One,
+
+    /// Maps to R component
+    R,
+
+    /// Maps to G component
+    G,
+
+    /// Maps to B component
+    B,
+
+    /// Maps to A component
+    A,
+}
+
+impl Default for Swizzle {
+    fn default() -> Self {
+        Self::Identity
+    }
+}
+
+/// Defines remapping of color components.
+#[derive(Clone, Copy, Debug, Default, Hash, PartialEq, Eq)]
+pub struct ComponentMapping {
+    /// Mapping of R component
+    pub r: Swizzle,
+
+    /// Mapping of G component
+    pub g: Swizzle,
+
+    /// Mapping of B component
+    pub b: Swizzle,
+
+    /// Mapping of A component
+    pub a: Swizzle,
+}
+
 /// Information required to create an image view.
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct ImageViewInfo {
@@ -41,6 +88,9 @@ pub struct ImageViewInfo {
 
     /// An image view is bound to.
     pub image: Image,
+
+    /// Defines remapping of color components.
+    pub mapping: ComponentMapping,
 }
 
 impl ImageViewInfo {
@@ -59,6 +109,7 @@ impl ImageViewInfo {
                 0..info.layers,
             ),
             image,
+            mapping: ComponentMapping::default(),
         }
     }
 }
