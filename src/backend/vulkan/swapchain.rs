@@ -120,7 +120,6 @@ struct SwapchainInner {
 pub struct Swapchain {
     inner: Option<SwapchainInner>,
     retired: VecDeque<SwapchainInner>,
-    retired_offset: u64,
     free_semaphore: Semaphore,
     device: WeakDevice,
     surface: Surface,
@@ -158,7 +157,6 @@ impl Swapchain {
             free_semaphore,
             inner: None,
             retired: VecDeque::new(),
-            retired_offset: 0,
             device: device.downgrade(),
             surface_capabilities,
         })
