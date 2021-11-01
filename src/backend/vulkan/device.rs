@@ -320,11 +320,14 @@ impl Device {
         self.create_buffer_impl(info, Some(memory_usage))
     }
 
+    #[track_caller]
     fn create_buffer_impl(
         &self,
         info: BufferInfo,
         memory_usage: Option<MemoryUsage>,
     ) -> Result<MappableBuffer, OutOfMemory> {
+        assert_ne!(info.size, 0, "Buffer size must be greater than 0");
+
         if info.usage.contains(BufferUsage::DEVICE_ADDRESS) {
             assert_ne!(self.inner.features.v12.buffer_device_address, 0);
         }
@@ -1183,7 +1186,8 @@ impl Device {
                             .base_array_layer(info.range.first_layer)
                             .layer_count(info.range.layer_count)
                             .build(),
-                    ),
+                    )
+                    .components(info.mapping.to_erupt()),
                 None,
             )
         }

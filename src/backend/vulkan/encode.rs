@@ -247,8 +247,8 @@ impl CommandBuffer {
                     offset,
                     data,
                 } => unsafe {
-                    assert_eq!(offset % 4, 0);
-                    assert!(data.len() < 65_536);
+                    debug_assert_eq!(offset % 4, 0);
+                    debug_assert!(data.len() <= 65_536, "Data length greater than 65536 MUST NOT be uploaded with encoder, consider buffer mapping. Actual data is {} bytes", data.len());
                     assert_owner!(buffer, device);
                     self.references.add_buffer(buffer.clone());
 

@@ -1,13 +1,14 @@
 use crate::{
     out_of_host_memory, AccelerationStructureBuildFlags, AccelerationStructureLevel, AccessFlags,
     AspectFlags, BlendFactor, BlendOp, BorderColor, BufferCopy, BufferImageCopy, BufferUsage,
-    CompareOp, ComponentMask, CompositeAlphaFlags, Culling, DescriptorBindingFlags,
-    DescriptorSetLayoutFlags, DescriptorType, DeviceAddress, Extent2d, Extent3d, Filter, Format,
-    FrontFace, GeometryFlags, ImageBlit, ImageCopy, ImageExtent, ImageUsage, ImageViewKind,
-    IndexType, Layout, LoadOp, LogicOp, MemoryUsage, MipmapMode, Offset2d, Offset3d, OutOfMemory,
-    PipelineStageFlags, PolygonMode, PresentMode, PrimitiveTopology, QueueCapabilityFlags, Rect2d,
-    SamplerAddressMode, Samples, ShaderStage, ShaderStageFlags, StencilOp, StoreOp, Subresource,
-    SubresourceLayers, SubresourceRange, SurfaceTransformFlags, VertexInputRate, Viewport,
+    CompareOp, ComponentMapping, ComponentMask, CompositeAlphaFlags, Culling,
+    DescriptorBindingFlags, DescriptorSetLayoutFlags, DescriptorType, DeviceAddress, Extent2d,
+    Extent3d, Filter, Format, FrontFace, GeometryFlags, ImageBlit, ImageCopy, ImageExtent,
+    ImageUsage, ImageViewKind, IndexType, Layout, LoadOp, LogicOp, MemoryUsage, MipmapMode,
+    Offset2d, Offset3d, OutOfMemory, PipelineStageFlags, PolygonMode, PresentMode,
+    PrimitiveTopology, QueueCapabilityFlags, Rect2d, SamplerAddressMode, Samples, ShaderStage,
+    ShaderStageFlags, StencilOp, StoreOp, Subresource, SubresourceLayers, SubresourceRange,
+    SurfaceTransformFlags, Swizzle, VertexInputRate, Viewport,
 };
 use erupt::{
     extensions::{
@@ -1524,5 +1525,30 @@ impl ToErupt<SurfaceTransformFlagsKHR> for SurfaceTransformFlags {
             result |= SurfaceTransformFlagsKHR::INHERIT_KHR;
         }
         result
+    }
+}
+
+impl ToErupt<vk1_0::ComponentSwizzle> for Swizzle {
+    fn to_erupt(self) -> vk1_0::ComponentSwizzle {
+        match self {
+            Self::Identity => vk1_0::ComponentSwizzle::IDENTITY,
+            Self::Zero => vk1_0::ComponentSwizzle::ZERO,
+            Self::One => vk1_0::ComponentSwizzle::ONE,
+            Self::R => vk1_0::ComponentSwizzle::R,
+            Self::G => vk1_0::ComponentSwizzle::G,
+            Self::B => vk1_0::ComponentSwizzle::B,
+            Self::A => vk1_0::ComponentSwizzle::A,
+        }
+    }
+}
+
+impl ToErupt<vk1_0::ComponentMapping> for ComponentMapping {
+    fn to_erupt(self) -> vk1_0::ComponentMapping {
+        vk1_0::ComponentMapping {
+            r: self.r.to_erupt(),
+            g: self.g.to_erupt(),
+            b: self.b.to_erupt(),
+            a: self.a.to_erupt(),
+        }
     }
 }
