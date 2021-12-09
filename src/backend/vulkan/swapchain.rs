@@ -11,7 +11,7 @@ use crate::{
     out_of_host_memory,
     semaphore::Semaphore,
     surface::{PresentMode, SurfaceCapabilities, SurfaceError},
-    Extent2d, OutOfMemory,
+    OutOfMemory,
 };
 use erupt::{
     extensions::{
@@ -110,7 +110,6 @@ struct SwapchainInner {
     images: Vec<SwapchainImageAndSemaphores>,
     acquired_counter: AtomicU32,
     format: Format,
-    extent: Extent2d,
     usage: ImageUsage,
     mode: PresentMode,
     optimal: bool,
@@ -355,7 +354,6 @@ impl Swapchain {
                 })
                 .collect(),
             acquired_counter: AtomicU32::new(0),
-            extent: caps.current_extent,
             format,
             usage,
             mode,

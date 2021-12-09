@@ -1462,6 +1462,7 @@ impl Device {
                     &module,
                     &info,
                     &naga::back::spv::Options::default(),
+                    None,
                 )?;
 
                 bytemuck::cast_slice(&spv)
@@ -1484,6 +1485,7 @@ impl Device {
                     &module,
                     &info,
                     &naga::back::spv::Options::default(),
+                    None,
                 )?;
 
                 bytemuck::cast_slice(&spv)

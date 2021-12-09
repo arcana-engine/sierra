@@ -88,6 +88,7 @@ impl Debug for Buffer {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         if fmt.alternate() {
             #[derive(Debug)]
+            #[allow(unused)]
             struct Memory {
                 handle: vk1_0::DeviceMemory,
                 offset: u64,
@@ -177,6 +178,7 @@ impl Debug for MappableBuffer {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         if fmt.alternate() {
             #[derive(Debug)]
+            #[allow(unused)]
             struct Memory {
                 handle: vk1_0::DeviceMemory,
                 offset: u64,

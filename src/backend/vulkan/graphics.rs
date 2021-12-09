@@ -355,12 +355,12 @@ impl Graphics {
             }
 
             #[cfg(target_os = "ios")]
-            RawWindowHandle::IOS(handle) => {
+            RawWindowHandle::UiKit(handle) => {
                 todo!()
             }
 
             #[cfg(target_os = "macos")]
-            RawWindowHandle::MacOS(handle) => {
+            RawWindowHandle::AppKit(handle) => {
                 use core_graphics_types::{base::CGFloat, geometry::CGRect};
                 use objc::{
                     class, msg_send,

@@ -54,8 +54,8 @@ fn check_surface_error() {
 #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 pub enum RawWindowHandleKind {
-    IOS,
-    MacOS,
+    UiKit,
+    AppKit,
     Xlib,
     Xcb,
     Wayland,
@@ -73,10 +73,10 @@ impl RawWindowHandleKind {
             RawWindowHandle::Android(_) => RawWindowHandleKind::Android,
 
             #[cfg(target_os = "ios")]
-            RawWindowHandle::IOS(_) => RawWindowHandleKind::IOS,
+            RawWindowHandle::UiKit(_) => RawWindowHandleKind::IOS,
 
             #[cfg(target_os = "macos")]
-            RawWindowHandle::MacOS(_) => RawWindowHandleKind::MacOS,
+            RawWindowHandle::AppKit(_) => RawWindowHandleKind::AppKit,
 
             #[cfg(any(
                 target_os = "linux",
