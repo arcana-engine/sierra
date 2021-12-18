@@ -1,11 +1,10 @@
 pub use crate::backend::ImageView;
 use crate::{
-    access::AccessFlags,
+    access::Access,
     backend::Device,
     encode::Encoder,
-    image::{Image, ImageExtent, ImageMemoryBarrier, Layout, SubresourceRange},
+    image::{Image, ImageExtent, ImageMemoryBarrier, SyncLayout, SubresourceRange},
     queue::{Ownership, QueueId},
-    stage::PipelineStageFlags,
     OutOfMemory,
 };
 
@@ -133,18 +132,17 @@ impl MakeImageView for Image {
 }
 
 /// Image region with access mask,
-/// specifying how it may be accessed "before".
+/// specifying how it was accessed "before".
 ///
-/// Note that "before" is loosely defined,
-/// as whatever previous owners do.
-/// Which should be translated to "earlier GPU operations"
+/// Note that "before" is loosely defined
+/// as whatever previous owners did with it,
+/// i.e. "earlier GPU operations which used this resource,"
 /// but this crate doesn't attempt to enforce that.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ImageViewState {
     pub view: ImageView,
-    pub access: AccessFlags,
-    pub stages: PipelineStageFlags,
-    pub layout: Option<Layout>,
+    pub prev_access: Access,
+    pub old_layout: Option<SyncLayout>,
     pub family: Ownership,
 }
 
@@ -152,22 +150,19 @@ impl ImageViewState {
     ///
     pub fn access<'a>(
         &'a mut self,
-        access: AccessFlags,
-        stages: PipelineStageFlags,
-        layout: Layout,
+        next_access: Access,
+        new_layout: SyncLayout,
         queue: QueueId,
         encoder: &mut Encoder<'a>,
     ) -> &'a ImageView {
         match self.family {
             Ownership::NotOwned => encoder.image_barriers(
-                self.stages,
-                stages,
                 encoder.scope().to_scope([ImageMemoryBarrier {
                     image: &self.view.info().image,
-                    old_access: self.access,
-                    new_access: access,
-                    old_layout: self.layout,
-                    new_layout: layout,
+                    prev_access: self.prev_access,
+                    next_access,
+                    old_layout: self.old_layout,
+                    new_layout,
                     family_transfer: None,
                     range: self.view.info().range,
                 }]),
@@ -176,14 +171,12 @@ impl ImageViewState {
                 assert_eq!(family, queue.family, "Wrong queue family owns the buffer");
 
                 encoder.image_barriers(
-                    self.stages,
-                    stages,
                     encoder.scope().to_scope([ImageMemoryBarrier {
                         image: &self.view.info().image,
-                        old_access: self.access,
-                        new_access: access,
-                        old_layout: self.layout,
-                        new_layout: layout,
+                        prev_access: self.prev_access,
+                        next_access,
+                        old_layout: self.old_layout,
+                        new_layout,
                         family_transfer: None,
                         range: self.view.info().range,
                     }]),
@@ -196,14 +189,12 @@ impl ImageViewState {
                 );
 
                 encoder.image_barriers(
-                    self.stages,
-                    stages,
                     encoder.scope().to_scope([ImageMemoryBarrier {
                         image: &self.view.info().image,
-                        old_access: self.access,
-                        new_access: access,
-                        old_layout: self.layout,
-                        new_layout: layout,
+                        prev_access: self.prev_access,
+                        next_access,
+                        old_layout: self.old_layout,
+                        new_layout,
                         family_transfer: Some((from, to)),
                         range: self.view.info().range,
                     }]),
@@ -213,30 +204,26 @@ impl ImageViewState {
         self.family = Ownership::Owned {
             family: queue.family,
         };
-        self.stages = stages;
-        self.access = access;
-        self.layout = Some(layout);
+        self.prev_access = next_access;
+        self.old_layout = Some(new_layout);
         &self.view
     }
 
     ///
     pub fn overwrite<'a>(
         &'a mut self,
-        access: AccessFlags,
-        stages: PipelineStageFlags,
-        layout: Layout,
+        next_access: Access,
+        new_layout: SyncLayout,
         queue: QueueId,
         encoder: &mut Encoder<'a>,
     ) -> &'a ImageView {
         encoder.image_barriers(
-            self.stages,
-            stages,
             encoder.scope().to_scope([ImageMemoryBarrier {
                 image: &self.view.info().image,
-                old_access: AccessFlags::empty(),
-                new_access: access,
+                prev_access: Access::None,
+                next_access,
                 old_layout: None,
-                new_layout: layout,
+                new_layout,
                 family_transfer: None,
                 range: self.view.info().range,
             }]),
@@ -244,9 +231,8 @@ impl ImageViewState {
         self.family = Ownership::Owned {
             family: queue.family,
         };
-        self.stages = stages;
-        self.access = access;
-        self.layout = Some(layout);
+        self.prev_access = next_access;
+        self.old_layout = Some(new_layout);
         &self.view
     }
 }

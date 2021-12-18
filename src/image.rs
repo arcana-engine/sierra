@@ -1,7 +1,7 @@
 pub use {
     self::Samples::*,
     crate::{
-        access::AccessFlags,
+        access::Access,
         backend::Image,
         encode::Encoder,
         queue::{Ownership, QueueId},
@@ -71,6 +71,28 @@ impl ImageUsage {
                 | Self::COLOR_ATTACHMENT
                 | Self::DEPTH_STENCIL_ATTACHMENT,
         )
+    }
+}
+
+/// When performing a synchronization operation which may transition
+/// an image's layout, chooses whether to automatically compute the optimal
+/// layout based on specified [`Access`]es or whether to transition manually
+/// to a specified [`Layout`].
+///
+/// `Optimal` is usually preferred.
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
+pub enum SyncLayout {
+    /// Choose the most optimal layout for each usage. Performs layout transitions as appropriate for the access.
+    Optimal,
+
+    /// Manually choose a RawLayout regardless of usage or access provided.
+    Manual(Layout),
+}
+
+impl Default for SyncLayout {
+    fn default() -> Self {
+        SyncLayout::Optimal
     }
 }
 
@@ -465,62 +487,96 @@ pub struct ImageBlit {
     pub dst_offsets: [Offset3d; 2],
 }
 
+/// Transitions `image` between layouts. Shorthand helper for creating
+/// an [`ImageMemoryBarrier`] when a layout transition with simple accesses
+/// is desired. Some adavanced use cases should use [`ImageMemoryBarrier`] directly
+/// instead.
+///
+/// If `old_layout` is empty, the contents of the image become
+/// undefined after the barrier is executed, which can result in a performance
+/// boost over attempting to preserve the contents. This is particularly useful
+/// for transient images where the contents are going to be immediately overwritten.
+/// A good example of when to use this is when an application re-uses a presented
+/// image after acquiring the next swap chain image.
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub struct LayoutTransition<'a> {
     pub image: &'a Image,
-    pub old_access: AccessFlags,
-    pub old_layout: Option<Layout>,
-    pub new_access: AccessFlags,
-    pub new_layout: Layout,
+    pub prev_access: Access,
+    pub next_access: Access,
+    pub old_layout: Option<SyncLayout>,
+    pub new_layout: SyncLayout,
     pub range: SubresourceRange,
 }
 
 impl<'a> LayoutTransition<'a> {
     pub fn transition_whole(
         image: &'a Image,
-        access: Range<AccessFlags>,
-        layout: Range<Layout>,
+        access: Range<Access>,
+        layout: Range<SyncLayout>,
     ) -> Self {
         LayoutTransition {
             range: SubresourceRange::whole(image.info()),
             image,
-            old_access: access.start,
-            new_access: access.end,
+            prev_access: access.start,
+            next_access: access.end,
             old_layout: Some(layout.start),
             new_layout: layout.end,
         }
     }
 
-    pub fn initialize_whole(image: &'a Image, access: AccessFlags, layout: Layout) -> Self {
+    pub fn initialize_whole(image: &'a Image, next_access: Access, layout: SyncLayout) -> Self {
         LayoutTransition {
             range: SubresourceRange::whole(image.info()),
             image,
-            old_access: AccessFlags::empty(),
+            prev_access: Access::None,
+            next_access,
             old_layout: None,
-            new_access: access,
             new_layout: layout,
         }
     }
 }
 
-#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
+/// Image barriers should only be used when a queue family ownership transfer
+/// or an image layout transition is required - prefer global barriers at all
+/// other times.
+///
+/// In general it is better to use image barriers with `Layout::Optimal`
+/// than it is to use global barriers with images using the
+/// `RawLayout::General` layout.
+///
+/// Access types are defined in the same way as for a global memory barrier, but
+/// they only affect the image subresource range identified by `image` and
+/// `range`, rather than all resources.
+///
+/// An image barrier defining a queue ownership transfer needs to be executed
+/// twice - once by a queue in the source queue family, and then once again by a
+/// queue in the destination queue family, with a semaphore guaranteeing
+/// execution order between them.
+///
+/// If `old_layout` is empty, the contents of the image become
+/// undefined after the barrier is executed, which can result in a performance
+/// boost over attempting to preserve the contents. This is particularly useful
+/// for transient images where the contents are going to be immediately overwritten.
+/// A good example of when to use this is when an application re-uses a presented
+/// image after acquiring the next swap chain image.
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct ImageMemoryBarrier<'a> {
     pub image: &'a Image,
-    pub old_access: AccessFlags,
-    pub old_layout: Option<Layout>,
-    pub new_access: AccessFlags,
-    pub new_layout: Layout,
+    pub prev_access: Access,
+    pub next_access: Access,
+    pub old_layout: Option<SyncLayout>,
+    pub new_layout: SyncLayout,
     pub family_transfer: Option<(u32, u32)>,
     pub range: SubresourceRange,
 }
 
-impl<'a> From<LayoutTransition<'a>> for ImageMemoryBarrier<'a> {
-    fn from(value: LayoutTransition<'a>) -> Self {
+impl<'a> From<&'a LayoutTransition<'a>> for ImageMemoryBarrier<'a> {
+    fn from(value: &'a LayoutTransition<'a>) -> Self {
         ImageMemoryBarrier {
             image: value.image,
-            old_access: value.old_access,
+            prev_access: value.prev_access,
+            next_access: value.next_access,
             old_layout: value.old_layout,
-            new_access: value.new_access,
             new_layout: value.new_layout,
             family_transfer: None,
             range: value.range,
@@ -537,16 +593,15 @@ pub struct ImageSubresourceRange {
 /// Image region with access mask,
 /// specifying how it may be accessed "before".
 ///
-/// Note that "before" is loosely defined,
+/// Note that "before" is loosely defined
 /// as whatever previous owners do.
 /// Which should be translated to "earlier GPU operations"
 /// but this crate doesn't attempt to enforce that.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ImageSubresourceState {
     pub subresource: ImageSubresourceRange,
-    pub access: AccessFlags,
-    pub stages: PipelineStageFlags,
-    pub layout: Option<Layout>,
+    pub prev_access: Access,
+    pub old_layout: Option<SyncLayout>,
     pub family: Ownership,
 }
 
@@ -554,42 +609,35 @@ impl ImageSubresourceState {
     ///
     pub fn access<'a>(
         &'a mut self,
-        access: AccessFlags,
-        stages: PipelineStageFlags,
-        layout: Layout,
+        next_access: Access,
+        new_layout: SyncLayout,
         queue: QueueId,
         encoder: &mut Encoder<'a>,
     ) -> &'a Self {
         match self.family {
-            Ownership::NotOwned => encoder.image_barriers(
-                self.stages,
-                stages,
-                encoder.scope().to_scope([ImageMemoryBarrier {
+            Ownership::NotOwned => {
+                encoder.image_barriers(encoder.scope().to_scope([ImageMemoryBarrier {
                     image: &self.subresource.image,
-                    old_access: self.access,
-                    new_access: access,
-                    old_layout: self.layout,
-                    new_layout: layout,
+                    prev_access: self.prev_access,
+                    next_access,
+                    old_layout: self.old_layout,
+                    new_layout,
                     family_transfer: None,
                     range: self.subresource.range,
-                }]),
-            ),
+                }]))
+            }
             Ownership::Owned { family } => {
                 assert_eq!(family, queue.family, "Wrong queue family owns the buffer");
 
-                encoder.image_barriers(
-                    self.stages,
-                    stages,
-                    encoder.scope().to_scope([ImageMemoryBarrier {
-                        image: &self.subresource.image,
-                        old_access: self.access,
-                        new_access: access,
-                        old_layout: self.layout,
-                        new_layout: layout,
-                        family_transfer: None,
-                        range: self.subresource.range,
-                    }]),
-                )
+                encoder.image_barriers(encoder.scope().to_scope([ImageMemoryBarrier {
+                    image: &self.subresource.image,
+                    prev_access: self.prev_access,
+                    next_access,
+                    old_layout: self.old_layout,
+                    new_layout,
+                    family_transfer: None,
+                    range: self.subresource.range,
+                }]))
             }
             Ownership::Transition { from, to } => {
                 assert_eq!(
@@ -597,55 +645,44 @@ impl ImageSubresourceState {
                     "Image is being transitioned to wrong queue family"
                 );
 
-                encoder.image_barriers(
-                    self.stages,
-                    stages,
-                    encoder.scope().to_scope([ImageMemoryBarrier {
-                        image: &self.subresource.image,
-                        old_access: self.access,
-                        new_access: access,
-                        old_layout: self.layout,
-                        new_layout: layout,
-                        family_transfer: Some((from, to)),
-                        range: self.subresource.range,
-                    }]),
-                )
+                encoder.image_barriers(encoder.scope().to_scope([ImageMemoryBarrier {
+                    image: &self.subresource.image,
+                    prev_access: self.prev_access,
+                    next_access,
+                    old_layout: self.old_layout,
+                    new_layout,
+                    family_transfer: Some((from, to)),
+                    range: self.subresource.range,
+                }]))
             }
         }
-        self.stages = stages;
-        self.access = access;
-        self.layout = Some(layout);
+        self.prev_access = next_access;
+        self.old_layout = Some(new_layout);
         self
     }
 
     ///
     pub fn overwrite<'a>(
         &'a mut self,
-        access: AccessFlags,
-        stages: PipelineStageFlags,
-        layout: Layout,
+        next_access: Access,
+        new_layout: SyncLayout,
         queue: QueueId,
         encoder: &mut Encoder<'a>,
     ) -> &'a ImageSubresourceRange {
-        encoder.image_barriers(
-            self.stages,
-            stages,
-            encoder.scope().to_scope([ImageMemoryBarrier {
-                image: &self.subresource.image,
-                old_access: AccessFlags::empty(),
-                new_access: access,
-                old_layout: None,
-                new_layout: layout,
-                family_transfer: None,
-                range: self.subresource.range,
-            }]),
-        );
+        encoder.image_barriers(encoder.scope().to_scope([ImageMemoryBarrier {
+            image: &self.subresource.image,
+            prev_access: Access::None,
+            next_access,
+            old_layout: None,
+            new_layout,
+            family_transfer: None,
+            range: self.subresource.range,
+        }]));
         self.family = Ownership::Owned {
             family: queue.family,
         };
-        self.stages = stages;
-        self.access = access;
-        self.layout = Some(layout);
+        self.prev_access = next_access;
+        self.old_layout = Some(new_layout);
         &self.subresource
     }
 }

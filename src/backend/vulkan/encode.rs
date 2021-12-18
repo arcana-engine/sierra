@@ -1,9 +1,9 @@
 use {
     super::{
-        access::supported_access,
         convert::{oom_error_from_erupt, ToErupt},
         device::WeakDevice,
         epochs::References,
+        sync,
     },
     crate::{
         accel::{AccelerationStructureGeometry, AccelerationStructureLevel, IndexData},
@@ -684,82 +684,53 @@ impl CommandBuffer {
                 },
 
                 Command::PipelineBarrier {
-                    src,
-                    dst,
                     images,
                     buffers,
-                    memory,
+                    global,
                 } => unsafe {
-                    for barrier in images {
+                    let mut src_stages = vk1_0::PipelineStageFlags::empty();
+                    let mut dst_stages = vk1_0::PipelineStageFlags::empty();
+
+                    let image_barriers = scope.to_scope_from_iter(images.iter().map(|barrier| {
                         assert_owner!(barrier.image, device);
                         self.references.add_image(barrier.image.clone());
-                    }
-                    for barrier in buffers {
+                        let (src_stg, dst_stg, image_barrier) = sync::get_image_memory_barrier(barrier);
+
+                        src_stages |= src_stg;
+                        dst_stages |= dst_stg;
+
+                        image_barrier
+                    }));
+
+                    let buffer_barriers = scope.to_scope_from_iter(buffers.iter().map(|barrier| {
                         assert_owner!(barrier.buffer, device);
                         self.references.add_buffer(barrier.buffer.clone());
-                    }
+
+                        let (src_stg, dst_stg, buffer_barrier) = sync::get_buffer_memory_barrier(barrier);
+
+                        src_stages |= src_stg;
+                        dst_stages |= dst_stg;
+
+                        buffer_barrier
+                    }));
+
+                    let global = global.map(|global| {
+                        let (src_stg, dst_stg, global_barrier) = sync::get_global_barrier(&global);
+
+                        src_stages |= src_stg;
+                        dst_stages |= dst_stg;
+
+                        global_barrier
+                    });
 
                     logical.cmd_pipeline_barrier(
                         self.handle,
-                        src.to_erupt(),
-                        dst.to_erupt(),
+                        src_stages,
+                        dst_stages,
                         None,
-                        &[vk1_0::MemoryBarrierBuilder::new()
-                            .src_access_mask(
-                                memory
-                                    .as_ref()
-                                    .map_or(supported_access(src.to_erupt()), |m| m.src.to_erupt()),
-                            )
-                            .dst_access_mask(
-                                memory
-                                    .as_ref()
-                                    .map_or(supported_access(dst.to_erupt()), |m| m.dst.to_erupt()),
-                            )],
-                        scope.to_scope_from_iter(buffers.iter().map(|buffer| {
-                            vk1_0::BufferMemoryBarrierBuilder::new()
-                                .buffer(buffer.buffer.handle())
-                                .offset(buffer.offset)
-                                .size(buffer.size)
-                                .src_access_mask(buffer.old_access.to_erupt())
-                                .dst_access_mask(buffer.new_access.to_erupt())
-                                .src_queue_family_index(
-                                    buffer
-                                        .family_transfer
-                                        .as_ref()
-                                        .map(|r| r.0)
-                                        .unwrap_or(vk1_0::QUEUE_FAMILY_IGNORED),
-                                )
-                                .dst_queue_family_index(
-                                    buffer
-                                        .family_transfer
-                                        .as_ref()
-                                        .map(|r| r.1)
-                                        .unwrap_or(vk1_0::QUEUE_FAMILY_IGNORED),
-                                )
-                        })),
-                        scope.to_scope_from_iter(images.iter().map(|image| {
-                            vk1_0::ImageMemoryBarrierBuilder::new()
-                                .image(image.image.handle())
-                                .subresource_range(image.range.to_erupt())
-                                .src_access_mask(image.old_access.to_erupt())
-                                .dst_access_mask(image.new_access.to_erupt())
-                                .old_layout(image.old_layout.to_erupt())
-                                .new_layout(image.new_layout.to_erupt())
-                                .src_queue_family_index(
-                                    image
-                                        .family_transfer
-                                        .as_ref()
-                                        .map(|r| r.0)
-                                        .unwrap_or(vk1_0::QUEUE_FAMILY_IGNORED),
-                                )
-                                .dst_queue_family_index(
-                                    image
-                                        .family_transfer
-                                        .as_ref()
-                                        .map(|r| r.1)
-                                        .unwrap_or(vk1_0::QUEUE_FAMILY_IGNORED),
-                                )
-                        })),
+                        scope.to_scope_from_iter(global.into_iter()),
+                        buffer_barriers,
+                        image_barriers,
                     )
                 },
                 Command::PushConstants {
