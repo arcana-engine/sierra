@@ -465,10 +465,10 @@ impl Graphics {
             }
 
             #[cfg(target_os = "windows")]
-            RawWindowHandle::Windows(handle) => {
+            RawWindowHandle::Win32(handle) => {
                 if !self.instance.enabled().khr_win32_surface {
                     return Err(CreateSurfaceError::UnsupportedWindow {
-                        window: RawWindowHandleKind::Windows,
+                        window: RawWindowHandleKind::Win32,
                         source: Some(Box::new(RequiredExtensionIsNotAvailable {
                             extension: "VK_KHR_win32_surface",
                         })),
@@ -489,6 +489,14 @@ impl Graphics {
                     vk1_0::Result::ERROR_OUT_OF_DEVICE_MEMORY => OutOfMemory,
                     _ => unexpected_result(err),
                 })?
+            }
+
+            #[cfg(target_os = "windows")]
+            RawWindowHandle::WinRt(_) => {
+                return Err(CreateSurfaceError::UnsupportedWindow {
+                    window: RawWindowHandleKind::WinRt,
+                    source: Some(Box::from("WinRT is not supported")),
+                })
             }
 
             #[cfg(any(

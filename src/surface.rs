@@ -59,7 +59,8 @@ pub enum RawWindowHandleKind {
     Xlib,
     Xcb,
     Wayland,
-    Windows,
+    Win32,
+    WinRt,
     Web,
     Android,
     Unknown,
@@ -88,7 +89,10 @@ impl RawWindowHandleKind {
             RawWindowHandle::Wayland(_) => RawWindowHandleKind::Wayland,
 
             #[cfg(target_os = "windows")]
-            RawWindowHandle::Windows(_) => RawWindowHandleKind::Windows,
+            RawWindowHandle::Win32(_) => RawWindowHandleKind::Win32,
+
+            #[cfg(target_os = "windows")]
+            RawWindowHandle::WinRt(_) => RawWindowHandleKind::WinRt,
 
             #[cfg(any(
                 target_os = "linux",
