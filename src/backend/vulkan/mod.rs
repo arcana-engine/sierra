@@ -14,6 +14,7 @@ mod physical;
 mod queue;
 mod resources;
 mod surface;
+mod sync;
 mod swapchain;
 
 pub use self::{

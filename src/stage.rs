@@ -1,3 +1,5 @@
+use crate::QueueCapabilityFlags;
+
 bitflags::bitflags! {
     /// Flags to specify set of pipeline stages.
     #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
@@ -65,6 +67,39 @@ bitflags::bitflags! {
 
         /// Stage at which acceleration structures are built.
         const ACCELERATION_STRUCTURE_BUILD = 0x02000000;
+    }
+}
+
+impl PipelineStageFlags {
+    pub fn required_capabilities(self) -> QueueCapabilityFlags {
+        let mut caps = QueueCapabilityFlags::empty();
+        if self.intersects(
+            PipelineStageFlags::DRAW_INDIRECT
+            | PipelineStageFlags::VERTEX_INPUT
+            | PipelineStageFlags::VERTEX_SHADER
+            | PipelineStageFlags::EARLY_FRAGMENT_TESTS
+            | PipelineStageFlags::FRAGMENT_SHADER
+            | PipelineStageFlags::LATE_FRAGMENT_TESTS
+            | PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT
+            | PipelineStageFlags::ALL_GRAPHICS
+        ) {
+            caps |= QueueCapabilityFlags::GRAPHICS;
+        }
+
+        if self.intersects(
+            PipelineStageFlags::COMPUTE_SHADER
+            | PipelineStageFlags::ALL_COMMANDS
+            | PipelineStageFlags::RAY_TRACING_SHADER
+            | PipelineStageFlags::ACCELERATION_STRUCTURE_BUILD
+        ) {
+            caps |= QueueCapabilityFlags::COMPUTE;
+        }
+
+        if self.intersects(PipelineStageFlags::TRANSFER) {
+            caps |= QueueCapabilityFlags::TRANSFER;
+        }
+
+        caps
     }
 }
 

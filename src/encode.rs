@@ -2,18 +2,19 @@ pub use crate::backend::CommandBuffer;
 use {
     crate::{
         accel::AccelerationStructureBuildGeometryInfo,
-        access::AccessFlags,
+        access::Access,
         arith_le,
         buffer::{Buffer, BufferMemoryBarrier},
         descriptor::{DescriptorSet, UpdatedPipelineDescriptors},
+        format::AspectFlags,
         framebuffer::{Framebuffer, FramebufferError},
         image::{Image, ImageBlit, ImageMemoryBarrier, Layout, SubresourceLayers},
-        memory::MemoryBarrier,
+        memory::GlobalMemoryBarrier,
         pipeline::{
             ComputePipeline, DynamicGraphicsPipeline, GraphicsPipeline, PipelineLayout,
             RayTracingPipeline, ShaderBindingTable, TypedPipelineLayout, Viewport,
         },
-        queue::QueueCapabilityFlags,
+        queue::{Queue, QueueCapabilityFlags},
         render_pass::{ClearValue, RenderPass, RenderPassInstance},
         sampler::Filter,
         shader::ShaderStageFlags,
@@ -172,11 +173,9 @@ pub enum Command<'a> {
     },
 
     PipelineBarrier {
-        src: PipelineStageFlags,
-        dst: PipelineStageFlags,
+        global: Option<GlobalMemoryBarrier<'a>>,
         images: &'a [ImageMemoryBarrier<'a>],
         buffers: &'a [BufferMemoryBarrier<'a>],
-        memory: Option<MemoryBarrier>,
     },
 
     PushConstants {
@@ -193,19 +192,92 @@ pub enum Command<'a> {
     },
 }
 
+impl<'a> Command<'a> {
+    /// Returns a [`QueueCapabilityFlags`] mask which specifies the required
+    /// queue capabilities to run this command. i.e., if a queue with capabilities
+    /// `queue_capabilities` supports *all* of `self.required_capabilities()`, then `self` may be executed
+    /// on that queue
+    pub fn required_capabilities(&self) -> QueueCapabilityFlags {
+        match self {
+            Command::BeginRenderPass {..} => QueueCapabilityFlags::GRAPHICS,
+            Command::EndRenderPass {} => QueueCapabilityFlags::GRAPHICS,
+            Command::BindGraphicsPipeline {..} => QueueCapabilityFlags::GRAPHICS,
+            Command::BindComputePipeline {..} => QueueCapabilityFlags::COMPUTE,
+            Command::BindRayTracingPipeline {..} => QueueCapabilityFlags::COMPUTE,
+            Command::BindGraphicsDescriptorSets {..} => QueueCapabilityFlags::GRAPHICS,
+            Command::BindComputeDescriptorSets {..} => QueueCapabilityFlags::COMPUTE,
+            Command::BindRayTracingDescriptorSets {..} => QueueCapabilityFlags::COMPUTE,
+            Command::SetViewport {..} => QueueCapabilityFlags::GRAPHICS,
+            Command::SetScissor {..} => QueueCapabilityFlags::GRAPHICS,
+            Command::Draw {..} => QueueCapabilityFlags::GRAPHICS,
+            Command::DrawIndexed {..} => QueueCapabilityFlags::GRAPHICS,
+            Command::UpdateBuffer {..} => QueueCapabilityFlags::TRANSFER,
+            Command::BindVertexBuffers {..} => QueueCapabilityFlags::GRAPHICS,
+            Command::BindIndexBuffer {..} => QueueCapabilityFlags::GRAPHICS,
+            Command::BuildAccelerationStructure {..} => QueueCapabilityFlags::COMPUTE,
+            Command::TraceRays {..} => QueueCapabilityFlags::COMPUTE,
+            Command::CopyBuffer {..} => QueueCapabilityFlags::TRANSFER,
+            Command::CopyImage {..} => QueueCapabilityFlags::TRANSFER,
+            Command::CopyBufferImage { regions, .. } => {
+                let mut caps = QueueCapabilityFlags::GRAPHICS;
+
+                if !regions.iter().any(|region| {
+                    region.image_subresource.aspect.intersects(AspectFlags::DEPTH | AspectFlags::STENCIL)
+                }) {
+                    caps = QueueCapabilityFlags::COMPUTE;
+                }
+
+                if regions.iter().all(|region| region.buffer_offset % 4 == 0) {
+                    caps = QueueCapabilityFlags::TRANSFER;
+                }
+
+                caps
+            }
+            Command::BlitImage {..} => QueueCapabilityFlags::GRAPHICS,
+            Command::PipelineBarrier {
+                global,
+                images,
+                buffers,
+            } => {
+                let mut stages = PipelineStageFlags::empty();
+                if let Some(global) = global {
+                    for access in global.prev_accesses.iter().chain(global.next_accesses) {
+                        stages |= access.stage_flags()
+                    }
+                }
+                for image in images.iter() {
+                    stages |= image.prev_access.stage_flags();
+                    stages |= image.next_access.stage_flags();
+                }
+                for buffer in buffers.iter() {
+                    stages |= buffer.prev_access.stage_flags();
+                    stages |= buffer.next_access.stage_flags();
+                }
+                stages.required_capabilities()
+            }
+            Command::PushConstants {..} => QueueCapabilityFlags::empty(),
+            Command::Dispatch {..} => QueueCapabilityFlags::COMPUTE,
+        }
+    }
+}
+
 #[derive(Debug)]
 struct Commands<'a> {
     buckets: &'a mut ArrayVec<&'a mut ArrayVec<Command<'a>, 1024>, 1024>,
+    required_capabilities: QueueCapabilityFlags,
 }
 
 impl<'a> Commands<'a> {
     pub fn new(scope: &'a Scope<'a>) -> Self {
         Commands {
             buckets: scope.to_scope_with(ArrayVec::new),
+            required_capabilities: QueueCapabilityFlags::empty(),
         }
     }
 
     pub fn push(&mut self, scope: &'a Scope<'a>, mut command: Command<'a>) {
+        self.required_capabilities |= command.required_capabilities();
+
         if let Some(last) = self.buckets.last_mut() {
             match last.try_push(command) {
                 Ok(()) => return,
@@ -219,6 +291,7 @@ impl<'a> Commands<'a> {
     }
 
     pub fn drain(&mut self) -> impl Iterator<Item = Command<'a>> + '_ {
+        self.required_capabilities = QueueCapabilityFlags::empty();
         self.buckets.drain(..).flat_map(|bucket| bucket.drain(..))
     }
 }
@@ -228,60 +301,50 @@ impl<'a> Commands<'a> {
 /// pass.
 #[derive(Debug)]
 pub struct EncoderCommon<'a> {
-    capabilities: QueueCapabilityFlags,
     commands: Commands<'a>,
     scope: &'a Scope<'a>,
 }
 
 impl<'a> EncoderCommon<'a> {
+    pub fn required_capabilities(&self) -> QueueCapabilityFlags {
+        self.commands.required_capabilities
+    }
+
     pub fn scope(&self) -> &'a Scope<'a> {
         self.scope
     }
 
     pub fn set_viewport(&mut self, viewport: Viewport) {
-        assert!(self.capabilities.supports_graphics());
-
         self.commands
             .push(self.scope, Command::SetViewport { viewport })
     }
 
     pub fn set_scissor(&mut self, scissor: Rect2d) {
-        assert!(self.capabilities.supports_graphics());
-
         self.commands
             .push(self.scope, Command::SetScissor { scissor })
     }
 
     pub fn bind_graphics_pipeline(&mut self, pipeline: &'a GraphicsPipeline) {
-        assert!(self.capabilities.supports_graphics());
-
         self.commands
             .push(self.scope, Command::BindGraphicsPipeline { pipeline })
     }
 
     pub fn bind_compute_pipeline(&mut self, pipeline: &'a ComputePipeline) {
-        assert!(self.capabilities.supports_compute());
         self.commands
             .push(self.scope, Command::BindComputePipeline { pipeline })
     }
 
     pub fn bind_ray_tracing_pipeline(&mut self, pipeline: &'a RayTracingPipeline) {
-        assert!(self.capabilities.supports_compute());
-
         self.commands
             .push(self.scope, Command::BindRayTracingPipeline { pipeline })
     }
 
     pub fn bind_vertex_buffers(&mut self, first: u32, buffers: &'a [(&'a Buffer, u64)]) {
-        assert!(self.capabilities.supports_graphics());
-
         self.commands
             .push(self.scope, Command::BindVertexBuffers { first, buffers })
     }
 
     pub fn bind_index_buffer(&mut self, buffer: &'a Buffer, offset: u64, index_type: IndexType) {
-        assert!(self.capabilities.supports_graphics());
-
         self.commands.push(
             self.scope,
             Command::BindIndexBuffer {
@@ -299,8 +362,6 @@ impl<'a> EncoderCommon<'a> {
         sets: &'a [&'a DescriptorSet],
         dynamic_offsets: &'a [u32],
     ) {
-        assert!(self.capabilities.supports_graphics());
-
         self.commands.push(
             self.scope,
             Command::BindGraphicsDescriptorSets {
@@ -329,8 +390,6 @@ impl<'a> EncoderCommon<'a> {
         sets: &'a [&'a DescriptorSet],
         dynamic_offsets: &'a [u32],
     ) {
-        assert!(self.capabilities.supports_compute());
-
         self.commands.push(
             self.scope,
             Command::BindComputeDescriptorSets {
@@ -359,8 +418,6 @@ impl<'a> EncoderCommon<'a> {
         sets: &'a [&'a DescriptorSet],
         dynamic_offsets: &'a [u32],
     ) {
-        assert!(self.capabilities.supports_compute());
-
         self.commands.push(
             self.scope,
             Command::BindRayTracingDescriptorSets {
@@ -409,7 +466,6 @@ impl<'a> EncoderCommon<'a> {
 #[derive(Debug)]
 pub struct Encoder<'a> {
     inner: EncoderCommon<'a>,
-    command_buffer: CommandBuffer,
 }
 
 impl<'a> std::ops::Deref for Encoder<'a> {
@@ -427,18 +483,14 @@ impl<'a> std::ops::DerefMut for Encoder<'a> {
 }
 
 impl<'a> Encoder<'a> {
-    pub(crate) fn new(
-        command_buffer: CommandBuffer,
-        capabilities: QueueCapabilityFlags,
+    pub fn new(
         scope: &'a Scope<'a>,
     ) -> Self {
         Encoder {
             inner: EncoderCommon {
-                capabilities,
                 commands: Commands::new(scope),
                 scope,
             },
-            command_buffer,
         }
     }
 
@@ -456,8 +508,6 @@ impl<'a> Encoder<'a> {
         framebuffer: &'a Framebuffer,
         clears: &'a [ClearValue],
     ) -> RenderPassEncoder<'_, 'a> {
-        assert!(self.inner.capabilities.supports_graphics());
-
         self.inner.commands.push(
             self.scope,
             Command::BeginRenderPass {
@@ -527,8 +577,6 @@ impl<'a> Encoder<'a> {
         &mut self,
         infos: &'a [AccelerationStructureBuildGeometryInfo<'a>],
     ) {
-        assert!(self.inner.capabilities.supports_compute());
-
         if infos.is_empty() {
             return;
         }
@@ -563,8 +611,6 @@ impl<'a> Encoder<'a> {
     }
 
     pub fn trace_rays(&mut self, shader_binding_table: &'a ShaderBindingTable, extent: Extent3d) {
-        assert!(self.inner.capabilities.supports_compute());
-
         self.inner.commands.push(
             self.inner.scope,
             Command::TraceRays {
@@ -645,8 +691,6 @@ impl<'a> Encoder<'a> {
         regions: &'a [ImageBlit],
         filter: Filter,
     ) {
-        assert!(self.inner.capabilities.supports_graphics());
-
         self.inner.commands.push(
             self.inner.scope,
             Command::BlitImage {
@@ -661,30 +705,40 @@ impl<'a> Encoder<'a> {
     }
 
     pub fn dispatch(&mut self, x: u32, y: u32, z: u32) {
-        assert!(self.inner.capabilities.supports_compute());
-
         self.inner
             .commands
             .push(self.inner.scope, Command::Dispatch { x, y, z });
     }
 
-    pub fn memory_barrier(
+    pub fn pipeline_barrier(
         &mut self,
-        src: PipelineStageFlags,
-        src_acc: AccessFlags,
-        dst: PipelineStageFlags,
-        dst_acc: AccessFlags,
+        global: Option<GlobalMemoryBarrier<'a>>,
+        images: &'a [ImageMemoryBarrier<'a>],
+        buffers: &'a [BufferMemoryBarrier<'a>],
     ) {
         self.inner.commands.push(
             self.inner.scope,
             Command::PipelineBarrier {
-                src,
-                dst,
+                images,
+                buffers,
+                global,
+            }
+        )
+    }
+
+    pub fn global_barrier(
+        &mut self,
+        prev_accesses: &'a [Access],
+        next_accesses: &'a [Access],
+    ) {
+        self.inner.commands.push(
+            self.inner.scope,
+            Command::PipelineBarrier {
                 images: &[],
                 buffers: &[],
-                memory: Some(MemoryBarrier {
-                    src: src_acc,
-                    dst: dst_acc,
+                global: Some(GlobalMemoryBarrier {
+                    prev_accesses,
+                    next_accesses,
                 }),
             },
         );
@@ -692,48 +746,51 @@ impl<'a> Encoder<'a> {
 
     pub fn image_barriers(
         &mut self,
-        src: PipelineStageFlags,
-        dst: PipelineStageFlags,
         images: &'a [ImageMemoryBarrier<'a>],
     ) {
         self.inner.commands.push(
             self.inner.scope,
             Command::PipelineBarrier {
-                src,
-                dst,
                 images,
                 buffers: &[],
-                memory: None,
+                global: None,
             },
         );
     }
 
     pub fn buffer_barriers(
         &mut self,
-        src: PipelineStageFlags,
-        dst: PipelineStageFlags,
         buffers: &'a [BufferMemoryBarrier<'a>],
     ) {
         self.inner.commands.push(
             self.inner.scope,
             Command::PipelineBarrier {
-                src,
-                dst,
                 images: &[],
                 buffers,
-                memory: None,
+                global: None,
             },
         );
     }
 
-    /// Flushes commands recorded into this encoder to the underlying command
-    /// buffer.
-    pub fn finish(mut self) -> CommandBuffer {
-        self.command_buffer
+    /// Flushes commands recorded into this encoder to an underlying command
+    /// buffer, which must have the required capabilities to execute all commands
+    /// contained in this Encoder.
+    pub fn flush_into(mut self, mut command_buffer: CommandBuffer) -> CommandBuffer {
+        assert!(command_buffer.capabilities().supports_all(self.inner.commands.required_capabilities));
+
+        command_buffer
             .write(self.inner.commands.drain(), self.inner.scope)
             .expect("TODO: Handle command buffer writing error");
 
-        self.command_buffer
+        command_buffer 
+    }
+
+    /// Flushes commands recorded into this encoder to a command buffer from
+    /// the provided queue, which must have the required capabilities to execute
+    /// all commands contained in this Encoder.
+    pub fn finish(self, queue: &mut Queue) -> Result<CommandBuffer, OutOfMemory> {
+        let cbuf = queue.get_command_buffer()?;
+        Ok(self.flush_into(cbuf))
     }
 }
 
@@ -781,8 +838,6 @@ impl<'a, 'b> RenderPassEncoder<'a, 'b> {
         pipeline: &'b mut DynamicGraphicsPipeline,
         device: &Device,
     ) -> Result<(), OutOfMemory> {
-        assert!(self.capabilities.supports_graphics());
-
         let mut set_viewport = false;
         let mut set_scissor = false;
 

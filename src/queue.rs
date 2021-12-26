@@ -33,6 +33,18 @@ impl QueueCapabilityFlags {
         }
     }
 
+    /// Returns true if a queue with capabilities `self` supports all of the
+    /// capabilities in `other`
+    pub fn supports_all(&self, other: QueueCapabilityFlags) -> bool {
+        self.contains(other)
+    }
+
+    /// Returns true if a queue with capabilities `self` supports any of the
+    /// capabilities in `other`
+    pub fn supports_any(&self, other: QueueCapabilityFlags) -> bool {
+        self.intersects(other)
+    }
+
     /// Check if queue with those flags supports specified capability.
     pub fn supports_graphics(&self) -> bool {
         self.contains(Self::GRAPHICS)

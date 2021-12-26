@@ -1,139 +1,239 @@
-bitflags::bitflags! {
-    /// Flags for access types.
-    pub struct AccessFlags: u32 {
-        /// Read access to indirect command data
-        /// read as part of an indirect build,
-        /// trace, drawing or dispatch command.
-        const INDIRECT_COMMAND_READ = 0x00000001;
+use crate::PipelineStageFlags;
 
-        /// Read access to an index buffer as part of an indexed drawing command
-        const INDEX_READ = 0x00000002;
+// Modified from vk-sync-rs, originally Copyright 2019 Graham Wihlidal
+// licensed under MIT license.
+//
+// https://github.com/gwihlidal/vk-sync-rs/blob/master/LICENSE-MIT
 
-        /// Read access to a vertex buffer as part of a drawing command
-        const VERTEX_ATTRIBUTE_READ = 0x00000004;
+/// Defines all potential resource usages
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub enum Access {
+    /// No access. Useful primarily for initialization
+    None,
 
-        /// Read access to a uniform buffer..
-        const UNIFORM_READ = 0x00000008;
+    /// Read as an indirect buffer for drawing or dispatch
+    IndirectBuffer,
 
-        /// Read access to an input attachment
-        /// within a render pass during fragment shading.
-        const INPUT_ATTACHMENT_READ = 0x00000010;
+    /// Read as an index buffer for drawing
+    IndexBuffer,
 
-        /// Read access to a storage buffer, physical storage buffer,
-        /// shader binding table, uniform texel buffer, storage texel buffer,
-        /// sampled image, or storage image.
-        const SHADER_READ = 0x00000020;
+    /// Read as a vertex buffer for drawing
+    VertexBuffer,
 
-        /// Write access to a storage buffer, physical storage buffer,
-        /// storage texel buffer, or storage image.
-        const SHADER_WRITE = 0x00000040;
+    /// Read as a uniform buffer in a vertex shader
+    VertexShaderReadUniformBuffer,
 
-        /// Read access to a color attachment,
-        /// such as via blending, logic operations,
-        /// or via certain subpass load operations.\
-        /// It does not include advanced blend operations.
-        const COLOR_ATTACHMENT_READ = 0x00000080;
+    /// Read as a sampled image/uniform texel buffer in a vertex shader
+    VertexShaderReadSampledImageOrUniformTexelBuffer,
 
-        /// Write access to a color, resolve,
-        /// or depth/stencil resolve attachment
-        /// during a render pass
-        /// or via certain subpass load and store operations.
-        const COLOR_ATTACHMENT_WRITE = 0x00000100;
+    /// Read as any other resource in a vertex shader
+    VertexShaderReadOther,
 
-        /// Read access to a depth/stencil attachment,
-        /// via depth or stencil operations
-        /// or via certain subpass load operations.
-        const DEPTH_STENCIL_ATTACHMENT_READ = 0x00000200;
+    /// Read as a uniform buffer in a fragment shader
+    FragmentShaderReadUniformBuffer,
 
-        /// Write access to a depth/stencil attachment,
-        /// via depth or stencil operations
-        /// or via certain subpass load and store operations.
-        const DEPTH_STENCIL_ATTACHMENT_WRITE = 0x00000400;
+    /// Read as a sampled image/uniform texel buffer in a fragment shader
+    FragmentShaderReadSampledImageOrUniformTexelBuffer,
 
-        /// Read access to an image or buffer in a copy operation.
-        const TRANSFER_READ = 0x00000800;
+    /// Read as an input attachment with a color format in a fragment shader
+    FragmentShaderReadColorInputAttachment,
 
-        /// Write access to an image or buffer in a clear or copy operation.
-        const TRANSFER_WRITE = 0x00001000;
+    /// Read as an input attachment with a depth/stencil format in a fragment shader
+    FragmentShaderReadDepthStencilInputAttachment,
 
-        /// Read access by a host operation.
-        const HOST_READ = 0x00002000;
+    /// Read as any other resource in a fragment shader
+    FragmentShaderReadOther,
 
-        /// Write access by a host operation.
-        const HOST_WRITE = 0x00004000;
+    /// Read by blending/logic operations or subpass load operations
+    ColorAttachmentRead,
 
-        /// All read accesses.
-        const MEMORY_READ = 0x00008000;
+    /// Read by depth/stencil tests or subpass load operations
+    DepthStencilAttachmentRead,
 
-        /// All write accesses.
-        const MEMORY_WRITE = 0x00010000;
+    /// Read as a uniform buffer in a compute shader
+    ComputeShaderReadUniformBuffer,
 
-        // /// Write access to a transform feedback buffer made
-        // /// when transform feedback is active.
-        // const TRANSFORM_FEEDBACK_WRITE = 0x00020000;
+    /// Read as a sampled image/uniform texel buffer in a compute shader
+    ComputeShaderReadSampledImageOrUniformTexelBuffer,
 
-        // /// Read access to a transform feedback counter buffer
-        // /// which is read when vkCmdBeginTransformFeedbackEXT executes.
-        // const TRANSFORM_FEEDBACK_COUNTER_READ = 0x00040000;
+    /// Read as any other resource in a compute shader
+    ComputeShaderReadOther,
 
-        // /// Write access to a transform feedback counter buffer
-        // /// which is written when vkCmdEndTransformFeedbackEXT executes.
-        // const TRANSFORM_FEEDBACK_COUNTER_WRITE = 0x00080000;
+    /// Read as a uniform buffer in any shader
+    AnyShaderReadUniformBuffer,
 
-        /// Read access to a predicate as part of conditional rendering.
-        const CONDITIONAL_RENDERING_READ = 0x00100000;
+    /// Read as a uniform buffer in any shader, or a vertex buffer
+    AnyShaderReadUniformBufferOrVertexBuffer,
 
-        /// Similar to [`COLOR_ATTACHMENT_READ`],
-        /// but also includes advanced blend operations.
-        const COLOR_ATTACHMENT_READ_NONCOHERENT = 0x00200000;
+    /// Read as a sampled image in any shader
+    AnyShaderReadSampledImageOrUniformTexelBuffer,
 
-        /// Read access to an acceleration structure
-        /// as part of a trace, build, or copy command,
-        /// or to an acceleration structure scratch buffer
-        // as part of a build command.
-        const ACCELERATION_STRUCTURE_READ = 0x00400000;
+    /// Read as any other resource (excluding attachments) in any shader
+    AnyShaderReadOther,
 
-        /// Write access to an acceleration structure
-        /// or acceleration structure scratch buffer
-        /// as part of a build or copy command.
-        const ACCELERATION_STRUCTURE_WRITE = 0x00800000;
+    /// Read as the source of a transfer operation
+    TransferRead,
 
-        /// Read access to a fragment density map attachment
-        /// during dynamic fragment density map operations.
-        const FRAGMENT_DENSITY_MAP_READ = 0x01000000;
+    /// Read on the host
+    HostRead,
 
-        /// Read access to a fragment shading rate attachment
-        /// or shading rate image during rasterization.
-        const FRAGMENT_SHADING_RATE_ATTACHMENT_READ = 0x02000000;
+    /// Read by the presentation engine (i.e. `vkQueuePresentKHR`)
+    Present,
+
+    /// Written as any resource in a vertex shader
+    VertexShaderWrite,
+
+    /// Written as any resource in a fragment shader
+    FragmentShaderWrite,
+
+    /// Written as a color attachment during rendering, or via a subpass store op
+    ColorAttachmentWrite,
+
+    /// Written as a depth/stencil attachment during rendering, or via a subpass store op
+    DepthStencilAttachmentWrite,
+
+    /// Written as a depth aspect of a depth/stencil attachment during rendering, whilst the
+    /// stencil aspect is read-only. Requires `VK_KHR_maintenance2` to be enabled.
+    DepthAttachmentWriteStencilReadOnly,
+
+    /// Written as a stencil aspect of a depth/stencil attachment during rendering, whilst the
+    /// depth aspect is read-only. Requires `VK_KHR_maintenance2` to be enabled.
+    StencilAttachmentWriteDepthReadOnly,
+
+    /// Written as any resource in a compute shader
+    ComputeShaderWrite,
+
+    /// Written as any resource in any shader
+    AnyShaderWrite,
+
+    /// Written as the destination of a transfer operation
+    TransferWrite,
+
+    /// Written on the host
+    HostWrite,
+
+    /// Read or written as a color attachment during rendering
+    ColorAttachmentReadWrite,
+
+    /// Covers any access - useful for debug, generally avoid for performance reasons
+    General,
+}
+
+impl Default for Access {
+    fn default() -> Self {
+        Access::None
     }
 }
 
-impl AccessFlags {
-    pub fn is_read(self) -> bool {
-        self.intersects(
-            Self::SHADER_READ
-                | Self::COLOR_ATTACHMENT_READ
-                | Self::DEPTH_STENCIL_ATTACHMENT_READ
-                | Self::TRANSFER_READ
-                | Self::HOST_READ
-                | Self::MEMORY_READ
-                // | Self::TRANSFORM_FEEDBACK_READ
-                // | Self::TRANSFORM_FEEDBACK_COUNTER_READ
-                | Self::ACCELERATION_STRUCTURE_READ,
-        )
+impl Access {
+    pub fn is_write(self) -> bool {
+        match self {
+            Access::VertexShaderWrite => true,
+            Access::FragmentShaderWrite => true,
+            Access::ColorAttachmentWrite => true,
+            Access::DepthStencilAttachmentWrite => true,
+            Access::DepthAttachmentWriteStencilReadOnly => true,
+            Access::StencilAttachmentWriteDepthReadOnly => true,
+            Access::ComputeShaderWrite => true,
+            Access::AnyShaderWrite => true,
+            Access::TransferWrite => true,
+            Access::HostWrite => true,
+            Access::ColorAttachmentReadWrite => true,
+            Access::General => true,
+            _ => false,
+        }
     }
 
-    pub fn is_write(self) -> bool {
-        self.intersects(
-            Self::SHADER_WRITE
-                | Self::COLOR_ATTACHMENT_WRITE
-                | Self::DEPTH_STENCIL_ATTACHMENT_WRITE
-                | Self::TRANSFER_WRITE
-                | Self::HOST_WRITE
-                | Self::MEMORY_WRITE
-                // | Self::TRANSFORM_FEEDBACK_WRITE
-                // | Self::TRANSFORM_FEEDBACK_COUNTER_WRITE
-                | Self::ACCELERATION_STRUCTURE_WRITE,
-        )
+    pub fn is_read_only(self) -> bool {
+        !self.is_write()
+    }
+
+    pub fn stage_flags(self) -> crate::PipelineStageFlags {
+        match self {
+            Access::None => PipelineStageFlags::empty(),
+            Access::IndirectBuffer => PipelineStageFlags::DRAW_INDIRECT,
+            Access::IndexBuffer => PipelineStageFlags::VERTEX_INPUT,
+            Access::VertexBuffer => PipelineStageFlags::VERTEX_INPUT,
+            Access::VertexShaderReadUniformBuffer => PipelineStageFlags::VERTEX_SHADER,
+            Access::VertexShaderReadSampledImageOrUniformTexelBuffer => {
+                PipelineStageFlags::VERTEX_SHADER
+            }
+
+            Access::VertexShaderReadOther => PipelineStageFlags::VERTEX_SHADER,
+
+            Access::FragmentShaderReadUniformBuffer => PipelineStageFlags::FRAGMENT_SHADER,
+
+            Access::FragmentShaderReadSampledImageOrUniformTexelBuffer => {
+                PipelineStageFlags::FRAGMENT_SHADER
+            }
+
+            Access::FragmentShaderReadColorInputAttachment => PipelineStageFlags::FRAGMENT_SHADER,
+
+            Access::FragmentShaderReadDepthStencilInputAttachment => {
+                PipelineStageFlags::FRAGMENT_SHADER
+            }
+
+            Access::FragmentShaderReadOther => PipelineStageFlags::FRAGMENT_SHADER,
+
+            Access::ColorAttachmentRead => PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
+
+            Access::DepthStencilAttachmentRead => {
+                PipelineStageFlags::EARLY_FRAGMENT_TESTS | PipelineStageFlags::LATE_FRAGMENT_TESTS
+            }
+
+            Access::ComputeShaderReadUniformBuffer => PipelineStageFlags::COMPUTE_SHADER,
+
+            Access::ComputeShaderReadSampledImageOrUniformTexelBuffer => {
+                PipelineStageFlags::COMPUTE_SHADER
+            }
+
+            Access::ComputeShaderReadOther => PipelineStageFlags::COMPUTE_SHADER,
+
+            Access::AnyShaderReadUniformBuffer => PipelineStageFlags::ALL_COMMANDS,
+
+            Access::AnyShaderReadUniformBufferOrVertexBuffer => PipelineStageFlags::ALL_COMMANDS,
+
+            Access::AnyShaderReadSampledImageOrUniformTexelBuffer => {
+                PipelineStageFlags::ALL_COMMANDS
+            }
+
+            Access::AnyShaderReadOther => PipelineStageFlags::ALL_COMMANDS,
+
+            Access::TransferRead => PipelineStageFlags::TRANSFER,
+
+            Access::HostRead => PipelineStageFlags::HOST,
+
+            Access::Present => PipelineStageFlags::empty(),
+
+            Access::VertexShaderWrite => PipelineStageFlags::VERTEX_SHADER,
+
+            Access::FragmentShaderWrite => PipelineStageFlags::FRAGMENT_SHADER,
+
+            Access::ColorAttachmentWrite => PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
+
+            Access::DepthStencilAttachmentWrite => {
+                PipelineStageFlags::EARLY_FRAGMENT_TESTS | PipelineStageFlags::LATE_FRAGMENT_TESTS
+            }
+
+            Access::DepthAttachmentWriteStencilReadOnly => {
+                PipelineStageFlags::EARLY_FRAGMENT_TESTS | PipelineStageFlags::LATE_FRAGMENT_TESTS
+            }
+
+            Access::StencilAttachmentWriteDepthReadOnly => {
+                PipelineStageFlags::EARLY_FRAGMENT_TESTS | PipelineStageFlags::LATE_FRAGMENT_TESTS
+            }
+
+            Access::ComputeShaderWrite => PipelineStageFlags::COMPUTE_SHADER,
+
+            Access::AnyShaderWrite => PipelineStageFlags::ALL_COMMANDS,
+
+            Access::TransferWrite => PipelineStageFlags::TRANSFER,
+
+            Access::HostWrite => PipelineStageFlags::HOST,
+
+            Access::ColorAttachmentReadWrite => PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
+
+            Access::General => PipelineStageFlags::ALL_COMMANDS,
+        }
     }
 }

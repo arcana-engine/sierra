@@ -1,4 +1,4 @@
-use crate::access::AccessFlags;
+use crate::access::Access;
 
 bitflags::bitflags! {
     /// Memory usage type.
@@ -25,8 +25,14 @@ bitflags::bitflags! {
     }
 }
 
+/// Global barriers define a set of accesses on multiple resources at once.
+/// If a buffer or image doesn't require a queue ownership transfer, or an image
+/// doesn't require a layout transition (e.g. you're using one of the
+/// `ImageLayout::General*` layouts) then a global barrier should be preferred.
+///
+/// Simply define the previous and next access types of resources affected.
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
-pub struct MemoryBarrier {
-    pub src: AccessFlags,
-    pub dst: AccessFlags,
+pub struct GlobalMemoryBarrier<'a> {
+    pub prev_accesses: &'a [Access],
+    pub next_accesses: &'a [Access],
 }

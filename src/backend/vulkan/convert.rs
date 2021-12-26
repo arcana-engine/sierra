@@ -1,5 +1,5 @@
 use crate::{
-    out_of_host_memory, AccelerationStructureBuildFlags, AccelerationStructureLevel, AccessFlags,
+    out_of_host_memory, AccelerationStructureBuildFlags, AccelerationStructureLevel,
     AspectFlags, BlendFactor, BlendOp, BorderColor, BufferCopy, BufferImageCopy, BufferUsage,
     CompareOp, ComponentMapping, ComponentMask, CompositeAlphaFlags, Culling,
     DescriptorBindingFlags, DescriptorSetLayoutFlags, DescriptorType, DeviceAddress, Extent2d,
@@ -1329,93 +1329,6 @@ impl ToErupt<vk1_0::DescriptorSetLayoutCreateFlags> for DescriptorSetLayoutFlags
 
         if self.contains(DescriptorSetLayoutFlags::PUSH_DESCRIPTOR) {
             result |= vk1_0::DescriptorSetLayoutCreateFlags::PUSH_DESCRIPTOR_KHR
-        }
-
-        result
-    }
-}
-
-impl ToErupt<vk1_0::AccessFlags> for AccessFlags {
-    fn to_erupt(self) -> vk1_0::AccessFlags {
-        let mut result = vk1_0::AccessFlags::empty();
-
-        if self.contains(Self::INDIRECT_COMMAND_READ) {
-            result |= vk1_0::AccessFlags::INDIRECT_COMMAND_READ;
-        }
-        if self.contains(Self::INDEX_READ) {
-            result |= vk1_0::AccessFlags::INDEX_READ;
-        }
-        if self.contains(Self::VERTEX_ATTRIBUTE_READ) {
-            result |= vk1_0::AccessFlags::VERTEX_ATTRIBUTE_READ;
-        }
-        if self.contains(Self::UNIFORM_READ) {
-            result |= vk1_0::AccessFlags::UNIFORM_READ;
-        }
-        if self.contains(Self::INPUT_ATTACHMENT_READ) {
-            result |= vk1_0::AccessFlags::INPUT_ATTACHMENT_READ;
-        }
-        if self.contains(Self::SHADER_READ) {
-            result |= vk1_0::AccessFlags::SHADER_READ;
-        }
-        if self.contains(Self::SHADER_WRITE) {
-            result |= vk1_0::AccessFlags::SHADER_WRITE;
-        }
-        if self.contains(Self::COLOR_ATTACHMENT_READ) {
-            result |= vk1_0::AccessFlags::COLOR_ATTACHMENT_READ;
-        }
-        if self.contains(Self::COLOR_ATTACHMENT_WRITE) {
-            result |= vk1_0::AccessFlags::COLOR_ATTACHMENT_WRITE;
-        }
-        if self.contains(Self::DEPTH_STENCIL_ATTACHMENT_READ) {
-            result |= vk1_0::AccessFlags::DEPTH_STENCIL_ATTACHMENT_READ;
-        }
-        if self.contains(Self::DEPTH_STENCIL_ATTACHMENT_WRITE) {
-            result |= vk1_0::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE;
-        }
-        if self.contains(Self::TRANSFER_READ) {
-            result |= vk1_0::AccessFlags::TRANSFER_READ;
-        }
-        if self.contains(Self::TRANSFER_WRITE) {
-            result |= vk1_0::AccessFlags::TRANSFER_WRITE;
-        }
-        if self.contains(Self::HOST_READ) {
-            result |= vk1_0::AccessFlags::HOST_READ;
-        }
-        if self.contains(Self::HOST_WRITE) {
-            result |= vk1_0::AccessFlags::HOST_WRITE;
-        }
-        if self.contains(Self::MEMORY_READ) {
-            result |= vk1_0::AccessFlags::MEMORY_READ;
-        }
-        if self.contains(Self::MEMORY_WRITE) {
-            result |= vk1_0::AccessFlags::MEMORY_WRITE;
-        }
-        // if self.contains(Self::TRANSFORM_FEEDBACK_WRITE) {
-        //     result |= vk1_0::AccessFlags::TRANSFORM_FEEDBACK_WRITE_EXT;
-        // }
-        // if self.contains(Self::TRANSFORM_FEEDBACK_COUNTER_READ) {
-        //     result |= vk1_0::AccessFlags::TRANSFORM_FEEDBACK_COUNTER_READ_EXT;
-        // }
-        // if self.contains(Self::TRANSFORM_FEEDBACK_COUNTER_WRITE) {
-        //     result |= vk1_0::AccessFlags::TRANSFORM_FEEDBACK_COUNTER_WRITE_EXT;
-        // }
-        if self.contains(Self::CONDITIONAL_RENDERING_READ) {
-            result |= vk1_0::AccessFlags::CONDITIONAL_RENDERING_READ_EXT;
-        }
-        if self.contains(Self::COLOR_ATTACHMENT_READ_NONCOHERENT) {
-            result |= vk1_0::AccessFlags::COLOR_ATTACHMENT_READ_NONCOHERENT_EXT;
-        }
-        if self.contains(Self::ACCELERATION_STRUCTURE_READ) {
-            result |= vk1_0::AccessFlags::ACCELERATION_STRUCTURE_READ_KHR;
-        }
-        if self.contains(Self::ACCELERATION_STRUCTURE_WRITE) {
-            result |= vk1_0::AccessFlags::ACCELERATION_STRUCTURE_WRITE_KHR;
-        }
-        if self.contains(Self::FRAGMENT_DENSITY_MAP_READ) {
-            result |= vk1_0::AccessFlags::FRAGMENT_DENSITY_MAP_READ_EXT;
-        }
-        if self.contains(Self::FRAGMENT_SHADING_RATE_ATTACHMENT_READ) {
-            result |= vk1_0::AccessFlags::FRAGMENT_SHADING_RATE_ATTACHMENT_READ_KHR;
         }
 
         result

@@ -90,7 +90,7 @@ fn fs_main() -> [[location(0)]] vec4<f32> {
             winit::event::Event::RedrawRequested(_) => (|| -> eyre::Result<()> {
                 let mut image = swapchain.acquire_image(false)?;
 
-                let mut encoder = queue.create_encoder(&scope)?;
+                let mut encoder = sierra::Encoder::new(&scope);
                 let mut render_pass_encoder = encoder.with_render_pass(
                     &mut main,
                     &Main {
@@ -106,9 +106,10 @@ fn fs_main() -> [[location(0)]] vec4<f32> {
 
                 let [wait, signal] = image.wait_signal();
 
+                let cbuf = encoder.finish(&mut queue)?;
                 queue.submit(
-                    &mut [(sierra::PipelineStageFlags::TOP_OF_PIPE, wait)],
-                    Some(encoder.finish()),
+                    &mut [(sierra::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT, wait)],
+                    Some(cbuf),
                     &mut [signal],
                     None,
                     &scope,

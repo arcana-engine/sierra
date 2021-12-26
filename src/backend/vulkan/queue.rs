@@ -7,7 +7,7 @@ use {
         unexpected_result,
     },
     crate::{
-        encode::{CommandBuffer, Encoder},
+        encode::CommandBuffer,
         fence::Fence,
         out_of_host_memory,
         queue::*,
@@ -70,9 +70,9 @@ impl Queue {
     }
 
     #[tracing::instrument]
-    pub fn create_encoder<'a>(&mut self, scope: &'a Scope<'a>) -> Result<Encoder<'a>, OutOfMemory> {
+    pub fn get_command_buffer(&mut self) -> Result<CommandBuffer, OutOfMemory> {
         match self.cbufs.pop() {
-            Some(cbuf) => Ok(Encoder::new(cbuf, self.capabilities, scope)),
+            Some(cbuf) => Ok(cbuf),
             None => {
                 if self.pool == vk1_0::CommandPool::null() {
                     self.pool = unsafe {
@@ -100,9 +100,9 @@ impl Queue {
                 .result()
                 .map_err(oom_error_from_erupt)?;
 
-                let cbuf = CommandBuffer::new(buffers.remove(0), self.id, self.device.downgrade());
+                let cbuf = CommandBuffer::new(buffers.remove(0), self.id, self.capabilities, self.device.downgrade());
 
-                Ok(Encoder::new(cbuf, self.capabilities, scope))
+                Ok(cbuf)
             }
         }
     }
