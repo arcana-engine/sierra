@@ -357,7 +357,7 @@ pub enum CreateShaderModuleError {
     #[error("Failed to validate shader module")]
     NagaValidationError {
         #[from]
-        source: naga::valid::ValidationError,
+        source: naga::WithSpan<naga::valid::ValidationError>,
     },
 }
 

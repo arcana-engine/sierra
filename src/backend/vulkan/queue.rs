@@ -155,7 +155,7 @@ impl Queue {
                         .wait_dst_stage_mask(&*wait_stages)
                         .signal_semaphores(&*signal_semaphores)
                         .command_buffers(&*handles)],
-                    fence.map(|f| f.handle()),
+                    fence.map_or(vk1_0::Fence::null(), |f| f.handle()),
                 )
                 .expect("TODO: Handle queue submit error")
         };
@@ -179,7 +179,7 @@ impl Queue {
                         .wait_dst_stage_mask(&[])
                         .signal_semaphores(&[])
                         .command_buffers(std::slice::from_ref(&handle))],
-                    fence.map(|f| f.handle()),
+                    fence.map_or(vk1_0::Fence::null(), |f| f.handle()),
                 )
                 .expect("TODO: Handle queue submit error")
         };
@@ -244,7 +244,7 @@ impl Queue {
             unsafe {
                 self.device.logical().reset_command_buffer(
                     cbuf.handle(),
-                    Some(vk1_0::CommandBufferResetFlags::RELEASE_RESOURCES),
+                    vk1_0::CommandBufferResetFlags::RELEASE_RESOURCES,
                 )
             }
             .result()

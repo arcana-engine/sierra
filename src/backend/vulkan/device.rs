@@ -56,10 +56,10 @@ use {
     bytemuck::Pod,
     erupt::{
         extensions::{
-            khr_acceleration_structure as vkacc, khr_ray_tracing_pipeline as vkrt,
-            khr_swapchain as vksw,
+            khr_acceleration_structure as vkacc, khr_deferred_host_operations as vkdho,
+            khr_ray_tracing_pipeline as vkrt, khr_swapchain as vksw,
         },
-        vk1_0, vk1_2, DeviceLoader, ExtendableFromConst as _,
+        vk1_0, vk1_2, DeviceLoader, ExtendableFrom as _,
     },
     gpu_alloc::{GpuAllocator, MemoryBlock},
     gpu_alloc_erupt::EruptMemoryDevice,
@@ -360,7 +360,7 @@ impl Device {
             )
         }
         .map_err(|err| {
-            unsafe { self.inner.logical.destroy_buffer(Some(handle), None) }
+            unsafe { self.inner.logical.destroy_buffer(handle, None) }
 
             tracing::error!("{:#}", err);
             OutOfMemory
@@ -375,7 +375,7 @@ impl Device {
 
         if let Err(err) = result {
             unsafe {
-                self.inner.logical.destroy_buffer(Some(handle), None);
+                self.inner.logical.destroy_buffer(handle, None);
 
                 self.inner
                     .allocator
@@ -479,7 +479,7 @@ impl Device {
             .dealloc(EruptMemoryDevice::wrap(&self.inner.logical), block);
 
         let handle = self.inner.buffers.lock().remove(index);
-        self.inner.logical.destroy_buffer(Some(handle), None);
+        self.inner.logical.destroy_buffer(handle, None);
     }
 
     /// Returns handle to newly created [`Fence`].
@@ -502,7 +502,7 @@ impl Device {
 
     pub(super) unsafe fn destroy_fence(&self, index: usize) {
         let handle = self.inner.fences.lock().remove(index);
-        self.inner.logical.destroy_fence(Some(handle), None);
+        self.inner.logical.destroy_fence(handle, None);
     }
 
     /// Returns handle to newly created [`Framebuffer`].
@@ -558,7 +558,7 @@ impl Device {
 
     pub(super) unsafe fn destroy_framebuffer(&self, index: usize) {
         let handle = self.inner.framebuffers.lock().remove(index);
-        self.inner.logical.destroy_framebuffer(Some(handle), None);
+        self.inner.logical.destroy_framebuffer(handle, None);
     }
 
     /// Creates graphics pipeline.
@@ -878,9 +878,11 @@ impl Device {
         }
 
         let pipelines = unsafe {
-            self.inner
-                .logical
-                .create_graphics_pipelines(None, &[builder], None)
+            self.inner.logical.create_graphics_pipelines(
+                vk1_0::PipelineCache::null(),
+                &[builder],
+                None,
+            )
         }
         .result()
         .map_err(oom_error_from_erupt)?;
@@ -914,14 +916,14 @@ impl Device {
 
         let pipelines = unsafe {
             self.inner.logical.create_compute_pipelines(
-                None,
+                vk1_0::PipelineCache::null(),
                 &[vk1_0::ComputePipelineCreateInfoBuilder::new()
                     .stage(
                         vk1_0::PipelineShaderStageCreateInfoBuilder::new()
                             .stage(vk1_0::ShaderStageFlagBits::COMPUTE)
                             .module(info.shader.module().handle())
                             .name(&shader_entry)
-                            .build(),
+                            .build_dangling(),
                     )
                     .layout(info.layout.handle())],
                 None,
@@ -946,7 +948,7 @@ impl Device {
 
     pub(super) unsafe fn destroy_pipeline(&self, index: usize) {
         let handle = self.inner.pipelines.lock().remove(index);
-        self.inner.logical.destroy_pipeline(Some(handle), None);
+        self.inner.logical.destroy_pipeline(handle, None);
     }
 
     /// Creates image with uninitialized content.
@@ -989,7 +991,7 @@ impl Device {
                     },
                 )
                 .map_err(|err| {
-                    self.inner.logical.destroy_image(Some(image), None);
+                    self.inner.logical.destroy_image(image, None);
 
                     tracing::error!("{:#}", err);
                     OutOfMemory
@@ -1012,7 +1014,7 @@ impl Device {
             }
             Err(err) => {
                 unsafe {
-                    self.inner.logical.destroy_image(Some(image), None);
+                    self.inner.logical.destroy_image(image, None);
                     self.inner
                         .allocator
                         .lock()
@@ -1035,7 +1037,7 @@ impl Device {
             .dealloc(EruptMemoryDevice::wrap(self.logical()), block);
 
         let handle = self.inner.images.lock().remove(index);
-        self.inner.logical.destroy_image(Some(handle), None);
+        self.inner.logical.destroy_image(handle, None);
     }
 
     // /// Creates static image with preinitialized content from `data`.
@@ -1101,7 +1103,7 @@ impl Device {
     //                 },
     //             )
     //             .map_err(|err| {
-    //                 self.inner.logical.destroy_image(Some(image), None);
+    //                 self.inner.logical.destroy_image(image, None);
     //                 tracing::error!("{:#}", err);
     //                 OutOfMemory
     //             })
@@ -1118,7 +1120,7 @@ impl Device {
 
     //     if let Err(err) = result {
     //         unsafe {
-    //             self.inner.logical.destroy_image(Some(image), None);
+    //             self.inner.logical.destroy_image(image, None);
     //             self.inner.allocator.lock().dealloc(
     //                 EruptMemoryDevice::wrap(&self.inner.logical),
     //                 block,
@@ -1202,7 +1204,7 @@ impl Device {
 
     pub(super) unsafe fn destroy_image_view(&self, index: usize) {
         let handle = self.inner.image_views.lock().remove(index);
-        self.inner.logical.destroy_image_view(Some(handle), None);
+        self.inner.logical.destroy_image_view(handle, None);
     }
 
     /// Creates pipeline layout.
@@ -1256,9 +1258,7 @@ impl Device {
 
     pub(super) unsafe fn destroy_pipeline_layout(&self, index: usize) {
         let handle = self.inner.pipeline_layouts.lock().remove(index);
-        self.inner
-            .logical
-            .destroy_pipeline_layout(Some(handle), None);
+        self.inner.logical.destroy_pipeline_layout(handle, None);
     }
 
     /// Creates render pass.
@@ -1388,7 +1388,7 @@ impl Device {
 
     pub(super) unsafe fn destroy_render_pass(&self, index: usize) {
         let handle = self.inner.render_passes.lock().remove(index);
-        self.inner.logical.destroy_render_pass(Some(handle), None);
+        self.inner.logical.destroy_render_pass(handle, None);
     }
 
     pub(crate) fn create_semaphore_raw(&self) -> Result<(vk1_0::Semaphore, usize), vk1_0::Result> {
@@ -1415,7 +1415,7 @@ impl Device {
 
     pub(super) unsafe fn destroy_semaphore(&self, index: usize) {
         let handle = self.inner.semaphores.lock().remove(index);
-        self.inner.logical.destroy_semaphore(Some(handle), None);
+        self.inner.logical.destroy_semaphore(handle, None);
     }
 
     /// Creates new shader module from shader's code.
@@ -1573,7 +1573,7 @@ impl Device {
 
     pub(super) unsafe fn destroy_shader_module(&self, index: usize) {
         let handle = self.inner.shaders.lock().remove(index);
-        self.inner.logical.destroy_shader_module(Some(handle), None);
+        self.inner.logical.destroy_shader_module(handle, None);
     }
 
     /// Creates swapchain for specified surface.
@@ -1589,7 +1589,7 @@ impl Device {
 
     pub(super) unsafe fn destroy_swapchain(&self, index: usize) {
         let handle = self.inner.swapchains.lock().remove(index);
-        self.inner.logical.destroy_swapchain_khr(Some(handle), None);
+        self.inner.logical.destroy_swapchain_khr(handle, None);
     }
 
     /// Resets fences.
@@ -1754,7 +1754,7 @@ impl Device {
                                     .transform_data(vkacc::DeviceOrHostAddressConstKHR {
                                         device_address: allows_transforms as u64,
                                     })
-                                    .build(),
+                                    .build_dangling(),
                         })
                 }
                 AccelerationStructureGeometryInfo::AABBs { .. } => {
@@ -1888,7 +1888,7 @@ impl Device {
         let handle = self.inner.acceleration_strucutres.lock().remove(index);
         self.inner
             .logical
-            .destroy_acceleration_structure_khr(Some(handle), None);
+            .destroy_acceleration_structure_khr(handle, None);
     }
 
     /// Returns buffers device address.
@@ -2035,8 +2035,8 @@ impl Device {
 
         let handles = unsafe {
             self.inner.logical.create_ray_tracing_pipelines_khr(
-                None,
-                None,
+                vkdho::DeferredOperationKHR::null(),
+                vk1_0::PipelineCache::null(),
                 &[vkrt::RayTracingPipelineCreateInfoKHRBuilder::new()
                     .stages(&stages)
                     .groups(&groups)
@@ -2075,7 +2075,7 @@ impl Device {
         }
         .result()
         .map_err(|err| {
-            unsafe { self.inner.logical.destroy_pipeline(Some(handle), None) }
+            unsafe { self.inner.logical.destroy_pipeline(handle, None) }
 
             oom_error_from_erupt(err)
         })?;
@@ -2164,10 +2164,10 @@ impl Device {
                     .bindings(&bindings)
                     .flags(info.flags.to_erupt());
 
-                let flags = vk1_2::DescriptorSetLayoutBindingFlagsCreateInfoBuilder::new()
+                let mut flags = vk1_2::DescriptorSetLayoutBindingFlagsCreateInfoBuilder::new()
                     .binding_flags(&flags);
 
-                create_info = create_info.extend_from(&flags);
+                create_info = create_info.extend_from(&mut flags);
 
                 self.inner
                     .logical
@@ -2195,7 +2195,7 @@ impl Device {
         let handle = self.inner.descriptor_set_layouts.lock().remove(index);
         self.inner
             .logical
-            .destroy_descriptor_set_layout(Some(handle), None);
+            .destroy_descriptor_set_layout(handle, None);
     }
 
     #[tracing::instrument]
@@ -2509,7 +2509,7 @@ impl Device {
                         *acc_structure_write =
                             vkacc::WriteDescriptorSetAccelerationStructureKHRBuilder::new()
                                 .acceleration_structures(&acceleration_structures[range]);
-                        write.extend_from(&*acc_structure_write)
+                        write.extend_from(acc_structure_write)
                     }
                 }
             })
@@ -2565,7 +2565,7 @@ impl Device {
 
     pub(super) unsafe fn destroy_sampler(&self, index: usize) {
         let handle = self.inner.samplers.lock().remove(index);
-        self.inner.logical.destroy_sampler(Some(handle), None);
+        self.inner.logical.destroy_sampler(handle, None);
     }
 
     #[tracing::instrument]

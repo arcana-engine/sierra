@@ -340,7 +340,7 @@ impl CommandBuffer {
                                                     Some(IndexData::U32(range)) => buffer_range_to_device_address(range, &mut self.references),
                                                 })
                                                 .transform_data(transform_data.as_ref().map(|da| buffer_range_to_device_address(da, &mut self.references)).unwrap_or_default())
-                                                .build()
+                                                .build_dangling()
                                             })
                                     }
                                     AccelerationStructureGeometry::AABBs { flags, data, stride, primitive_count } => {
@@ -352,7 +352,7 @@ impl CommandBuffer {
                                                 aabbs: vkacc::AccelerationStructureGeometryAabbsDataKHRBuilder::new()
                                                     .data(buffer_range_to_device_address(data, &mut self.references))
                                                     .stride(*stride)
-                                                    .build()
+                                                    .build_dangling()
                                             })
                                     }
                                     AccelerationStructureGeometry::Instances { flags, data, .. } => {
@@ -362,7 +362,7 @@ impl CommandBuffer {
                                             .geometry(vkacc::AccelerationStructureGeometryDataKHR {
                                                 instances: vkacc::AccelerationStructureGeometryInstancesDataKHRBuilder::new()
                                                     .data(buffer_range_to_device_address(data, &mut self.references))
-                                                    .build()
+                                                    .build_dangling()
                                             })
                                     }
                                 }
@@ -703,7 +703,7 @@ impl CommandBuffer {
                         self.handle,
                         src.to_erupt(),
                         dst.to_erupt(),
-                        None,
+                        vk1_0::DependencyFlags::empty(),
                         &[vk1_0::MemoryBarrierBuilder::new()
                             .src_access_mask(
                                 memory

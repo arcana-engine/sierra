@@ -88,7 +88,7 @@ fn fs_main() -> [[location(0)]] vec4<f32> {
             }
 
             winit::event::Event::RedrawRequested(_) => (|| -> eyre::Result<()> {
-                let mut image = swapchain.acquire_image(false)?;
+                let mut image = swapchain.acquire_image()?;
 
                 let mut encoder = queue.create_encoder(&scope)?;
                 let mut render_pass_encoder = encoder.with_render_pass(
@@ -113,7 +113,14 @@ fn fs_main() -> [[location(0)]] vec4<f32> {
                     None,
                     &scope,
                 );
+
+                let optimal = image.is_optimal();
+
                 queue.present(image)?;
+
+                if !optimal {
+                    swapchain.update()?;
+                }
 
                 scope.reset();
                 Ok(())

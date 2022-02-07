@@ -28,8 +28,7 @@ use {
             khr_surface as vks,
             khr_swapchain::KHR_SWAPCHAIN_EXTENSION_NAME,
         },
-        vk1_0, vk1_1, vk1_2, DeviceLoader, ExtendableFromConst as _, ExtendableFromMut as _,
-        LoaderError,
+        vk1_0, vk1_1, vk1_2, DeviceLoader, ExtendableFrom as _, LoaderError,
     },
     smallvec::SmallVec,
     std::{collections::HashMap, convert::TryInto as _, ffi::CStr, num::NonZeroU32, sync::Arc},
@@ -37,8 +36,8 @@ use {
 
 #[derive(Clone, Debug)]
 pub(crate) struct Properties {
-    pub(crate) extension: Vec<vk1_0::ExtensionProperties>,
-    pub(crate) family: Vec<vk1_0::QueueFamilyProperties>,
+    pub(crate) extension: SmallVec<[vk1_0::ExtensionProperties; 8]>,
+    pub(crate) family: SmallVec<[vk1_0::QueueFamilyProperties; 8]>,
     pub(crate) memory: vk1_0::PhysicalDeviceMemoryProperties,
 
     pub(crate) v10: vk1_0::PhysicalDeviceProperties,
@@ -170,22 +169,22 @@ unsafe fn collect_properties_and_features(
         family: family_properties,
         memory: memory_properties,
         v10: properties10,
-        v11: properties11.build(),
-        v12: properties12.build(),
-        edi: properties_edi.build(),
-        acc: properties_acc.build(),
-        rt: properties_rt.build(),
+        v11: properties11.build_dangling(),
+        v12: properties12.build_dangling(),
+        edi: properties_edi.build_dangling(),
+        acc: properties_acc.build_dangling(),
+        rt: properties_rt.build_dangling(),
     };
 
     let mut features = Features {
         v10: features10,
-        v11: features11.build(),
-        v12: features12.build(),
-        sbl: features_sbl.build(),
-        edi: features_edi.build(),
-        bda: features_bda.build(),
-        acc: features_acc.build(),
-        rt: features_rt.build(),
+        v11: features11.build_dangling(),
+        v12: features12.build_dangling(),
+        sbl: features_sbl.build_dangling(),
+        edi: features_edi.build_dangling(),
+        bda: features_bda.build_dangling(),
+        acc: features_acc.build_dangling(),
+        rt: features_rt.build_dangling(),
     };
 
     properties.v11.p_next = std::ptr::null_mut();
@@ -552,7 +551,7 @@ impl PhysicalDevice {
 
         // Collect requested features.
         let mut features2 = vk1_1::PhysicalDeviceFeatures2Builder::new();
-        let features11 = vk1_2::PhysicalDeviceVulkan11FeaturesBuilder::new();
+        let mut features11 = vk1_2::PhysicalDeviceVulkan11FeaturesBuilder::new();
         let mut features12 = vk1_2::PhysicalDeviceVulkan12FeaturesBuilder::new();
         let mut features_sbl = sbl::PhysicalDeviceScalarBlockLayoutFeaturesEXTBuilder::new();
         let mut features_edi = edi::PhysicalDeviceDescriptorIndexingFeaturesEXTBuilder::new();
@@ -978,39 +977,39 @@ impl PhysicalDevice {
             // Push structure to the list if at least one feature is enabled.
             if include_features_sbl {
                 push_ext(EXT_SCALAR_BLOCK_LAYOUT_EXTENSION_NAME);
-                device_create_info = device_create_info.extend_from(&features_sbl);
+                device_create_info = device_create_info.extend_from(&mut features_sbl);
             }
 
             if include_features_edi {
                 push_ext(EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME);
-                device_create_info = device_create_info.extend_from(&features_edi);
+                device_create_info = device_create_info.extend_from(&mut features_edi);
             }
 
             if include_features_bda {
                 push_ext(KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME);
-                device_create_info = device_create_info.extend_from(&features_bda);
+                device_create_info = device_create_info.extend_from(&mut features_bda);
             }
 
             if include_features_acc {
                 push_ext(KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME);
                 push_ext(KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
-                device_create_info = device_create_info.extend_from(&features_acc);
+                device_create_info = device_create_info.extend_from(&mut features_acc);
             }
 
             if include_features_rt {
                 push_ext(KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME);
-                device_create_info = device_create_info.extend_from(&features_rt);
+                device_create_info = device_create_info.extend_from(&mut features_rt);
             }
 
             if include_features12 {
-                device_create_info = device_create_info.extend_from(&features12);
+                device_create_info = device_create_info.extend_from(&mut features12);
             }
 
             if include_features11 {
-                device_create_info = device_create_info.extend_from(&features11);
+                device_create_info = device_create_info.extend_from(&mut features11);
             }
 
-            device_create_info = device_create_info.extend_from(&features2);
+            device_create_info = device_create_info.extend_from(&mut features2);
         }
 
         device_create_info = device_create_info.enabled_extension_names(&enable_exts);
@@ -1020,8 +1019,7 @@ impl PhysicalDevice {
 
         let instance = &self.graphics().instance;
 
-        let result =
-            unsafe { DeviceLoader::new(instance, self.physical, &device_create_info, None) };
+        let result = unsafe { DeviceLoader::new(instance, self.physical, &device_create_info) };
 
         let logical = match result {
             Err(LoaderError::SymbolNotAvailable) => {
@@ -1048,13 +1046,13 @@ impl PhysicalDevice {
             self.properties,
             Features {
                 v10: features2.features,
-                v11: features11.build(),
-                v12: features12.build(),
-                sbl: features_sbl.build(),
-                edi: features_edi.build(),
-                bda: features_bda.build(),
-                acc: features_acc.build(),
-                rt: features_rt.build(),
+                v11: features11.build_dangling(),
+                v12: features12.build_dangling(),
+                sbl: features_sbl.build_dangling(),
+                edi: features_edi.build_dangling(),
+                bda: features_bda.build_dangling(),
+                acc: features_acc.build_dangling(),
+                rt: features_rt.build_dangling(),
             },
             version,
             families.iter().flat_map(|&(family, count)| {

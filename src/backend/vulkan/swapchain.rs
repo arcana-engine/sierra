@@ -167,6 +167,21 @@ impl Swapchain {
         &self.surface_capabilities
     }
 
+    /// Update swapchain images for changed surface.
+    /// Does nothing if not configured.
+    #[tracing::instrument]
+    pub fn update(&mut self) -> Result<(), SurfaceError> {
+        if let Some(inner) = &self.inner {
+            let usage = inner.usage;
+            let format = inner.format;
+            let mode = inner.mode;
+
+            self.configure(usage, format, mode)
+        } else {
+            Ok(())
+        }
+    }
+
     #[tracing::instrument]
     pub fn configure(
         &mut self,
@@ -306,7 +321,7 @@ impl Swapchain {
                 .get_swapchain_images_khr(handle, None)
                 .result()
                 .map_err(|err| {
-                    logical.destroy_swapchain_khr(Some(handle), None);
+                    logical.destroy_swapchain_khr(handle, None);
                     surface_error_from_erupt(err)
                 })
         }?;
@@ -320,7 +335,7 @@ impl Swapchain {
             })
             .collect::<Result<Vec<_>, _>>()
             .map_err(|err| unsafe {
-                logical.destroy_swapchain_khr(Some(handle), None);
+                logical.destroy_swapchain_khr(handle, None);
 
                 SurfaceError::OutOfMemory { source: err }
             })?;
@@ -364,7 +379,7 @@ impl Swapchain {
         Ok(())
     }
 
-    pub fn acquire_image(&mut self, optimal: bool) -> Result<SwapchainImage<'_>, SurfaceError> {
+    pub fn acquire_image(&mut self) -> Result<SwapchainImage<'_>, SurfaceError> {
         let device = self.device.upgrade().ok_or(SurfaceError::SurfaceLost)?;
 
         assert!(
@@ -381,17 +396,6 @@ impl Swapchain {
                 return Err(SurfaceError::TooManyAcquired);
             }
 
-            if optimal && !inner.optimal {
-                // If swapchain is not optimal and optimal is requested
-                // swapchain should be recreated.
-                let usage = inner.usage;
-                let format = inner.format;
-                let mode = inner.mode;
-
-                self.configure(usage, format, mode)?;
-                continue;
-            }
-
             // FIXME: Use fences to know that acquire semaphore is unused.
             let wait = &self.free_semaphore;
 
@@ -400,8 +404,8 @@ impl Swapchain {
                     inner.handle,
                     !0, /* wait indefinitely. This is OK as we never try to
                          * acquire more images than there is in swapchain. */
-                    Some(wait.handle()),
-                    None,
+                    wait.handle(),
+                    vk1_0::Fence::null(),
                 )
             };
 

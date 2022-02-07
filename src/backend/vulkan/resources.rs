@@ -283,8 +283,8 @@ impl ImageFlavor {
 /// Images represent a one, two or three dimensional arrays of texel.
 #[derive(Clone)]
 pub struct Image {
-    info: ImageInfo,
     handle: vk1_0::Image,
+    info: ImageInfo,
     inner: Arc<ImageInner>,
 }
 

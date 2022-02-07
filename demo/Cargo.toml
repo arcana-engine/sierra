@@ -11,10 +11,10 @@ description = "Demonstrates sierra's code generation abilities"
 
 [dependencies]
 sierra = { version = "0.3.0", path = "..", features = ["proc-verbose-docs"] }
-scoped-arena = "0.3"
+scoped-arena = "0.4"
 eyre = "0.6"
-color-eyre = "0.5"
+color-eyre = "0.6"
 tracing = "0.1"
-tracing-error = "0.1"
-tracing-subscriber = "0.2"
-winit = "0.25"
+tracing-error = "0.2"
+tracing-subscriber = "0.3"
+winit = "0.26"

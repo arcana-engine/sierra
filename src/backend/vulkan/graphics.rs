@@ -258,7 +258,6 @@ impl Graphics {
                     )
                     .enabled_layer_names(&enable_layers)
                     .enabled_extension_names(&enable_exts),
-                None,
             )
         };
 
