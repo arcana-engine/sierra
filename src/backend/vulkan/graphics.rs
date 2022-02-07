@@ -335,7 +335,7 @@ impl Graphics {
             RawWindowHandle::Android(handle) => {
                 if !self.instance.enabled().khr_android_surface {
                     return Err(CreateSurfaceError::UnsupportedWindow {
-                        window: RawWindowHandleKind::Android,
+                        window: RawWindowHandleKind::of(&window),
                         source: Box::new(RequiredExtensionIsNotAvailable {
                             extension: "VK_KHR_android_surface",
                         }),
@@ -369,7 +369,7 @@ impl Graphics {
 
                 if !self.instance.enabled().mvk_macos_surface {
                     return Err(CreateSurfaceError::UnsupportedWindow {
-                        window: RawWindowHandleKind::Windows,
+                        window: RawWindowHandleKind::of(&window),
                         source: Some(Box::new(RequiredExtensionIsNotAvailable {
                             extension: "VK_MVK_macos_surface",
                         })),
@@ -435,7 +435,7 @@ impl Graphics {
             RawWindowHandle::Wayland(handle) => {
                 if !self.instance.enabled().khr_wayland_surface {
                     return Err(CreateSurfaceError::UnsupportedWindow {
-                        window: RawWindowHandleKind::Windows,
+                        window: RawWindowHandleKind::of(&window),
                         source: Some(Box::new(RequiredExtensionIsNotAvailable {
                             extension: "VK_KHR_wayland_surface",
                         })),
@@ -467,7 +467,7 @@ impl Graphics {
             RawWindowHandle::Win32(handle) => {
                 if !self.instance.enabled().khr_win32_surface {
                     return Err(CreateSurfaceError::UnsupportedWindow {
-                        window: RawWindowHandleKind::Win32,
+                        window: RawWindowHandleKind::of(&window),
                         source: Some(Box::new(RequiredExtensionIsNotAvailable {
                             extension: "VK_KHR_win32_surface",
                         })),
@@ -493,7 +493,7 @@ impl Graphics {
             #[cfg(target_os = "windows")]
             RawWindowHandle::WinRt(_) => {
                 return Err(CreateSurfaceError::UnsupportedWindow {
-                    window: RawWindowHandleKind::WinRt,
+                    window: RawWindowHandleKind::of(&window),
                     source: Some(Box::from("WinRT is not supported")),
                 })
             }
@@ -508,7 +508,7 @@ impl Graphics {
             RawWindowHandle::Xcb(handle) => {
                 if !self.instance.enabled().khr_xcb_surface {
                     return Err(CreateSurfaceError::UnsupportedWindow {
-                        window: RawWindowHandleKind::Xcb,
+                        window: RawWindowHandleKind::of(&window),
                         source: Some(Box::new(RequiredExtensionIsNotAvailable {
                             extension: "VK_KHR_xcb_surface",
                         })),
@@ -546,7 +546,7 @@ impl Graphics {
             RawWindowHandle::Xlib(handle) => {
                 if !self.instance.enabled().khr_xlib_surface {
                     return Err(CreateSurfaceError::UnsupportedWindow {
-                        window: RawWindowHandleKind::Xlib,
+                        window: RawWindowHandleKind::of(&window),
                         source: Some(Box::new(RequiredExtensionIsNotAvailable {
                             extension: "VK_KHR_xlib_surface",
                         })),
@@ -577,7 +577,7 @@ impl Graphics {
                 );
 
                 return Err(CreateSurfaceError::UnsupportedWindow {
-                    window: RawWindowHandleKind::Unknown,
+                    window: RawWindowHandleKind::of(&window),
                     source: None,
                 });
             }
