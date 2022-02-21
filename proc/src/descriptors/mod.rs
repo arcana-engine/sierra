@@ -1,11 +1,11 @@
 mod acceleration_structure;
 mod buffer;
-mod combined_image_sampler;
+// mod combined_image_sampler;
+mod image;
 mod input;
 mod instance;
 mod layout;
 mod parse;
-mod sampled_image;
 mod sampler;
 mod uniform;
 

@@ -1,4 +1,12 @@
+use codespan_reporting::{
+    diagnostic::{Diagnostic, Label},
+    files::SimpleFile,
+    term::termcolor::{ColorChoice, StandardStream},
+};
+use naga::WithSpan;
 use ordered_float::OrderedFloat;
+
+use crate::BufferViewInfo;
 
 use {
     super::{
@@ -20,7 +28,8 @@ use {
         },
         align_up, arith_eq, arith_le, arith_ne, assert_object,
         buffer::{
-            Buffer, BufferInfo, BufferRange, BufferUsage, MappableBuffer, StridedBufferRange,
+            Buffer, BufferInfo, BufferRange, BufferUsage, BufferView, MappableBuffer,
+            StridedBufferRange,
         },
         descriptor::{
             CopyDescriptorSet, DescriptorBindingFlags, DescriptorSet, DescriptorSetInfo,
@@ -102,6 +111,7 @@ pub(crate) struct Inner {
     allocator: Mutex<GpuAllocator<vk1_0::DeviceMemory>>,
     version: u32,
     buffers: Mutex<Slab<vk1_0::Buffer>>,
+    buffer_views: Mutex<Slab<vk1_0::BufferView>>,
     descriptor_allocator: Mutex<DescriptorAllocator<vk1_0::DescriptorPool, vk1_0::DescriptorSet>>,
     descriptor_set_layouts: Mutex<Slab<vk1_0::DescriptorSetLayout>>,
     fences: Mutex<Slab<vk1_0::Fence>>,
@@ -262,6 +272,7 @@ impl Device {
 
                 // Numbers here are hints so no strong reasoning is required.
                 buffers: Mutex::new(Slab::with_capacity(4096)),
+                buffer_views: Mutex::new(Slab::with_capacity(4096)),
                 descriptor_set_layouts: Mutex::new(Slab::with_capacity(64)),
                 fences: Mutex::new(Slab::with_capacity(128)),
                 framebuffers: Mutex::new(Slab::with_capacity(128)),
@@ -480,6 +491,42 @@ impl Device {
 
         let handle = self.inner.buffers.lock().remove(index);
         self.inner.logical.destroy_buffer(handle, None);
+    }
+
+    #[tracing::instrument]
+    pub fn create_buffer_view(&self, info: BufferViewInfo) -> Result<BufferView, OutOfMemory> {
+        assert_owner!(info.buffer, self);
+        assert!(info
+            .buffer
+            .info()
+            .usage
+            .intersects(BufferUsage::UNIFORM_TEXEL | BufferUsage::STORAGE_TEXEL), "BufferView cannot be created from buffer without at least on of `UNIFORM_TEXEL` or `STORAGE_TEXEL` usage flags");
+
+        let buffer = &info.buffer;
+
+        let view = unsafe {
+            self.inner.logical.create_buffer_view(
+                &vk1_0::BufferViewCreateInfoBuilder::new()
+                    .buffer(buffer.handle())
+                    .format(info.format.to_erupt())
+                    .offset(info.offset)
+                    .range(info.size),
+                None,
+            )
+        }
+        .result()
+        .map_err(oom_error_from_erupt)?;
+
+        let index = self.inner.buffer_views.lock().insert(view);
+
+        tracing::debug!("BufferView created {:p}", view);
+        Ok(BufferView::new(info, self.downgrade(), view, index))
+    }
+
+    #[tracing::instrument]
+    pub(super) unsafe fn destroy_buffer_view(&self, index: usize) {
+        let handle = self.inner.buffer_views.lock().remove(index);
+        self.inner.logical.destroy_buffer_view(handle, None);
     }
 
     /// Returns handle to newly created [`Fence`].
@@ -1450,13 +1497,20 @@ impl Device {
                         },
                         code,
                     )
-                    .map_err(|errors| CreateShaderModuleError::NagaGlslParseError { errors })?;
+                    .map_err(|errors| {
+                        emit_glsl_parser_error(&errors, "source.glsl", code);
+                        CreateShaderModuleError::NagaGlslParseError { errors }
+                    })?;
 
                 let info = naga::valid::Validator::new(
                     naga::valid::ValidationFlags::all(),
                     Default::default(),
                 )
-                .validate(&module)?;
+                .validate(&module)
+                .map_err(|err| {
+                    emit_annotated_error(&err, "source.glsl", code);
+                    err
+                })?;
 
                 spv = naga::back::spv::write_vec(
                     &module,
@@ -1467,10 +1521,10 @@ impl Device {
 
                 bytemuck::cast_slice(&spv)
             }
-
             ShaderLanguage::WGSL => {
                 let code = from_utf8(&info.code)?;
                 let module = naga::front::wgsl::parse_str(code).map_err(|err| {
+                    err.emit_to_stderr("source.wgsl");
                     CreateShaderModuleError::NagaWgslParseError {
                         source: Box::from(err.emit_to_string(".")),
                     }
@@ -1479,7 +1533,11 @@ impl Device {
                     naga::valid::ValidationFlags::all(),
                     Default::default(),
                 )
-                .validate(&module)?;
+                .validate(&module)
+                .map_err(|err| {
+                    emit_annotated_error(&err, "source.wgsl", code);
+                    err
+                })?;
 
                 spv = naga::back::spv::write_vec(
                     &module,
@@ -2319,6 +2377,16 @@ impl Device {
                         );
                     }
                 }
+                Descriptors::UniformTexelBuffer(views) => {
+                    for view in views {
+                        assert_owner!(view, self);
+                    }
+                }
+                Descriptors::StorageTexelBuffer(views) => {
+                    for view in views {
+                        assert_owner!(view, self);
+                    }
+                }
             }
         }
 
@@ -2331,6 +2399,8 @@ impl Device {
         let mut images = SmallVec::<[_; 16]>::new();
 
         let mut buffers = SmallVec::<[_; 16]>::new();
+
+        let mut buffer_views = SmallVec::<[_; 16]>::new();
 
         // let mut buffer_views = SmallVec::<[_; 16]
         let mut acceleration_structures = SmallVec::<[_; 64]>::new();
@@ -2430,6 +2500,21 @@ impl Device {
 
                     ranges.push(start..buffers.len());
                 }
+                Descriptors::UniformTexelBuffer(slice) => {
+                    let start = buffer_views.len();
+
+                    buffer_views.extend(slice.iter().map(|view| view.handle()));
+
+                    ranges.push(start..buffers.len());
+                }
+
+                Descriptors::StorageTexelBuffer(slice) => {
+                    let start = buffer_views.len();
+
+                    buffer_views.extend(slice.iter().map(|view| view.handle()));
+
+                    ranges.push(start..buffers.len());
+                }
                 Descriptors::InputAttachment(slice) => {
                     let start = images.len();
 
@@ -2480,8 +2565,12 @@ impl Device {
                     Descriptors::StorageImage(_) => builder
                         .descriptor_type(vk1_0::DescriptorType::STORAGE_IMAGE)
                         .image_info(&images[ranges.next().unwrap()]),
-                    // Descriptors::UniformTexelBuffer(_) => todo!(),
-                    // Descriptors::StorageTexelBuffer(_) => todo!(),
+                    Descriptors::UniformTexelBuffer(_) => builder
+                        .descriptor_type(vk1_0::DescriptorType::UNIFORM_TEXEL_BUFFER)
+                        .texel_buffer_view(&buffer_views[ranges.next().unwrap()]),
+                    Descriptors::StorageTexelBuffer(_) => builder
+                        .descriptor_type(vk1_0::DescriptorType::STORAGE_TEXEL_BUFFER)
+                        .texel_buffer_view(&buffer_views[ranges.next().unwrap()]),
                     Descriptors::UniformBuffer(_) => builder
                         .descriptor_type(vk1_0::DescriptorType::UNIFORM_BUFFER)
                         .buffer_info(&buffers[ranges.next().unwrap()]),
@@ -2833,14 +2922,58 @@ pub(super) fn descriptor_count_from_bindings(
             DescriptorType::CombinedImageSampler => result.combined_image_sampler += binding.count,
             DescriptorType::InputAttachment => result.input_attachment += binding.count,
             DescriptorType::SampledImage => result.sampled_image += binding.count,
-            DescriptorType::Sampler => result.sampler += binding.count,
-            DescriptorType::StorageBuffer => result.storage_buffer += binding.count,
-            DescriptorType::StorageBufferDynamic => result.storage_buffer_dynamic += binding.count,
             DescriptorType::StorageImage => result.storage_image += binding.count,
+            DescriptorType::Sampler => result.sampler += binding.count,
+            DescriptorType::UniformTexelBuffer => result.uniform_texel_buffer += binding.count,
+            DescriptorType::StorageTexelBuffer => result.storage_texel_buffer += binding.count,
             DescriptorType::UniformBuffer => result.uniform_buffer += binding.count,
+            DescriptorType::StorageBuffer => result.storage_buffer += binding.count,
             DescriptorType::UniformBufferDynamic => result.uniform_buffer_dynamic += binding.count,
+            DescriptorType::StorageBufferDynamic => result.storage_buffer_dynamic += binding.count,
         }
     }
 
     result
+}
+
+fn emit_glsl_parser_error(errors: &[naga::front::glsl::Error], filename: &str, source: &str) {
+    let files = SimpleFile::new(filename, source);
+    let config = codespan_reporting::term::Config::default();
+    let writer = StandardStream::stderr(ColorChoice::Auto);
+
+    for err in errors {
+        let mut diagnostic = Diagnostic::error().with_message(err.kind.to_string());
+
+        if let Some(range) = err.meta.to_range() {
+            diagnostic = diagnostic.with_labels(vec![Label::primary((), range)]);
+        }
+
+        let mut writer = writer.lock();
+
+        if let Err(err) = codespan_reporting::term::emit(&mut writer, &config, &files, &diagnostic)
+        {
+            tracing::error!("Failed to print annotated error. {:#}", err);
+        }
+    }
+}
+
+fn emit_annotated_error<E: std::error::Error>(ann_err: &WithSpan<E>, filename: &str, source: &str) {
+    let files = SimpleFile::new(filename, source);
+    let config = codespan_reporting::term::Config::default();
+    let writer = StandardStream::stderr(ColorChoice::Auto);
+
+    let diagnostic = Diagnostic::error().with_labels(
+        ann_err
+            .spans()
+            .map(|(span, desc)| {
+                Label::primary((), span.to_range().unwrap()).with_message(desc.to_owned())
+            })
+            .collect(),
+    );
+
+    let mut writer = writer.lock();
+
+    if let Err(err) = codespan_reporting::term::emit(&mut writer, &config, &files, &diagnostic) {
+        tracing::error!("Failed to print annotated error. {:#}", err);
+    }
 }

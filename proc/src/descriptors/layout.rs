@@ -1,6 +1,6 @@
 use {
     super::{
-        buffer, combined_binding_flags_dedup,
+        buffer, combined_binding_flags_dedup, image,
         instance::instance_type_name,
         parse::{Descriptor, DescriptorType, Input},
     },
@@ -108,21 +108,37 @@ fn generate_layout_binding(descriptor: &Descriptor, binding: u32) -> TokenStream
         DescriptorType::Sampler(_) => {
             quote::format_ident!("Sampler")
         }
-        DescriptorType::SampledImage(_) => {
+        DescriptorType::Image(image::Image {
+            kind: image::Kind::Sampled,
+        }) => {
             quote::format_ident!("SampledImage")
         }
-        DescriptorType::CombinedImageSampler(_) => {
-            quote::format_ident!("CombinedImageSampler")
+        DescriptorType::Image(image::Image {
+            kind: image::Kind::Storage,
+        }) => {
+            quote::format_ident!("StorageImage")
         }
         DescriptorType::Buffer(buffer::Buffer {
             kind: buffer::Kind::Uniform,
-            ..
+            texel: false,
         }) => {
             quote::format_ident!("UniformBuffer")
         }
         DescriptorType::Buffer(buffer::Buffer {
             kind: buffer::Kind::Storage,
-            ..
+            texel: false,
+        }) => {
+            quote::format_ident!("StorageTexelBuffer")
+        }
+        DescriptorType::Buffer(buffer::Buffer {
+            kind: buffer::Kind::Uniform,
+            texel: true,
+        }) => {
+            quote::format_ident!("UniformTexelBuffer")
+        }
+        DescriptorType::Buffer(buffer::Buffer {
+            kind: buffer::Kind::Storage,
+            texel: true,
         }) => {
             quote::format_ident!("StorageBuffer")
         }

@@ -1,6 +1,6 @@
 use {
     super::{
-        buffer,
+        buffer, image,
         layout::layout_type_name,
         parse::{DescriptorType, Input},
     },
@@ -25,7 +25,7 @@ pub(super) fn generate(input: &Input) -> TokenStream {
             let descriptor_field = quote::format_ident!("descriptor_{}", input.member);
             let ty = &input.field.ty;
             quote::quote_spanned!(
-                input.field.ty.span()=> pub #descriptor_field: ::std::option::Option<<#ty as ::sierra::TypedDescriptorBinding>::Descriptors>,
+                input.field.ty.span() => pub #descriptor_field: ::std::option::Option<<#ty as ::sierra::TypedDescriptorBinding>::Descriptors>,
             )
         })
         .collect();
@@ -64,28 +64,40 @@ pub(super) fn generate(input: &Input) -> TokenStream {
             let span = input.field.ty.span();
             let descriptors = match input.desc_ty {
                 DescriptorType::Sampler(_) => Some(quote::quote_spanned! {
-                    span=> <::sierra::SamplerDescriptor as ::sierra::TypedDescriptor>::descriptors(descriptors)
+                    span => <::sierra::SamplerDescriptor as ::sierra::TypedDescriptor>::descriptors(descriptors)
                 }),
-                DescriptorType::SampledImage(_) => Some(quote::quote_spanned! {
-                    span=> <::sierra::SampledImageDescriptor as ::sierra::TypedDescriptor>::descriptors(descriptors)
+                DescriptorType::Image(image::Image { kind: image::Kind::Sampled}) => Some(quote::quote_spanned! {
+                    span => <::sierra::SampledImageDescriptor as ::sierra::TypedDescriptor>::descriptors(descriptors)
                 }),
-                DescriptorType::CombinedImageSampler(_) => Some(quote::quote_spanned! {
-                    span=> <::sierra::CombinedImageSamplerDescriptor as ::sierra::TypedDescriptor>::descriptors(descriptors)
+                DescriptorType::Image(image::Image { kind: image::Kind::Storage }) => Some(quote::quote_spanned! {
+                    span => <::sierra::StorageImageDescriptor as ::sierra::TypedDescriptor>::descriptors(descriptors)
                 }),
                 DescriptorType::AccelerationStructure(_) => Some(quote::quote_spanned! {
-                    span=> <::sierra::AccelerationStructureDescriptor as ::sierra::TypedDescriptor>::descriptors(descriptors)
+                    span => <::sierra::AccelerationStructureDescriptor as ::sierra::TypedDescriptor>::descriptors(descriptors)
                 }),
                 DescriptorType::Buffer(buffer::Buffer {
                     kind: buffer::Kind::Uniform,
-                    ..
+                    texel: false,
                 }) => Some(quote::quote_spanned! {
                     span=> <::sierra::UniformBufferDescriptor as ::sierra::TypedDescriptor>::descriptors(descriptors)
                 }),
                 DescriptorType::Buffer(buffer::Buffer {
                     kind: buffer::Kind::Storage,
-                    ..
+                    texel: false,
                 }) => Some(quote::quote_spanned! {
                     span=> <::sierra::StorageBufferDescriptor as ::sierra::TypedDescriptor>::descriptors(descriptors)
+                }),
+                DescriptorType::Buffer(buffer::Buffer {
+                    kind: buffer::Kind::Uniform,
+                    texel: true,
+                }) => Some(quote::quote_spanned! {
+                    span=> <::sierra::UniformTexelBufferDescriptor as ::sierra::TypedDescriptor>::descriptors(descriptors)
+                }),
+                DescriptorType::Buffer(buffer::Buffer {
+                    kind: buffer::Kind::Storage,
+                    texel: true,
+                }) => Some(quote::quote_spanned! {
+                    span=> <::sierra::StorageTexelBufferDescriptor as ::sierra::TypedDescriptor>::descriptors(descriptors)
                 }),
             }?;
 

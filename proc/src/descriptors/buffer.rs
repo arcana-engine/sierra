@@ -1,9 +1,9 @@
-use crate::{find_unique, get_unique};
+use crate::find_unique;
 
 #[derive(Clone)]
 pub struct Buffer {
+    pub texel: bool,
     pub kind: Kind,
-    pub ty: Box<syn::Type>,
 }
 
 impl Buffer {
@@ -20,8 +20,9 @@ pub enum Kind {
 }
 
 enum Argument {
-    Kind(Kind),
-    Type(Box<syn::Type>),
+    Uniform,
+    Storage,
+    Texel,
 }
 
 pub(super) fn parse_buffer_attr(attr: &syn::Attribute) -> syn::Result<Option<Buffer>> {
@@ -37,15 +38,10 @@ pub(super) fn parse_buffer_attr(attr: &syn::Attribute) -> syn::Result<Option<Buf
                 let ident = stream.parse::<syn::Ident>()?;
 
                 match ident {
-                    ident if ident == "uniform" => Ok(Argument::Kind(Kind::Uniform)),
-                    ident if ident == "storage" => Ok(Argument::Kind(Kind::Storage)),
-                    ident if ident == "ty" => {
-                        let _eq = stream.parse::<syn::Token![=]>()?;
-                        let ty = stream.parse::<syn::Type>()?;
-
-                        Ok(Argument::Type(Box::new(ty)))
-                    }
-                    _ => Err(stream.error("Unrecognized argument")),
+                    ident if ident == "uniform" => Ok(Argument::Uniform),
+                    ident if ident == "storage" => Ok(Argument::Storage),
+                    ident if ident == "texel" => Ok(Argument::Texel),
+                    _ => Err(stream.error(format!("Unrecognized argument '{}'", ident))),
                 }
             })?;
 
@@ -57,9 +53,19 @@ pub(super) fn parse_buffer_attr(attr: &syn::Attribute) -> syn::Result<Option<Buf
         }
     })?;
 
+    let texel = find_unique(
+        args.iter().filter_map(|arg| match arg {
+            Argument::Texel => Some(()),
+            _ => None,
+        }),
+        attr,
+        "Expected at most one `uniform` or `storage` argument",
+    )?;
+
     let kind = find_unique(
         args.iter().filter_map(|arg| match arg {
-            Argument::Kind(kind) => Some(*kind),
+            Argument::Uniform => Some(Kind::Uniform),
+            Argument::Storage => Some(Kind::Storage),
             _ => None,
         }),
         attr,
@@ -67,14 +73,8 @@ pub(super) fn parse_buffer_attr(attr: &syn::Attribute) -> syn::Result<Option<Buf
     )?
     .unwrap_or(Kind::Uniform);
 
-    let ty = get_unique(
-        args.iter().filter_map(|arg| match arg {
-            Argument::Type(path) => Some(path.clone()),
-            _ => None,
-        }),
-        attr,
-        "Expected exactly one `type` argument",
-    )?;
-
-    Ok(Some(Buffer { kind, ty }))
+    Ok(Some(Buffer {
+        kind,
+        texel: texel.is_some(),
+    }))
 }

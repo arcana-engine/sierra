@@ -96,6 +96,13 @@ pub enum DescriptorType {
     /// Contains [`ImageView`] instance.
     SampledImage,
 
+    /// Formatted view to the buffer data.
+    UniformTexelBuffer,
+
+    /// Formatted view to the buffer data.
+    /// Unlike [`UniformTexelBuffer`] content of [`StorageTexelBuffer`] can be overwritten by shader.
+    StorageTexelBuffer,
+
     /// Image that can be used as storage.
     /// Allows accessing individual pixels.
     /// Unlike [`SampledImage`] [`StorageImage`] can be overwritten by shader.
@@ -105,7 +112,7 @@ pub enum DescriptorType {
     UniformBuffer,
 
     /// Buffer that can be used as storage.
-    /// Unlike [`UniformBuffer`] [`StorageBuffer`] can be overwritten by shader.
+    /// Unlike [`UniformBuffer`] content of [`StorageBuffer`] can be overwritten by shader.
     StorageBuffer,
 
     /// Same as [`UniformBuffer`] but allows specifying offset each time set is bound to encoder.

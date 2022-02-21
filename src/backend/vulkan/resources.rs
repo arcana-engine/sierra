@@ -259,6 +259,93 @@ impl MappableBuffer {
     }
 }
 
+/// Handle to GPU image view object.
+///
+/// A slice view into an [`Image`].
+/// [`ImageView`] can encompass whole [`Image`]
+/// or only part of [`Image`]s layers, levels and aspects.
+#[derive(Clone)]
+pub struct BufferView {
+    handle: vk1_0::BufferView,
+    inner: Arc<BufferViewInner>,
+}
+
+struct BufferViewInner {
+    info: BufferViewInfo,
+    owner: WeakDevice,
+    index: usize,
+}
+
+impl Drop for BufferViewInner {
+    fn drop(&mut self) {
+        resource_freed();
+
+        if let Some(device) = self.owner.upgrade() {
+            unsafe { device.destroy_buffer_view(self.index) }
+        }
+    }
+}
+
+impl Debug for BufferView {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if fmt.alternate() {
+            fmt.debug_struct("BufferView")
+                .field("info", &self.inner.info)
+                .field("handle", &self.handle)
+                .field("owner", &self.inner.owner)
+                .finish()
+        } else {
+            write!(fmt, "BufferView({:p})", self.handle)
+        }
+    }
+}
+
+impl PartialEq for BufferView {
+    fn eq(&self, rhs: &Self) -> bool {
+        self.handle == rhs.handle
+    }
+}
+
+impl Eq for BufferView {}
+
+impl Hash for BufferView {
+    fn hash<H>(&self, hasher: &mut H)
+    where
+        H: Hasher,
+    {
+        self.handle.hash(hasher)
+    }
+}
+
+impl BufferView {
+    pub fn info(&self) -> &BufferViewInfo {
+        &self.inner.info
+    }
+
+    pub(super) fn new(
+        info: BufferViewInfo,
+        owner: WeakDevice,
+        handle: vk1_0::BufferView,
+        index: usize,
+    ) -> Self {
+        resource_allocated();
+
+        BufferView {
+            handle,
+            inner: Arc::new(BufferViewInner { info, owner, index }),
+        }
+    }
+
+    pub(super) fn is_owned_by(&self, owner: &impl PartialEq<WeakDevice>) -> bool {
+        *owner == self.inner.owner
+    }
+
+    pub(super) fn handle(&self) -> vk1_0::BufferView {
+        debug_assert!(!self.handle.is_null());
+        self.handle
+    }
+}
+
 enum ImageFlavor {
     DeviceImage {
         memory_block: ManuallyDrop<MemoryBlock<vk1_0::DeviceMemory>>,
@@ -1739,5 +1826,7 @@ mod resource_counting {
     #[inline(always)]
     pub fn resource_freed() {}
 }
+
+use crate::BufferViewInfo;
 
 use self::resource_counting::{resource_allocated, resource_freed};

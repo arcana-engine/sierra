@@ -328,6 +328,26 @@ impl SubresourceRange {
         }
     }
 
+    pub fn subresource(subresource: Subresource) -> Self {
+        SubresourceRange {
+            aspect: subresource.aspect,
+            first_level: subresource.level,
+            level_count: 1,
+            first_layer: subresource.layer,
+            layer_count: 1,
+        }
+    }
+
+    pub fn layers(layers: SubresourceLayers) -> Self {
+        SubresourceRange {
+            aspect: layers.aspect,
+            first_level: layers.level,
+            level_count: 1,
+            first_layer: layers.first_layer,
+            layer_count: layers.layer_count,
+        }
+    }
+
     pub fn whole(info: &ImageInfo) -> Self {
         SubresourceRange {
             aspect: info.format.aspect_flags(),
@@ -379,6 +399,15 @@ impl SubresourceLayers {
         }
     }
 
+    pub fn subresource(subresource: Subresource) -> Self {
+        SubresourceLayers {
+            aspect: subresource.aspect,
+            level: subresource.level,
+            first_layer: subresource.layer,
+            layer_count: 1,
+        }
+    }
+
     pub fn all_layers(info: &ImageInfo, level: u32) -> Self {
         assert!(level < info.levels);
 
@@ -404,6 +433,12 @@ impl SubresourceLayers {
 
     pub fn depth_stencil(level: u32, layers: Range<u32>) -> Self {
         Self::new(AspectFlags::DEPTH | AspectFlags::STENCIL, level, layers)
+    }
+}
+
+impl From<SubresourceLayers> for SubresourceRange {
+    fn from(layers: SubresourceLayers) -> Self {
+        SubresourceRange::layers(layers)
     }
 }
 
@@ -453,6 +488,18 @@ impl Subresource {
 
     pub fn depth_stencil(level: u32, layer: u32) -> Self {
         Self::new(AspectFlags::DEPTH | AspectFlags::STENCIL, level, layer)
+    }
+}
+
+impl From<Subresource> for SubresourceLayers {
+    fn from(subresource: Subresource) -> Self {
+        SubresourceLayers::subresource(subresource)
+    }
+}
+
+impl From<Subresource> for SubresourceRange {
+    fn from(subresource: Subresource) -> Self {
+        SubresourceRange::subresource(subresource)
     }
 }
 

@@ -10,17 +10,8 @@ pub use {
 };
 
 use crate::{
-    accel::AccelerationStructure,
-    backend::Device,
-    buffer::BufferRange,
-    encode::Encoder,
-    // image::Image,
-    image::Layout,
-    // image::{ImageExtent, SubresourceRange},
-    sampler::Sampler,
-    view::ImageView,
-    // view::ImageViewKind,
-    OutOfMemory,
+    accel::AccelerationStructure, backend::Device, buffer::BufferRange, encode::Encoder,
+    image::Layout, sampler::Sampler, view::ImageView, BufferView, OutOfMemory,
 };
 
 /// AllocationError that may occur during descriptor sets allocation.
@@ -109,8 +100,12 @@ pub enum Descriptors<'a> {
     /// Storage image descriptors.
     StorageImage(&'a [ImageViewDescriptor]),
 
-    // UniformTexelBuffer(&'a BufferView),
-    // StorageTexelBuffer(&'a BufferView),
+    /// Uniform texel buffer descriptors.
+    UniformTexelBuffer(&'a [BufferView]),
+
+    /// Storage texel buffer descriptors.
+    StorageTexelBuffer(&'a [BufferView]),
+
     /// Uniform buffer regions.
     UniformBuffer(&'a [BufferRange]),
 
@@ -161,6 +156,14 @@ pub enum UniformBufferDynamicDescriptor {}
 #[doc(hidden)]
 #[derive(Clone, Copy, Debug)]
 pub enum StorageBufferDynamicDescriptor {}
+
+#[doc(hidden)]
+#[derive(Clone, Copy, Debug)]
+pub enum UniformTexelBufferDescriptor {}
+
+#[doc(hidden)]
+#[derive(Clone, Copy, Debug)]
+pub enum StorageTexelBufferDescriptor {}
 
 #[doc(hidden)]
 #[derive(Clone, Copy, Debug)]
@@ -247,6 +250,24 @@ impl TypedDescriptor for StorageBufferDynamicDescriptor {
 
     fn descriptors(slice: &[BufferRange]) -> Descriptors<'_> {
         Descriptors::StorageBufferDynamic(slice)
+    }
+}
+
+impl TypedDescriptor for UniformTexelBufferDescriptor {
+    const TYPE: DescriptorType = DescriptorType::UniformTexelBuffer;
+    type Descriptor = BufferView;
+
+    fn descriptors(slice: &[BufferView]) -> Descriptors<'_> {
+        Descriptors::UniformTexelBuffer(slice)
+    }
+}
+
+impl TypedDescriptor for StorageTexelBufferDescriptor {
+    const TYPE: DescriptorType = DescriptorType::StorageTexelBuffer;
+    type Descriptor = BufferView;
+
+    fn descriptors(slice: &[BufferView]) -> Descriptors<'_> {
+        Descriptors::StorageTexelBuffer(slice)
     }
 }
 

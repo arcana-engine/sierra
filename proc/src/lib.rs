@@ -153,22 +153,22 @@ where
     }
 }
 
-fn get_unique<I>(
-    iter: I,
-    spanned: &impl quote::ToTokens,
-    msg: impl std::fmt::Display,
-) -> syn::Result<I::Item>
-where
-    I: IntoIterator,
-{
-    let mut iter = iter.into_iter();
-    if let Some(item) = iter.next() {
-        if iter.next().is_none() {
-            return Ok(item);
-        }
-    }
-    Err(syn::Error::new_spanned(spanned, msg))
-}
+// fn get_unique<I>(
+//     iter: I,
+//     spanned: &impl quote::ToTokens,
+//     msg: impl std::fmt::Display,
+// ) -> syn::Result<I::Item>
+// where
+//     I: IntoIterator,
+// {
+//     let mut iter = iter.into_iter();
+//     if let Some(item) = iter.next() {
+//         if iter.next().is_none() {
+//             return Ok(item);
+//         }
+//     }
+//     Err(syn::Error::new_spanned(spanned, msg))
+// }
 
 fn validate_member(member: &syn::Member, item_struct: &syn::ItemStruct) -> syn::Result<u32> {
     match (member, &item_struct.fields) {

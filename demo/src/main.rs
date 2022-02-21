@@ -1,10 +1,13 @@
 #[sierra::descriptors]
 pub struct Descriptors {
-    #[sampled_image]
+    #[image(sampled)]
     pub foo: sierra::ImageView,
 
     #[sampler]
     pub bar: sierra::Sampler,
+
+    #[buffer(uniform, texel)]
+    pub views: sierra::BufferView,
 }
 
 #[sierra::pipeline]

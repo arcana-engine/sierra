@@ -1,10 +1,11 @@
-pub use crate::backend::{Buffer, MappableBuffer};
+pub use crate::backend::{Buffer, BufferView, MappableBuffer};
 use crate::{
     access::AccessFlags,
     align_up,
     encode::Encoder,
     queue::{Ownership, QueueId},
     stage::PipelineStageFlags,
+    Format,
 };
 
 bitflags::bitflags! {
@@ -81,6 +82,22 @@ impl BufferInfo {
 
         is_mask && (align_up(self.align, self.size).is_some())
     }
+}
+
+/// Information required to create a buffer.
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+pub struct BufferViewInfo {
+    /// A buffer view is bound to.
+    pub buffer: Buffer,
+
+    /// Size of content buffer can hold.
+    pub format: Format,
+
+    /// Offset in bytes from the base address of the buffer.
+    pub offset: u64,
+
+    /// Size in bytes of the buffer view.
+    pub size: u64,
 }
 
 /// Buffer range.
