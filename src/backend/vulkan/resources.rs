@@ -1,35 +1,39 @@
-use {
-    super::device::{Device, WeakDevice},
-    crate::{
-        accel::AccelerationStructureInfo,
-        buffer::BufferInfo,
-        descriptor::{DescriptorSetInfo, DescriptorSetLayoutInfo},
-        framebuffer::FramebufferInfo,
-        image::ImageInfo,
-        memory::MemoryUsage,
-        pipeline::{
-            ComputePipelineInfo, GraphicsPipelineInfo, PipelineLayoutInfo, RayTracingPipelineInfo,
-        },
-        queue::QueueId,
-        render_pass::RenderPassInfo,
-        sampler::SamplerInfo,
-        shader::ShaderModuleInfo,
-        view::ImageViewInfo,
-        DeviceAddress,
-    },
-    erupt::{extensions::khr_acceleration_structure as vkacc, vk1_0},
-    gpu_alloc::MemoryBlock,
-    gpu_descriptor::DescriptorTotalCount,
-    std::{
-        cell::UnsafeCell,
-        fmt::{self, Debug},
-        hash::{Hash, Hasher},
-        mem::ManuallyDrop,
-        num::NonZeroU64,
-        ops::Deref,
-        sync::Arc,
-    },
+use std::{
+    cell::UnsafeCell,
+    fmt::{self, Debug},
+    hash::{Hash, Hasher},
+    mem::ManuallyDrop,
+    num::NonZeroU64,
+    ops::Deref,
+    sync::Arc,
 };
+
+use erupt::{extensions::khr_acceleration_structure as vkacc, vk1_0};
+use gpu_alloc::MemoryBlock;
+use gpu_descriptor::DescriptorTotalCount;
+
+use super::device::{Device, WeakDevice};
+
+use crate::{
+    accel::AccelerationStructureInfo,
+    buffer::BufferInfo,
+    descriptor::{DescriptorSetInfo, DescriptorSetLayoutInfo},
+    framebuffer::FramebufferInfo,
+    image::ImageInfo,
+    memory::MemoryUsage,
+    pipeline::{
+        ComputePipelineInfo, GraphicsPipelineInfo, PipelineLayoutInfo, RayTracingPipelineInfo,
+    },
+    queue::QueueId,
+    render_pass::RenderPassInfo,
+    sampler::SamplerInfo,
+    shader::ShaderModuleInfo,
+    view::ImageViewInfo,
+    BufferRange, BufferViewInfo, CombinedImageSampler, DescriptorType, Descriptors, DeviceAddress,
+    ImageViewDescriptor,
+};
+
+use self::resource_counting::{resource_allocated, resource_freed};
 
 struct BufferInner {
     owner: WeakDevice,
@@ -1271,16 +1275,51 @@ impl DescriptorSetLayout {
     }
 }
 
-/// Set of descriptors with specific layout.
-#[derive(Clone)]
-pub struct DescriptorSet {
-    inner: Arc<DescriptorSetInner>,
-}
-
 struct DescriptorSetInner {
     info: DescriptorSetInfo,
     set: ManuallyDrop<gpu_descriptor::DescriptorSet<vk1_0::DescriptorSet>>,
     owner: WeakDevice,
+
+    /// Currently bound descriptors.
+    bindings: Vec<ReferencedDescriptors>,
+}
+
+pub(super) enum ReferencedDescriptors {
+    /// Samplers.
+    Sampler(Box<[Option<Sampler>]>),
+
+    /// Combined image and sampler descriptors.
+    CombinedImageSampler(Box<[Option<CombinedImageSampler>]>),
+
+    /// Sampled image descriptors.
+    SampledImage(Box<[Option<ImageViewDescriptor>]>),
+
+    /// Storage image descriptors.
+    StorageImage(Box<[Option<ImageViewDescriptor>]>),
+
+    /// Uniform texel buffer descriptors.
+    UniformTexelBuffer(Box<[Option<BufferView>]>),
+
+    /// Storage texel buffer descriptors.
+    StorageTexelBuffer(Box<[Option<BufferView>]>),
+
+    /// Uniform buffer regions.
+    UniformBuffer(Box<[Option<BufferRange>]>),
+
+    /// Storage buffer regions.
+    StorageBuffer(Box<[Option<BufferRange>]>),
+
+    /// Dynamic uniform buffer regions.
+    UniformBufferDynamic(Box<[Option<BufferRange>]>),
+
+    /// Dynamic storage buffer regions.
+    StorageBufferDynamic(Box<[Option<BufferRange>]>),
+
+    /// Input attachments.
+    InputAttachment(Box<[Option<ImageViewDescriptor>]>),
+
+    /// Acceleration structures.
+    AccelerationStructure(Box<[Option<AccelerationStructure>]>),
 }
 
 impl Drop for DescriptorSetInner {
@@ -1289,28 +1328,303 @@ impl Drop for DescriptorSetInner {
 
         if let Some(device) = self.owner.upgrade() {
             unsafe { device.destroy_descriptor_set(ManuallyDrop::take(&mut self.set)) }
-        } else if !std::thread::panicking() {
-            panic!("Device already dropped")
+        }
+
+        self.bindings.clear();
+    }
+}
+
+/// Set of descriptors with specific layout.
+///
+/// This value guarantees unique access to the descriptor set.
+/// No other references to the set exists, including referneces in pending command buffers.
+/// Mutation of the set is safe.
+#[repr(transparent)]
+pub struct WritableDescriptorSet {
+    descriptor_set: DescriptorSet,
+}
+
+unsafe impl Send for WritableDescriptorSet {}
+unsafe impl Sync for WritableDescriptorSet {}
+
+impl Debug for WritableDescriptorSet {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if fmt.alternate() {
+            fmt.debug_struct("WritableDescriptorSet")
+                .field("handle", &self.descriptor_set.handle)
+                .field("owner", &self.inner().owner)
+                .finish()
+        } else {
+            write!(fmt, "DescriptorSet({:p})", self.inner().set.raw())
         }
     }
 }
+
+impl PartialEq for WritableDescriptorSet {
+    fn eq(&self, rhs: &Self) -> bool {
+        self.descriptor_set.handle == rhs.descriptor_set.handle
+    }
+}
+
+impl Eq for WritableDescriptorSet {}
+
+impl Hash for WritableDescriptorSet {
+    fn hash<H>(&self, hasher: &mut H)
+    where
+        H: Hasher,
+    {
+        Hash::hash(&self.descriptor_set.handle, hasher)
+    }
+}
+
+impl WritableDescriptorSet {
+    pub fn info(&self) -> &DescriptorSetInfo {
+        &self.inner().info
+    }
+
+    pub fn share(self) -> DescriptorSet {
+        self.descriptor_set
+    }
+
+    pub(super) fn new(
+        info: DescriptorSetInfo,
+        owner: WeakDevice,
+        set: gpu_descriptor::DescriptorSet<vk1_0::DescriptorSet>,
+    ) -> Self {
+        resource_allocated();
+
+        let bindings = &info.layout.info().bindings;
+
+        WritableDescriptorSet {
+            descriptor_set: DescriptorSet {
+                handle: *set.raw(),
+                inner: Arc::new(UnsafeCell::new(DescriptorSetInner {
+                    bindings: bindings
+                        .iter()
+                        .map(|binding| match binding.ty {
+                            DescriptorType::Sampler => ReferencedDescriptors::Sampler(
+                                vec![None; binding.count as usize].into_boxed_slice(),
+                            ),
+                            DescriptorType::CombinedImageSampler => {
+                                ReferencedDescriptors::CombinedImageSampler(
+                                    vec![None; binding.count as usize].into_boxed_slice(),
+                                )
+                            }
+                            DescriptorType::SampledImage => ReferencedDescriptors::SampledImage(
+                                vec![None; binding.count as usize].into_boxed_slice(),
+                            ),
+                            DescriptorType::UniformTexelBuffer => {
+                                ReferencedDescriptors::UniformTexelBuffer(
+                                    vec![None; binding.count as usize].into_boxed_slice(),
+                                )
+                            }
+                            DescriptorType::StorageTexelBuffer => {
+                                ReferencedDescriptors::StorageTexelBuffer(
+                                    vec![None; binding.count as usize].into_boxed_slice(),
+                                )
+                            }
+                            DescriptorType::StorageImage => ReferencedDescriptors::StorageImage(
+                                vec![None; binding.count as usize].into_boxed_slice(),
+                            ),
+                            DescriptorType::UniformBuffer => ReferencedDescriptors::UniformBuffer(
+                                vec![None; binding.count as usize].into_boxed_slice(),
+                            ),
+                            DescriptorType::StorageBuffer => ReferencedDescriptors::StorageBuffer(
+                                vec![None; binding.count as usize].into_boxed_slice(),
+                            ),
+                            DescriptorType::UniformBufferDynamic => {
+                                ReferencedDescriptors::UniformBufferDynamic(
+                                    vec![None; binding.count as usize].into_boxed_slice(),
+                                )
+                            }
+                            DescriptorType::StorageBufferDynamic => {
+                                ReferencedDescriptors::StorageBufferDynamic(
+                                    vec![None; binding.count as usize].into_boxed_slice(),
+                                )
+                            }
+                            DescriptorType::InputAttachment => {
+                                ReferencedDescriptors::InputAttachment(
+                                    vec![None; binding.count as usize].into_boxed_slice(),
+                                )
+                            }
+                            DescriptorType::AccelerationStructure => {
+                                ReferencedDescriptors::AccelerationStructure(
+                                    vec![None; binding.count as usize].into_boxed_slice(),
+                                )
+                            }
+                        })
+                        .collect(),
+                    info,
+                    owner,
+                    set: ManuallyDrop::new(set),
+                })),
+            },
+        }
+    }
+
+    fn inner(&self) -> &DescriptorSetInner {
+        unsafe { &*self.descriptor_set.inner.get() }
+    }
+
+    fn inner_mut(&mut self) -> &mut DescriptorSetInner {
+        unsafe { &mut *self.descriptor_set.inner.get() }
+    }
+
+    pub(super) fn is_owned_by(&self, owner: &impl PartialEq<WeakDevice>) -> bool {
+        *owner == self.inner().owner
+    }
+
+    pub(super) fn handle(&self) -> vk1_0::DescriptorSet {
+        debug_assert!(!self.inner().set.raw().is_null());
+        self.descriptor_set.handle
+    }
+
+    pub(super) fn write_descriptors(
+        &mut self,
+        binding: u32,
+        element: u32,
+        descriptors: Descriptors<'_>,
+    ) {
+        let inner = self.inner_mut();
+
+        match descriptors {
+            Descriptors::Sampler(slice) => match &mut inner.bindings[binding as usize] {
+                ReferencedDescriptors::Sampler(array) => {
+                    for (r, d) in array[element as usize..].iter_mut().zip(slice) {
+                        *r = Some(d.clone());
+                    }
+                }
+                _ => unreachable!(),
+            },
+            Descriptors::CombinedImageSampler(slice) => match &mut inner.bindings[binding as usize]
+            {
+                ReferencedDescriptors::CombinedImageSampler(array) => {
+                    for (r, d) in array[element as usize..].iter_mut().zip(slice) {
+                        *r = Some(d.clone());
+                    }
+                }
+                _ => unreachable!(),
+            },
+            Descriptors::SampledImage(slice) => match &mut inner.bindings[binding as usize] {
+                ReferencedDescriptors::SampledImage(array) => {
+                    for (r, d) in array[element as usize..].iter_mut().zip(slice) {
+                        *r = Some(d.clone());
+                    }
+                }
+                _ => unreachable!(),
+            },
+            Descriptors::StorageImage(slice) => match &mut inner.bindings[binding as usize] {
+                ReferencedDescriptors::StorageImage(array) => {
+                    for (r, d) in array[element as usize..].iter_mut().zip(slice) {
+                        *r = Some(d.clone());
+                    }
+                }
+                _ => unreachable!(),
+            },
+            Descriptors::UniformBuffer(slice) => match &mut inner.bindings[binding as usize] {
+                ReferencedDescriptors::UniformBuffer(array) => {
+                    for (r, d) in array[element as usize..].iter_mut().zip(slice) {
+                        *r = Some(d.clone());
+                    }
+                }
+                _ => unreachable!(),
+            },
+            Descriptors::StorageBuffer(slice) => match &mut inner.bindings[binding as usize] {
+                ReferencedDescriptors::StorageBuffer(array) => {
+                    for (r, d) in array[element as usize..].iter_mut().zip(slice) {
+                        *r = Some(d.clone());
+                    }
+                }
+                _ => unreachable!(),
+            },
+            Descriptors::UniformBufferDynamic(slice) => match &mut inner.bindings[binding as usize]
+            {
+                ReferencedDescriptors::UniformBufferDynamic(array) => {
+                    for (r, d) in array[element as usize..].iter_mut().zip(slice) {
+                        *r = Some(d.clone());
+                    }
+                }
+                _ => unreachable!(),
+            },
+            Descriptors::StorageBufferDynamic(slice) => match &mut inner.bindings[binding as usize]
+            {
+                ReferencedDescriptors::StorageBufferDynamic(array) => {
+                    for (r, d) in array[element as usize..].iter_mut().zip(slice) {
+                        *r = Some(d.clone());
+                    }
+                }
+                _ => unreachable!(),
+            },
+            Descriptors::UniformTexelBuffer(slice) => match &mut inner.bindings[binding as usize] {
+                ReferencedDescriptors::UniformTexelBuffer(array) => {
+                    for (r, d) in array[element as usize..].iter_mut().zip(slice) {
+                        *r = Some(d.clone());
+                    }
+                }
+                _ => unreachable!(),
+            },
+            Descriptors::StorageTexelBuffer(slice) => match &mut inner.bindings[binding as usize] {
+                ReferencedDescriptors::StorageTexelBuffer(array) => {
+                    for (r, d) in array[element as usize..].iter_mut().zip(slice) {
+                        *r = Some(d.clone());
+                    }
+                }
+                _ => unreachable!(),
+            },
+            Descriptors::InputAttachment(slice) => match &mut inner.bindings[binding as usize] {
+                ReferencedDescriptors::InputAttachment(array) => {
+                    for (r, d) in array[element as usize..].iter_mut().zip(slice) {
+                        *r = Some(d.clone());
+                    }
+                }
+                _ => unreachable!(),
+            },
+            Descriptors::AccelerationStructure(slice) => {
+                match &mut inner.bindings[binding as usize] {
+                    ReferencedDescriptors::AccelerationStructure(array) => {
+                        for (r, d) in array[element as usize..].iter_mut().zip(slice) {
+                            *r = Some(d.clone());
+                        }
+                    }
+                    _ => unreachable!(),
+                }
+            }
+        }
+    }
+}
+
+/// Set of descriptors with specific layout.
+///
+/// This value does not guarantees unique access to the descriptor set.
+/// Other references to the set may exist.
+/// Mutation of the set is not safe.
+///
+/// Unsafe mutation can be performed for bindings with `UPDATE_AFTER_BIND` and `UPDATE_UNUSED_WHILE_PENDING` flags.
+#[derive(Clone)]
+pub struct DescriptorSet {
+    handle: vk1_0::DescriptorSet,
+    inner: Arc<UnsafeCell<DescriptorSetInner>>,
+}
+
+unsafe impl Send for DescriptorSet {}
+unsafe impl Sync for DescriptorSet {}
 
 impl Debug for DescriptorSet {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         if fmt.alternate() {
             fmt.debug_struct("DescriptorSet")
-                .field("handle", &self.inner.set)
-                .field("owner", &self.inner.owner)
+                .field("handle", &self.handle)
+                .field("owner", &self.inner().owner)
                 .finish()
         } else {
-            write!(fmt, "DescriptorSet({:p})", self.inner.set.raw())
+            write!(fmt, "DescriptorSet({:p})", self.inner().set.raw())
         }
     }
 }
 
 impl PartialEq for DescriptorSet {
     fn eq(&self, rhs: &Self) -> bool {
-        self.inner.set.raw() == rhs.inner.set.raw()
+        self.handle == rhs.handle
     }
 }
 
@@ -1321,38 +1635,72 @@ impl Hash for DescriptorSet {
     where
         H: Hasher,
     {
-        self.inner.set.raw().hash(hasher)
+        Hash::hash(&self.handle, hasher)
     }
 }
 
 impl DescriptorSet {
     pub fn info(&self) -> &DescriptorSetInfo {
-        &self.inner.info
+        &self.inner().info
     }
 
-    pub(super) fn new(
-        info: DescriptorSetInfo,
-        owner: WeakDevice,
-        set: gpu_descriptor::DescriptorSet<vk1_0::DescriptorSet>,
-    ) -> Self {
-        resource_allocated();
-
-        DescriptorSet {
-            inner: Arc::new(DescriptorSetInner {
-                info,
-                owner,
-                set: ManuallyDrop::new(set),
-            }),
+    pub fn try_into_writable(self) -> Result<WritableDescriptorSet, Self> {
+        if self.is_writtable() {
+            Ok(unsafe { self.into_writable() })
+        } else {
+            Err(self)
         }
     }
 
+    /// # Safety
+    ///
+    /// Caller must ensure that writes would not create races.
+    pub unsafe fn into_writable(self) -> WritableDescriptorSet {
+        WritableDescriptorSet {
+            descriptor_set: self,
+        }
+    }
+
+    pub fn try_as_writtable(&mut self) -> Option<&mut WritableDescriptorSet> {
+        if self.is_writtable() {
+            Some(unsafe { self.as_writtable() })
+        } else {
+            None
+        }
+    }
+
+    /// # Safety
+    ///
+    /// Caller must ensure that writes would not create races.
+    pub unsafe fn as_writtable(&mut self) -> &mut WritableDescriptorSet {
+        // Single strong reference guarantees uniqueness.
+        // `[repr(transparent)]` allows this cast.
+        &mut *(self as *mut Self as *mut WritableDescriptorSet)
+    }
+
+    /// Check if descriptor set is writtable.
+    /// Caller should have exclusive access to the reference,
+    /// otherwise descriptor set can become unwrittable at any moment.
+    pub fn is_writtable(&self) -> bool {
+        debug_assert_eq!(
+            Arc::weak_count(&self.inner),
+            0,
+            "Weak pointers must not be created"
+        );
+        Arc::strong_count(&self.inner) == 1
+    }
+
+    fn inner(&self) -> &DescriptorSetInner {
+        unsafe { &*self.inner.get() }
+    }
+
     pub(super) fn is_owned_by(&self, owner: &impl PartialEq<WeakDevice>) -> bool {
-        *owner == self.inner.owner
+        *owner == self.inner().owner
     }
 
     pub(super) fn handle(&self) -> vk1_0::DescriptorSet {
-        debug_assert!(!self.inner.set.raw().is_null());
-        *self.inner.set.raw()
+        debug_assert!(!self.inner().set.raw().is_null());
+        self.handle
     }
 }
 
@@ -1826,7 +2174,3 @@ mod resource_counting {
     #[inline(always)]
     pub fn resource_freed() {}
 }
-
-use crate::BufferViewInfo;
-
-use self::resource_counting::{resource_allocated, resource_freed};

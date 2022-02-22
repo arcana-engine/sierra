@@ -75,13 +75,9 @@ pub use self::{
 
 pub use sierra_proc::{descriptors, graphics_pipeline_desc, pass, pipeline, shader_repr};
 
-/// Re-exporting scoped_arena for code-gen.
+/// Re-exporting for code-gen.
 #[doc(hidden)]
-pub use scoped_arena;
-
-/// Re-exporting OrderedFloat for code-gen.
-#[doc(hidden)]
-pub use ordered_float::OrderedFloat;
+pub use {arrayvec, scoped_arena, smallvec};
 
 /// Image size is defined to `u32` which is standard for graphics API of today.
 pub type ImageSize = u32;

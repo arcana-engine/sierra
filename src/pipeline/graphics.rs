@@ -1,3 +1,5 @@
+use std::hash::{Hash, Hasher};
+
 use {
     super::PipelineLayout,
     crate::{
@@ -44,11 +46,30 @@ impl<T> From<T> for State<T> {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug)]
 #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct Bounds {
-    pub offset: OrderedFloat<f32>,
-    pub size: OrderedFloat<f32>,
+    pub offset: f32,
+    pub size: f32,
+}
+
+impl PartialEq for Bounds {
+    fn eq(&self, other: &Self) -> bool {
+        OrderedFloat(self.offset) == OrderedFloat(other.offset)
+            && OrderedFloat(self.size) == OrderedFloat(other.size)
+    }
+}
+
+impl Eq for Bounds {}
+
+impl Hash for Bounds {
+    fn hash<H>(&self, hasher: &mut H)
+    where
+        H: Hasher,
+    {
+        Hash::hash(&OrderedFloat(self.offset), hasher);
+        Hash::hash(&OrderedFloat(self.size), hasher);
+    }
 }
 
 /// Graphics pipeline state definition.
@@ -213,16 +234,16 @@ impl From<Extent2d> for Viewport {
     fn from(extent: Extent2d) -> Self {
         Viewport {
             x: Bounds {
-                offset: OrderedFloat(0.0),
-                size: OrderedFloat(extent.width as f32),
+                offset: 0.0,
+                size: extent.width as f32,
             },
             y: Bounds {
-                offset: OrderedFloat(0.0),
-                size: OrderedFloat(extent.height as f32),
+                offset: 0.0,
+                size: extent.height as f32,
             },
             z: Bounds {
-                offset: OrderedFloat(0.0),
-                size: OrderedFloat(1.0),
+                offset: 0.0,
+                size: 1.0,
             },
         }
     }
@@ -232,16 +253,16 @@ impl From<Extent3d> for Viewport {
     fn from(extent: Extent3d) -> Self {
         Viewport {
             x: Bounds {
-                offset: OrderedFloat(0.0),
-                size: OrderedFloat(extent.width as f32),
+                offset: 0.0,
+                size: extent.width as f32,
             },
             y: Bounds {
-                offset: OrderedFloat(0.0),
-                size: OrderedFloat(extent.height as f32),
+                offset: 0.0,
+                size: extent.height as f32,
             },
             z: Bounds {
-                offset: OrderedFloat(0.0),
-                size: OrderedFloat(extent.depth as f32),
+                offset: 0.0,
+                size: extent.depth as f32,
             },
         }
     }
@@ -365,12 +386,7 @@ impl Rasterizer {
                 }),
                 write_mask: ComponentMask::RGBA,
                 constants: Static {
-                    value: [
-                        OrderedFloat(0.0),
-                        OrderedFloat(0.0),
-                        OrderedFloat(0.0),
-                        OrderedFloat(0.0),
-                    ],
+                    value: [0.0, 0.0, 0.0, 0.0],
                 },
             },
         }
@@ -524,7 +540,7 @@ pub enum StencilOp {
 
 /// Defines how color stored in attachment should be blended with color output
 /// of fragment shader.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug)]
 #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub enum ColorBlend {
     /// Values should be treated as unsigned integers and logic operation
@@ -545,7 +561,7 @@ pub enum ColorBlend {
         write_mask: ComponentMask,
 
         /// Constants for certain blending factors.
-        constants: State<[OrderedFloat<f32>; 4]>,
+        constants: State<[f32; 4]>,
     },
 
     /// Color and alpha of all attachments should be blended in specified way.
@@ -559,8 +575,104 @@ pub enum ColorBlend {
         blending: Vec<(Option<Blending>, ComponentMask)>,
 
         /// Constants for certain blending factors.
-        constants: State<[OrderedFloat<f32>; 4]>,
+        constants: State<[f32; 4]>,
     },
+}
+
+impl PartialEq for ColorBlend {
+    fn eq(&self, other: &Self) -> bool {
+        use ColorBlend::*;
+
+        match (self, other) {
+            (Logic { op: l_op }, Logic { op: r_op }) => *l_op == *r_op,
+            (
+                Blending {
+                    blending: l_blending,
+                    write_mask: l_write_mask,
+                    constants: l_constants,
+                },
+                Blending {
+                    blending: r_blending,
+                    write_mask: r_write_mask,
+                    constants: r_constants,
+                },
+            ) => {
+                *l_blending == *r_blending
+                    && *l_write_mask == *r_write_mask
+                    && match (l_constants, r_constants) {
+                        (State::Dynamic, State::Dynamic) => true,
+                        (State::Static { value: l_value }, State::Static { value: r_value }) => {
+                            (*l_value).map(OrderedFloat) == (*r_value).map(OrderedFloat)
+                        }
+                        _ => false,
+                    }
+            }
+            (
+                IndependentBlending {
+                    blending: l_blending,
+                    constants: l_constants,
+                },
+                IndependentBlending {
+                    blending: r_blending,
+                    constants: r_constants,
+                },
+            ) => {
+                *l_blending == *r_blending
+                    && match (l_constants, r_constants) {
+                        (State::Dynamic, State::Dynamic) => true,
+                        (State::Static { value: l_value }, State::Static { value: r_value }) => {
+                            (*l_value).map(OrderedFloat) == (*r_value).map(OrderedFloat)
+                        }
+                        _ => false,
+                    }
+            }
+            _ => false,
+        }
+    }
+}
+
+impl Eq for ColorBlend {}
+
+impl Hash for ColorBlend {
+    fn hash<H>(&self, hasher: &mut H)
+    where
+        H: Hasher,
+    {
+        match self {
+            ColorBlend::Logic { op } => {
+                Hash::hash(op, hasher);
+            }
+            ColorBlend::Blending {
+                blending,
+                write_mask,
+                constants,
+            } => {
+                hasher.write_u8(1);
+                if let Some(blending) = blending {
+                    Hash::hash(blending, hasher);
+                }
+                Hash::hash(write_mask, hasher);
+                if let State::Static { value } = constants {
+                    Hash::hash(&(*value).map(OrderedFloat), hasher);
+                }
+            }
+            ColorBlend::IndependentBlending {
+                blending,
+                constants,
+            } => {
+                hasher.write_u8(2);
+                for (blending, mask) in blending {
+                    if let Some(blending) = blending {
+                        Hash::hash(blending, hasher);
+                    }
+                    Hash::hash(mask, hasher);
+                }
+                if let State::Static { value } = constants {
+                    Hash::hash(&(*value).map(OrderedFloat), hasher);
+                }
+            }
+        }
+    }
 }
 
 impl Default for ColorBlend {

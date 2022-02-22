@@ -1,92 +1,86 @@
+use std::{
+    collections::hash_map::{Entry, HashMap},
+    convert::{TryFrom as _, TryInto as _},
+    ffi::CString,
+    fmt::{self, Debug},
+    mem::{size_of_val, MaybeUninit},
+    ops::Range,
+    str::from_utf8,
+    sync::{Arc, Weak},
+};
+
+use bytemuck::Pod;
 use codespan_reporting::{
     diagnostic::{Diagnostic, Label},
     files::SimpleFile,
     term::termcolor::{ColorChoice, StandardStream},
 };
+use erupt::{
+    extensions::{
+        khr_acceleration_structure as vkacc, khr_deferred_host_operations as vkdho,
+        khr_ray_tracing_pipeline as vkrt, khr_swapchain as vksw,
+    },
+    vk1_0, vk1_2, DeviceLoader, ExtendableFrom as _,
+};
+use gpu_alloc::{GpuAllocator, MemoryBlock};
+use gpu_alloc_erupt::EruptMemoryDevice;
+use gpu_descriptor::{DescriptorAllocator, DescriptorSetLayoutCreateFlags, DescriptorTotalCount};
+use gpu_descriptor_erupt::EruptDescriptorDevice;
 use naga::WithSpan;
-use ordered_float::OrderedFloat;
 
-use crate::BufferViewInfo;
+use parking_lot::Mutex;
+use slab::Slab;
+use smallvec::SmallVec;
 
-use {
-    super::{
-        access::supported_access,
-        convert::{
-            buffer_memory_usage_to_gpu_alloc, from_erupt, oom_error_from_erupt, ToErupt as _,
-        },
-        device_lost,
-        epochs::Epochs,
-        graphics::Graphics,
-        physical::{Features, Properties},
-        unexpected_result,
+use crate::{
+    accel::{
+        AccelerationStructure, AccelerationStructureBuildFlags,
+        AccelerationStructureBuildSizesInfo, AccelerationStructureGeometryInfo,
+        AccelerationStructureInfo, AccelerationStructureLevel,
     },
-    crate::{
-        accel::{
-            AccelerationStructure, AccelerationStructureBuildFlags,
-            AccelerationStructureBuildSizesInfo, AccelerationStructureGeometryInfo,
-            AccelerationStructureInfo, AccelerationStructureLevel,
-        },
-        align_up, arith_eq, arith_le, arith_ne, assert_object,
-        buffer::{
-            Buffer, BufferInfo, BufferRange, BufferUsage, BufferView, MappableBuffer,
-            StridedBufferRange,
-        },
-        descriptor::{
-            CopyDescriptorSet, DescriptorBindingFlags, DescriptorSet, DescriptorSetInfo,
-            DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutFlags,
-            DescriptorSetLayoutInfo, DescriptorType, Descriptors, DescriptorsAllocationError,
-            WriteDescriptorSet,
-        },
-        fence::Fence,
-        framebuffer::{Framebuffer, FramebufferInfo},
-        host_memory_space_overlow,
-        image::{Image, ImageInfo},
-        memory::MemoryUsage,
-        out_of_host_memory,
-        pipeline::{
-            ColorBlend, ComputePipeline, ComputePipelineInfo, GraphicsPipeline,
-            GraphicsPipelineInfo, PipelineLayout, PipelineLayoutInfo, RayTracingPipeline,
-            RayTracingPipelineInfo, RayTracingShaderGroupInfo, ShaderBindingTable,
-            ShaderBindingTableInfo, State,
-        },
-        queue::QueueId,
-        render_pass::{CreateRenderPassError, RenderPass, RenderPassInfo},
-        sampler::{Sampler, SamplerInfo},
-        semaphore::Semaphore,
-        shader::{
-            CreateShaderModuleError, InvalidShader, ShaderLanguage, ShaderModule, ShaderModuleInfo,
-            ShaderStage,
-        },
-        surface::{Surface, SurfaceError},
-        swapchain::Swapchain,
-        view::{ImageView, ImageViewInfo, ImageViewKind},
-        CreateImageError, DeviceAddress, IndexType, MapError, OutOfMemory,
+    align_up, arith_eq, arith_le, arith_ne, assert_object,
+    buffer::{
+        Buffer, BufferInfo, BufferRange, BufferUsage, BufferView, BufferViewInfo, MappableBuffer,
+        StridedBufferRange,
     },
-    bytemuck::Pod,
-    erupt::{
-        extensions::{
-            khr_acceleration_structure as vkacc, khr_deferred_host_operations as vkdho,
-            khr_ray_tracing_pipeline as vkrt, khr_swapchain as vksw,
-        },
-        vk1_0, vk1_2, DeviceLoader, ExtendableFrom as _,
+    descriptor::{
+        DescriptorBindingFlags, DescriptorSetInfo, DescriptorSetLayout, DescriptorSetLayoutBinding,
+        DescriptorSetLayoutFlags, DescriptorSetLayoutInfo, DescriptorType, Descriptors,
+        DescriptorsAllocationError, UpdateDescriptorSet, WritableDescriptorSet,
     },
-    gpu_alloc::{GpuAllocator, MemoryBlock},
-    gpu_alloc_erupt::EruptMemoryDevice,
-    gpu_descriptor::{DescriptorAllocator, DescriptorSetLayoutCreateFlags, DescriptorTotalCount},
-    gpu_descriptor_erupt::EruptDescriptorDevice,
-    parking_lot::Mutex,
-    slab::Slab,
-    smallvec::SmallVec,
-    std::{
-        collections::hash_map::{Entry, HashMap},
-        convert::{TryFrom as _, TryInto as _},
-        ffi::CString,
-        fmt::{self, Debug},
-        mem::{size_of_val, MaybeUninit},
-        ops::Range,
-        str::from_utf8,
-        sync::{Arc, Weak},
+    fence::Fence,
+    framebuffer::{Framebuffer, FramebufferInfo},
+    host_memory_space_overlow,
+    image::{Image, ImageInfo},
+    memory::MemoryUsage,
+    out_of_host_memory,
+    pipeline::{
+        ColorBlend, ComputePipeline, ComputePipelineInfo, GraphicsPipeline, GraphicsPipelineInfo,
+        PipelineLayout, PipelineLayoutInfo, RayTracingPipeline, RayTracingPipelineInfo,
+        RayTracingShaderGroupInfo, ShaderBindingTable, ShaderBindingTableInfo, State,
     },
+    queue::QueueId,
+    render_pass::{CreateRenderPassError, RenderPass, RenderPassInfo},
+    sampler::{Sampler, SamplerInfo},
+    semaphore::Semaphore,
+    shader::{
+        CreateShaderModuleError, InvalidShader, ShaderLanguage, ShaderModule, ShaderModuleInfo,
+        ShaderStage,
+    },
+    surface::{Surface, SurfaceError},
+    swapchain::Swapchain,
+    view::{ImageView, ImageViewInfo, ImageViewKind},
+    CreateImageError, DeviceAddress, IndexType, MapError, OutOfMemory,
+};
+
+use super::{
+    access::supported_access,
+    convert::{buffer_memory_usage_to_gpu_alloc, from_erupt, oom_error_from_erupt, ToErupt as _},
+    device_lost,
+    epochs::Epochs,
+    graphics::Graphics,
+    physical::{Features, Properties},
+    unexpected_result,
 };
 
 impl From<gpu_alloc::MapError> for MapError {
@@ -744,8 +738,8 @@ impl Device {
                 match depth_bounds {
                     State::Static { value } => {
                         builder = builder
-                            .min_depth_bounds(value.offset.into())
-                            .max_depth_bounds(value.offset.into_inner() + value.size.into_inner())
+                            .min_depth_bounds(value.offset)
+                            .max_depth_bounds(value.offset + value.size)
                     }
                     State::Dynamic => dynamic_states.push(vk1_0::DynamicState::DEPTH_BOUNDS),
                 }
@@ -2155,6 +2149,8 @@ impl Device {
         &self,
         info: DescriptorSetLayoutInfo,
     ) -> Result<DescriptorSetLayout, OutOfMemory> {
+        tracing::error!("Creating new descriptor set");
+
         let handle = if vk1_0::make_api_version(0, 1, 2, 0) > self.inner.version {
             assert!(
                 info.bindings.iter().all(|binding| binding.flags.is_empty()),
@@ -2260,7 +2256,7 @@ impl Device {
     pub fn create_descriptor_set(
         &self,
         info: DescriptorSetInfo,
-    ) -> Result<DescriptorSet, DescriptorsAllocationError> {
+    ) -> Result<WritableDescriptorSet, DescriptorsAllocationError> {
         assert_owner!(info.layout, self);
 
         assert!(
@@ -2303,7 +2299,7 @@ impl Device {
         let set = sets.remove(0);
 
         tracing::debug!("DescriptorSet created {:?}", set);
-        Ok(DescriptorSet::new(info, self.downgrade(), set))
+        Ok(WritableDescriptorSet::new(info, self.downgrade(), set))
     }
 
     pub(super) unsafe fn destroy_descriptor_set(
@@ -2317,81 +2313,82 @@ impl Device {
     }
 
     #[tracing::instrument]
-    pub fn update_descriptor_sets<'a>(
-        &self,
-        writes: &[WriteDescriptorSet<'a>],
-        copies: &[CopyDescriptorSet<'a>],
-    ) {
-        for write in writes {
-            assert_owner!(write.set, self);
+    pub fn update_descriptor_sets<'a>(&self, updates: &mut [UpdateDescriptorSet<'a>]) {
+        let mut writes_count = 0;
 
-            match write.descriptors {
-                Descriptors::Sampler(samplers) => {
-                    for sampler in samplers {
-                        assert_owner!(sampler, self);
+        for update in updates.iter() {
+            assert_owner!(update.set, self);
+            writes_count += update.writes.len();
+
+            for write in update.writes.iter() {
+                match write.descriptors {
+                    Descriptors::Sampler(samplers) => {
+                        for sampler in samplers {
+                            assert_owner!(sampler, self);
+                        }
                     }
-                }
-                Descriptors::CombinedImageSampler(combos) => {
-                    for combo in combos {
-                        assert_owner!(combo.view, self);
-                        assert_owner!(combo.sampler, self);
+                    Descriptors::CombinedImageSampler(combos) => {
+                        for combo in combos {
+                            assert_owner!(combo.view, self);
+                            assert_owner!(combo.sampler, self);
+                        }
                     }
-                }
-                Descriptors::SampledImage(views)
-                | Descriptors::StorageImage(views)
-                | Descriptors::InputAttachment(views) => {
-                    for view in views {
-                        assert_owner!(view.view, self);
+                    Descriptors::SampledImage(views)
+                    | Descriptors::StorageImage(views)
+                    | Descriptors::InputAttachment(views) => {
+                        for view in views {
+                            assert_owner!(view.view, self);
+                        }
                     }
-                }
-                Descriptors::UniformBuffer(regions)
-                | Descriptors::StorageBuffer(regions)
-                | Descriptors::UniformBufferDynamic(regions)
-                | Descriptors::StorageBufferDynamic(regions) => {
-                    for region in regions {
-                        assert_owner!(region.buffer, self);
-                        debug_assert_ne!(
-                            region.size, 0,
-                            "Cannot write 0 sized buffer range into descriptor"
-                        );
-                        debug_assert!(
-                            region.offset <= region.buffer.info().size,
-                            "Buffer ({:#?}) descriptor offset ({}) is out of bounds",
-                            region.buffer,
-                            region.offset,
-                        );
-                        debug_assert!(
-                            region.size <= region.buffer.info().size - region.offset,
-                            "Buffer ({:#?}) descriptor size ({}) is out of bounds",
-                            region.buffer,
-                            region.size
-                        );
+                    Descriptors::UniformBuffer(regions)
+                    | Descriptors::StorageBuffer(regions)
+                    | Descriptors::UniformBufferDynamic(regions)
+                    | Descriptors::StorageBufferDynamic(regions) => {
+                        for region in regions {
+                            assert_owner!(region.buffer, self);
+                            debug_assert_ne!(
+                                region.size, 0,
+                                "Cannot write 0 sized buffer range into descriptor"
+                            );
+                            debug_assert!(
+                                region.offset <= region.buffer.info().size,
+                                "Buffer ({:#?}) descriptor offset ({}) is out of bounds",
+                                region.buffer,
+                                region.offset,
+                            );
+                            debug_assert!(
+                                region.size <= region.buffer.info().size - region.offset,
+                                "Buffer ({:#?}) descriptor size ({}) is out of bounds",
+                                region.buffer,
+                                region.size
+                            );
+                        }
                     }
-                }
-                Descriptors::AccelerationStructure(acceleration_structures) => {
-                    for acceleration_structure in acceleration_structures {
-                        assert_owner!(acceleration_structure, self);
-                        assert_eq!(
-                            acceleration_structure.info().level,
-                            AccelerationStructureLevel::Top
-                        );
+                    Descriptors::AccelerationStructure(acceleration_structures) => {
+                        for acceleration_structure in acceleration_structures {
+                            assert_owner!(acceleration_structure, self);
+                            assert_eq!(
+                                acceleration_structure.info().level,
+                                AccelerationStructureLevel::Top
+                            );
+                        }
                     }
-                }
-                Descriptors::UniformTexelBuffer(views) => {
-                    for view in views {
-                        assert_owner!(view, self);
+                    Descriptors::UniformTexelBuffer(views) => {
+                        for view in views {
+                            assert_owner!(view, self);
+                        }
                     }
-                }
-                Descriptors::StorageTexelBuffer(views) => {
-                    for view in views {
-                        assert_owner!(view, self);
+                    Descriptors::StorageTexelBuffer(views) => {
+                        for view in views {
+                            assert_owner!(view, self);
+                        }
                     }
                 }
             }
-        }
 
-        if !copies.is_empty() {
-            unimplemented!()
+            if !update.copies.is_empty() {
+                unimplemented!()
+            }
         }
 
         let mut ranges = SmallVec::<[_; 64]>::new();
@@ -2407,134 +2404,136 @@ impl Device {
 
         let mut write_descriptor_acceleration_structures = SmallVec::<[_; 16]>::new();
 
-        for write in writes {
-            match write.descriptors {
-                Descriptors::Sampler(slice) => {
-                    let start = images.len();
+        for update in updates.iter() {
+            for write in update.writes.iter() {
+                match write.descriptors {
+                    Descriptors::Sampler(slice) => {
+                        let start = images.len();
 
-                    images.extend(slice.iter().map(|sampler| {
-                        vk1_0::DescriptorImageInfoBuilder::new().sampler(sampler.handle())
-                    }));
+                        images.extend(slice.iter().map(|sampler| {
+                            vk1_0::DescriptorImageInfoBuilder::new().sampler(sampler.handle())
+                        }));
 
-                    ranges.push(start..images.len());
-                }
-                Descriptors::CombinedImageSampler(slice) => {
-                    let start = images.len();
+                        ranges.push(start..images.len());
+                    }
+                    Descriptors::CombinedImageSampler(slice) => {
+                        let start = images.len();
 
-                    images.extend(slice.iter().map(|combo| {
-                        vk1_0::DescriptorImageInfoBuilder::new()
-                            .sampler(combo.sampler.handle())
-                            .image_view(combo.view.handle())
-                            .image_layout(combo.layout.to_erupt())
-                    }));
+                        images.extend(slice.iter().map(|combo| {
+                            vk1_0::DescriptorImageInfoBuilder::new()
+                                .sampler(combo.sampler.handle())
+                                .image_view(combo.view.handle())
+                                .image_layout(combo.layout.to_erupt())
+                        }));
 
-                    ranges.push(start..images.len());
-                }
-                Descriptors::SampledImage(slice) => {
-                    let start = images.len();
+                        ranges.push(start..images.len());
+                    }
+                    Descriptors::SampledImage(slice) => {
+                        let start = images.len();
 
-                    images.extend(slice.iter().map(|view| {
-                        vk1_0::DescriptorImageInfoBuilder::new()
-                            .image_view(view.view.handle())
-                            .image_layout(view.layout.to_erupt())
-                    }));
+                        images.extend(slice.iter().map(|view| {
+                            vk1_0::DescriptorImageInfoBuilder::new()
+                                .image_view(view.view.handle())
+                                .image_layout(view.layout.to_erupt())
+                        }));
 
-                    ranges.push(start..images.len());
-                }
-                Descriptors::StorageImage(slice) => {
-                    let start = images.len();
+                        ranges.push(start..images.len());
+                    }
+                    Descriptors::StorageImage(slice) => {
+                        let start = images.len();
 
-                    images.extend(slice.iter().map(|view| {
-                        vk1_0::DescriptorImageInfoBuilder::new()
-                            .image_view(view.view.handle())
-                            .image_layout(view.layout.to_erupt())
-                    }));
+                        images.extend(slice.iter().map(|view| {
+                            vk1_0::DescriptorImageInfoBuilder::new()
+                                .image_view(view.view.handle())
+                                .image_layout(view.layout.to_erupt())
+                        }));
 
-                    ranges.push(start..images.len());
-                }
-                Descriptors::UniformBuffer(slice) => {
-                    let start = buffers.len();
+                        ranges.push(start..images.len());
+                    }
+                    Descriptors::UniformBuffer(slice) => {
+                        let start = buffers.len();
 
-                    buffers.extend(slice.iter().map(|region| {
-                        vk1_0::DescriptorBufferInfoBuilder::new()
-                            .buffer(region.buffer.handle())
-                            .offset(region.offset)
-                            .range(region.size)
-                    }));
+                        buffers.extend(slice.iter().map(|region| {
+                            vk1_0::DescriptorBufferInfoBuilder::new()
+                                .buffer(region.buffer.handle())
+                                .offset(region.offset)
+                                .range(region.size)
+                        }));
 
-                    ranges.push(start..buffers.len());
-                }
-                Descriptors::StorageBuffer(slice) => {
-                    let start = buffers.len();
+                        ranges.push(start..buffers.len());
+                    }
+                    Descriptors::StorageBuffer(slice) => {
+                        let start = buffers.len();
 
-                    buffers.extend(slice.iter().map(|region| {
-                        vk1_0::DescriptorBufferInfoBuilder::new()
-                            .buffer(region.buffer.handle())
-                            .offset(region.offset)
-                            .range(region.size)
-                    }));
+                        buffers.extend(slice.iter().map(|region| {
+                            vk1_0::DescriptorBufferInfoBuilder::new()
+                                .buffer(region.buffer.handle())
+                                .offset(region.offset)
+                                .range(region.size)
+                        }));
 
-                    ranges.push(start..buffers.len());
-                }
-                Descriptors::UniformBufferDynamic(slice) => {
-                    let start = buffers.len();
+                        ranges.push(start..buffers.len());
+                    }
+                    Descriptors::UniformBufferDynamic(slice) => {
+                        let start = buffers.len();
 
-                    buffers.extend(slice.iter().map(|region| {
-                        vk1_0::DescriptorBufferInfoBuilder::new()
-                            .buffer(region.buffer.handle())
-                            .offset(region.offset)
-                            .range(region.size)
-                    }));
+                        buffers.extend(slice.iter().map(|region| {
+                            vk1_0::DescriptorBufferInfoBuilder::new()
+                                .buffer(region.buffer.handle())
+                                .offset(region.offset)
+                                .range(region.size)
+                        }));
 
-                    ranges.push(start..buffers.len());
-                }
-                Descriptors::StorageBufferDynamic(slice) => {
-                    let start = buffers.len();
+                        ranges.push(start..buffers.len());
+                    }
+                    Descriptors::StorageBufferDynamic(slice) => {
+                        let start = buffers.len();
 
-                    buffers.extend(slice.iter().map(|region| {
-                        vk1_0::DescriptorBufferInfoBuilder::new()
-                            .buffer(region.buffer.handle())
-                            .offset(region.offset)
-                            .range(region.size)
-                    }));
+                        buffers.extend(slice.iter().map(|region| {
+                            vk1_0::DescriptorBufferInfoBuilder::new()
+                                .buffer(region.buffer.handle())
+                                .offset(region.offset)
+                                .range(region.size)
+                        }));
 
-                    ranges.push(start..buffers.len());
-                }
-                Descriptors::UniformTexelBuffer(slice) => {
-                    let start = buffer_views.len();
+                        ranges.push(start..buffers.len());
+                    }
+                    Descriptors::UniformTexelBuffer(slice) => {
+                        let start = buffer_views.len();
 
-                    buffer_views.extend(slice.iter().map(|view| view.handle()));
+                        buffer_views.extend(slice.iter().map(|view| view.handle()));
 
-                    ranges.push(start..buffers.len());
-                }
+                        ranges.push(start..buffer_views.len());
+                    }
 
-                Descriptors::StorageTexelBuffer(slice) => {
-                    let start = buffer_views.len();
+                    Descriptors::StorageTexelBuffer(slice) => {
+                        let start = buffer_views.len();
 
-                    buffer_views.extend(slice.iter().map(|view| view.handle()));
+                        buffer_views.extend(slice.iter().map(|view| view.handle()));
 
-                    ranges.push(start..buffers.len());
-                }
-                Descriptors::InputAttachment(slice) => {
-                    let start = images.len();
+                        ranges.push(start..buffer_views.len());
+                    }
+                    Descriptors::InputAttachment(slice) => {
+                        let start = images.len();
 
-                    images.extend(slice.iter().map(|view| {
-                        vk1_0::DescriptorImageInfoBuilder::new()
-                            .image_view(view.view.handle())
-                            .image_layout(view.layout.to_erupt())
-                    }));
+                        images.extend(slice.iter().map(|view| {
+                            vk1_0::DescriptorImageInfoBuilder::new()
+                                .image_view(view.view.handle())
+                                .image_layout(view.layout.to_erupt())
+                        }));
 
-                    ranges.push(start..images.len());
-                }
-                Descriptors::AccelerationStructure(slice) => {
-                    let start = acceleration_structures.len();
+                        ranges.push(start..images.len());
+                    }
+                    Descriptors::AccelerationStructure(slice) => {
+                        let start = acceleration_structures.len();
 
-                    acceleration_structures.extend(slice.iter().map(|accs| accs.handle()));
+                        acceleration_structures.extend(slice.iter().map(|accs| accs.handle()));
 
-                    ranges.push(start..acceleration_structures.len());
+                        ranges.push(start..acceleration_structures.len());
 
-                    write_descriptor_acceleration_structures
-                        .push(vkacc::WriteDescriptorSetAccelerationStructureKHRBuilder::new());
+                        write_descriptor_acceleration_structures
+                            .push(vkacc::WriteDescriptorSetAccelerationStructureKHRBuilder::new());
+                    }
                 }
             }
         }
@@ -2544,15 +2543,16 @@ impl Device {
         let mut write_descriptor_acceleration_structures =
             write_descriptor_acceleration_structures.iter_mut();
 
-        let writes: SmallVec<[_; 16]> = writes
-            .iter()
-            .map(|write| {
+        let mut erupt_writes: SmallVec<[_; 16]> = SmallVec::with_capacity(writes_count);
+
+        for update in updates.iter() {
+            for write in update.writes {
                 let builder = vk1_0::WriteDescriptorSetBuilder::new()
-                    .dst_set(write.set.handle())
+                    .dst_set(update.set.handle())
                     .dst_binding(write.binding)
                     .dst_array_element(write.element);
 
-                match write.descriptors {
+                let write = match write.descriptors {
                     Descriptors::Sampler(_) => builder
                         .descriptor_type(vk1_0::DescriptorType::SAMPLER)
                         .image_info(&images[ranges.next().unwrap()]),
@@ -2600,11 +2600,25 @@ impl Device {
                                 .acceleration_structures(&acceleration_structures[range]);
                         write.extend_from(acc_structure_write)
                     }
-                }
-            })
-            .collect();
+                };
 
-        unsafe { self.inner.logical.update_descriptor_sets(&writes, &[]) }
+                erupt_writes.push(write);
+            }
+        }
+
+        for update in updates {
+            for write in update.writes {
+                update
+                    .set
+                    .write_descriptors(write.binding, write.element, write.descriptors);
+            }
+        }
+
+        unsafe {
+            self.inner
+                .logical
+                .update_descriptor_sets(&erupt_writes, &[])
+        }
     }
 
     #[tracing::instrument]
@@ -2621,20 +2635,16 @@ impl Device {
                             .address_mode_u(info.address_mode_u.to_erupt())
                             .address_mode_v(info.address_mode_v.to_erupt())
                             .address_mode_w(info.address_mode_w.to_erupt())
-                            .mip_lod_bias(info.mip_lod_bias.into_inner())
+                            .mip_lod_bias(info.mip_lod_bias)
                             .anisotropy_enable(info.max_anisotropy.is_some())
-                            .max_anisotropy(
-                                info.max_anisotropy
-                                    .unwrap_or(OrderedFloat(0.0))
-                                    .into_inner(),
-                            )
+                            .max_anisotropy(info.max_anisotropy.unwrap_or(0.0))
                             .compare_enable(info.compare_op.is_some())
                             .compare_op(match info.compare_op {
                                 Some(compare_op) => compare_op.to_erupt(),
                                 None => vk1_0::CompareOp::NEVER,
                             })
-                            .min_lod(info.min_lod.into_inner())
-                            .max_lod(info.max_lod.into_inner())
+                            .min_lod(info.min_lod)
+                            .max_lod(info.max_lod)
                             .border_color(info.border_color.to_erupt())
                             .unnormalized_coordinates(info.unnormalized_coordinates),
                         None,

@@ -1,17 +1,18 @@
-use {
-    super::{
-        encode::CommandBuffer,
-        resources::{
-            AccelerationStructure, Buffer, ComputePipeline, DescriptorSet, Fence, Framebuffer,
-            GraphicsPipeline, Image, ImageView, PipelineLayout, RayTracingPipeline, Sampler,
-        },
-    },
-    crate::queue::QueueId,
-    parking_lot::Mutex,
-    smallvec::SmallVec,
-    std::{
-        collections::{HashMap, VecDeque},
-        convert::TryFrom as _,
+use std::{
+    collections::{HashMap, VecDeque},
+    convert::TryFrom as _,
+};
+
+use parking_lot::Mutex;
+use smallvec::SmallVec;
+
+use crate::QueueId;
+
+use super::{
+    encode::CommandBuffer,
+    resources::{
+        AccelerationStructure, Buffer, ComputePipeline, DescriptorSet, Framebuffer,
+        GraphicsPipeline, Image, ImageView, PipelineLayout, RayTracingPipeline, Sampler,
     },
 };
 
@@ -150,7 +151,6 @@ pub(super) struct References {
     acceleration_strucutres: Vec<AccelerationStructure>,
     samplers: Vec<Sampler>,
     descriptor_sets: Vec<DescriptorSet>,
-    fences: Vec<Fence>,
 }
 
 impl References {
@@ -167,7 +167,6 @@ impl References {
             acceleration_strucutres: Vec::new(),
             samplers: Vec::new(),
             descriptor_sets: Vec::new(),
-            fences: Vec::new(),
         }
     }
 
@@ -215,10 +214,6 @@ impl References {
         self.descriptor_sets.push(descriptor_set);
     }
 
-    // pub fn add_fence(&mut self, fence: Fence) {
-    //     self.fences.push(fence);
-    // }
-
     pub fn is_empty(&self) -> bool {
         self.buffers.is_empty()
             && self.images.is_empty()
@@ -231,7 +226,6 @@ impl References {
             && self.acceleration_strucutres.is_empty()
             && self.samplers.is_empty()
             && self.descriptor_sets.is_empty()
-            && self.fences.is_empty()
     }
 
     pub fn clear(&mut self) {
@@ -246,7 +240,6 @@ impl References {
         self.acceleration_strucutres.clear();
         self.samplers.clear();
         self.descriptor_sets.clear();
-        self.fences.clear();
     }
 }
 

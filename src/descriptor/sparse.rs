@@ -106,7 +106,6 @@ where
     fn update<'a>(
         &'a mut self,
         _input: &SparseDescriptors<T, CAP, STAGES>,
-        _fence: usize,
         device: &Device,
         writes: &mut impl Extend<WriteDescriptorSet<'a>>,
         _encoder: &mut Encoder<'a>,
@@ -119,14 +118,19 @@ where
             });
         }
 
-        let set = self.set.as_ref().unwrap();
+        let set = self.set.as_mut().unwrap();
         let indices = &self.indices;
 
         writes.extend(self.updates.drain(..).filter_map(|descriptor| {
             let (descriptor, idx) = indices.get_key_value(&descriptor)?;
 
             Some(WriteDescriptorSet {
-                set: &set.raw,
+                set: unsafe {
+                    // # Safety
+                    //
+                    // None
+                    set.raw.as_writtable()
+                },
                 binding: 0,
                 element: *idx,
                 descriptors: T::descriptors(std::slice::from_ref(descriptor)),

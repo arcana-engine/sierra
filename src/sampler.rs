@@ -1,3 +1,5 @@
+use std::hash::{Hash, Hasher};
+
 pub use crate::backend::Sampler;
 use ordered_float::OrderedFloat;
 
@@ -89,7 +91,7 @@ impl Default for BorderColor {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug)]
 #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct SamplerInfo {
     #[cfg_attr(feature = "serde-1", serde(default))]
@@ -105,19 +107,60 @@ pub struct SamplerInfo {
     #[cfg_attr(feature = "serde-1", serde(default))]
     pub address_mode_w: SamplerAddressMode,
     #[cfg_attr(feature = "serde-1", serde(default))]
-    pub mip_lod_bias: OrderedFloat<f32>,
+    pub mip_lod_bias: f32,
     #[cfg_attr(feature = "serde-1", serde(default))]
-    pub max_anisotropy: Option<OrderedFloat<f32>>,
+    pub max_anisotropy: Option<f32>,
     #[cfg_attr(feature = "serde-1", serde(default))]
     pub compare_op: Option<CompareOp>,
     #[cfg_attr(feature = "serde-1", serde(default))]
-    pub min_lod: OrderedFloat<f32>,
+    pub min_lod: f32,
     #[cfg_attr(feature = "serde-1", serde(default))]
-    pub max_lod: OrderedFloat<f32>,
+    pub max_lod: f32,
     #[cfg_attr(feature = "serde-1", serde(default))]
     pub border_color: BorderColor,
     #[cfg_attr(feature = "serde-1", serde(default))]
     pub unnormalized_coordinates: bool,
+}
+
+impl PartialEq for SamplerInfo {
+    fn eq(&self, other: &Self) -> bool {
+        self.mag_filter == other.mag_filter
+            && self.min_filter == other.min_filter
+            && self.mipmap_mode == other.mipmap_mode
+            && self.address_mode_u == other.address_mode_u
+            && self.address_mode_v == other.address_mode_v
+            && self.address_mode_w == other.address_mode_w
+            && OrderedFloat(self.mip_lod_bias) == OrderedFloat(other.mip_lod_bias)
+            && self.max_anisotropy.map(OrderedFloat) == other.max_anisotropy.map(OrderedFloat)
+            && self.compare_op == other.compare_op
+            && OrderedFloat(self.min_lod) == OrderedFloat(other.min_lod)
+            && OrderedFloat(self.max_lod) == OrderedFloat(other.max_lod)
+            && self.border_color == other.border_color
+            && self.unnormalized_coordinates == other.unnormalized_coordinates
+    }
+}
+
+impl Eq for SamplerInfo {}
+
+impl Hash for SamplerInfo {
+    fn hash<H>(&self, hasher: &mut H)
+    where
+        H: Hasher,
+    {
+        Hash::hash(&self.mag_filter, hasher);
+        Hash::hash(&self.min_filter, hasher);
+        Hash::hash(&self.mipmap_mode, hasher);
+        Hash::hash(&self.address_mode_u, hasher);
+        Hash::hash(&self.address_mode_v, hasher);
+        Hash::hash(&self.address_mode_w, hasher);
+        Hash::hash(&OrderedFloat(self.mip_lod_bias), hasher);
+        Hash::hash(&self.max_anisotropy.map(OrderedFloat), hasher);
+        Hash::hash(&self.compare_op, hasher);
+        Hash::hash(&OrderedFloat(self.min_lod), hasher);
+        Hash::hash(&OrderedFloat(self.max_lod), hasher);
+        Hash::hash(&self.border_color, hasher);
+        Hash::hash(&self.unnormalized_coordinates, hasher);
+    }
 }
 
 impl SamplerInfo {
@@ -129,11 +172,11 @@ impl SamplerInfo {
             address_mode_u: SamplerAddressMode::ClampToEdge,
             address_mode_v: SamplerAddressMode::ClampToEdge,
             address_mode_w: SamplerAddressMode::ClampToEdge,
-            mip_lod_bias: OrderedFloat(0.0),
+            mip_lod_bias: 0.0,
             max_anisotropy: None,
             compare_op: None,
-            min_lod: OrderedFloat(0.0),
-            max_lod: OrderedFloat(0.0),
+            min_lod: 0.0,
+            max_lod: 0.0,
             border_color: BorderColor::FloatTransparentBlack,
             unnormalized_coordinates: false,
         }
@@ -147,11 +190,11 @@ impl SamplerInfo {
             address_mode_u: SamplerAddressMode::ClampToEdge,
             address_mode_v: SamplerAddressMode::ClampToEdge,
             address_mode_w: SamplerAddressMode::ClampToEdge,
-            mip_lod_bias: OrderedFloat(0.0),
+            mip_lod_bias: 0.0,
             max_anisotropy: None,
             compare_op: None,
-            min_lod: OrderedFloat(0.0),
-            max_lod: OrderedFloat(0.0),
+            min_lod: 0.0,
+            max_lod: 0.0,
             border_color: BorderColor::FloatTransparentBlack,
             unnormalized_coordinates: false,
         }

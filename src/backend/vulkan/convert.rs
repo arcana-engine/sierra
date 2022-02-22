@@ -840,12 +840,12 @@ impl ToErupt<vk1_0::PrimitiveTopology> for PrimitiveTopology {
 impl ToErupt<vk1_0::Viewport> for Viewport {
     fn to_erupt(self) -> vk1_0::Viewport {
         vk1_0::Viewport {
-            x: self.x.offset.into(),
-            y: self.y.offset.into(),
-            width: self.x.size.into(),
-            height: self.y.size.into(),
-            min_depth: self.z.offset.into(),
-            max_depth: self.z.size.into_inner() + self.z.offset.into_inner(),
+            x: self.x.offset,
+            y: self.y.offset,
+            width: self.x.size,
+            height: self.y.size,
+            min_depth: self.z.offset,
+            max_depth: self.z.size + self.z.offset,
         }
     }
 }

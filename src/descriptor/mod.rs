@@ -6,7 +6,11 @@ mod sampler;
 
 pub use {
     self::{buffer::*, image::*, layout::* /*, sparse::**/},
-    crate::{backend::DescriptorSet, queue::QueueId, stage::PipelineStageFlags},
+    crate::{
+        backend::{DescriptorSet, WritableDescriptorSet},
+        queue::QueueId,
+        stage::PipelineStageFlags,
+    },
 };
 
 use crate::{
@@ -40,11 +44,20 @@ pub struct DescriptorSetInfo {
 }
 
 /// Defines how to write descriptors into set.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct WriteDescriptorSet<'a> {
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub struct UpdateDescriptorSet<'a> {
     /// Target descriptor set.
-    pub set: &'a DescriptorSet,
+    pub set: &'a mut WritableDescriptorSet,
 
+    /// Writes to the descriptor set.
+    pub writes: &'a [DescriptorSetWrite<'a>],
+
+    /// Writes to the descriptor set.
+    pub copies: &'a [DescriptorSetCopy<'a>],
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct DescriptorSetWrite<'a> {
     /// Binding index.
     pub binding: u32,
 
@@ -54,6 +67,27 @@ pub struct WriteDescriptorSet<'a> {
 
     /// Descriptors to write.
     pub descriptors: Descriptors<'a>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct DescriptorSetCopy<'a> {
+    /// Source set from where descriptors are copied.
+    pub src: &'a DescriptorSet,
+
+    /// First binding to copy descriptors from.
+    pub src_binding: u32,
+
+    /// First array element of first binding to copy descriptors from.
+    pub src_element: u32,
+
+    /// First binding to copy descriptors to.
+    pub dst_binding: u32,
+
+    /// First array element of first binding to copy descriptors to.
+    pub dst_element: u32,
+
+    /// Number of descriptors to copy.
+    pub count: u32,
 }
 
 /// Image view and layout.\
@@ -289,31 +323,6 @@ impl TypedDescriptor for AccelerationStructureDescriptor {
     }
 }
 
-/// Defines operation to copy descriptors range from one set to another.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct CopyDescriptorSet<'a> {
-    /// Source set from where descriptors are copied.
-    pub src: &'a DescriptorSet,
-
-    /// First binding to copy descriptors from.
-    pub src_binding: u32,
-
-    /// First array element of first binding to copy descriptors from.
-    pub src_element: u32,
-
-    /// Destination set into which descriptors are copied.
-    pub dst: &'a DescriptorSet,
-
-    /// First binding to copy descriptors to.
-    pub dst_binding: u32,
-
-    /// First array element of first binding to copy descriptors to.
-    pub dst_element: u32,
-
-    /// Number of descriptors to copy.
-    pub count: u32,
-}
-
 /// Trait for descriptor layouts.
 ///
 /// This trait is intended to be implemented by proc macro `#[descriptors]` for generated types.
@@ -338,12 +347,12 @@ pub trait UpdatedDescriptors {
 pub trait DescriptorsInstance<I: ?Sized> {
     type Updated: UpdatedDescriptors;
 
+    /// Performs necessary updates to the descriptors according to the input.
+    /// Returns update descriptors instance that can be bound to the encoder with correct pipline.
     fn update<'a, 'b: 'a>(
         &'b mut self,
         input: &I,
-        fence: usize,
         device: &Device,
-        writes: &mut impl Extend<WriteDescriptorSet<'a>>,
         encoder: &mut Encoder<'a>,
     ) -> Result<&'b Self::Updated, DescriptorsAllocationError>;
 

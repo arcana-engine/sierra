@@ -17,12 +17,7 @@ pub fn graphics_pipeline_desc(tokens: proc_macro::TokenStream) -> TokenStream {
                     }),
                     write_mask: sierra::ComponentMask::RGBA,
                     constants: sierra::Static {
-                        value: [
-                            sierra::OrderedFloat(0.0),
-                            sierra::OrderedFloat(0.0),
-                            sierra::OrderedFloat(0.0),
-                            sierra::OrderedFloat(0.0),
-                        ],
+                        value: [0.0, 0.0, 0.0, 0.0],
                     },
                 }",
             )

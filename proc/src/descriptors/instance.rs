@@ -107,12 +107,11 @@ pub(super) fn generate(input: &Input) -> TokenStream {
             let stream = quote::quote!(
                 if #write_descriptor {
                     let descriptors: &_ = elem.#descriptor_field.as_ref().unwrap();
-                    writes.extend(Some(::sierra::WriteDescriptorSet {
-                        set: &elem.set,
+                    writes.push(::sierra::DescriptorSetWrite {
                         binding: #binding,
                         element: 0,
                         descriptors: #descriptors,
-                    }));
+                    });
                 }
             );
 
@@ -186,12 +185,11 @@ pub(super) fn generate(input: &Input) -> TokenStream {
     } else {
         quote::quote!(
             if write_uniforms {
-                writes.extend(Some(::sierra::WriteDescriptorSet {
-                    set: &elem.set,
+                writes.push(::sierra::DescriptorSetWrite {
                     binding: #binding,
                     element: 0,
                     descriptors: ::sierra::Descriptors::UniformBuffer(::std::slice::from_ref(&elem.uniforms_buffer.as_ref().unwrap().1)),
-                }));
+                });
             }
 
             let (uniforms, buffer) = elem.uniforms_buffer.as_ref().unwrap();
@@ -210,11 +208,14 @@ pub(super) fn generate(input: &Input) -> TokenStream {
         quote::quote!(#[doc(hidden)])
     };
 
+    let max_writes = input.descriptors.len() + (!input.uniforms.is_empty()) as usize;
+
     quote::quote!(
         #doc_attr
         #vis struct #instance_ident {
             pub layout: ::sierra::DescriptorSetLayout,
-            pub cycle: ::std::vec::Vec<#elem_ident>,
+            pub cycle: ::sierra::arrayvec::ArrayVec<#elem_ident, 5>,
+            pub cycle_next: usize,
         }
 
         #doc_attr
@@ -225,7 +226,7 @@ pub(super) fn generate(input: &Input) -> TokenStream {
         }
 
         impl ::sierra::UpdatedDescriptors for #elem_ident {
-            fn raw(&self) -> &::sierra::DescriptorSet{
+            fn raw(&self) -> &::sierra::DescriptorSet {
                 &self.set
             }
         }
@@ -234,48 +235,93 @@ pub(super) fn generate(input: &Input) -> TokenStream {
             pub fn new(layout: &#layout_ident) -> Self {
                 #instance_ident {
                     layout: layout.layout.clone(),
-                    cycle: ::std::vec::Vec::new(),
+                    cycle: ::sierra::arrayvec::ArrayVec::new(),
+                    cycle_next: 0,
                 }
             }
 
             pub fn update<'a, 'b: 'a>(
                 &'b mut self,
                 input: &#ident,
-                fence: usize,
                 device: &::sierra::Device,
-                writes: &mut impl ::std::iter::Extend<::sierra::WriteDescriptorSet<'a>>,
                 encoder: &mut ::sierra::Encoder<'a>,
             ) -> ::std::result::Result<&'b #elem_ident, ::sierra::DescriptorsAllocationError> {
-                while self.cycle.len() <= fence {
-                        let new_elem = self.new_cycle_elem(device)?;
-                        self.cycle.push(new_elem);
+                if self.cycle.is_empty() {
+                    self.cycle.push(#elem_ident {
+                        set: device.create_descriptor_set(::sierra::DescriptorSetInfo {
+                            layout: self.layout.clone(),
+                        })?.share(),
+                        #new_cycle_elem_descriptors
+                        #new_cycle_elem_uniforms_buffer
+                    });
                 }
 
-                let elem = self.cycle.get_mut(fence).unwrap();
+                if self.cycle_next >= self.cycle.len() {
+                    self.cycle_next = 0;
+                }
+
+                let start = self.cycle_next;
+
+                loop {
+                    match self.cycle[self.cycle_next].set.is_writtable() {
+                        false => {
+                            let next = (self.cycle_next + 1) % self.cycle.len();
+                            if next == start {
+                                let new_elem = #elem_ident {
+                                    set: device.create_descriptor_set(::sierra::DescriptorSetInfo {
+                                        layout: self.layout.clone(),
+                                    })?.share(),
+                                    #new_cycle_elem_descriptors
+                                    #new_cycle_elem_uniforms_buffer
+                                };
+
+                                // No sets available yet.
+                                if self.cycle.len() < self.cycle.capacity() {
+                                    self.cycle.insert(start + 1, new_elem);
+                                    self.cycle_next = start + 1;
+                                } else {
+                                    self.cycle[start] = new_elem;
+                                    self.cycle_next = start;
+                                }
+
+                                break;
+                            }
+                            self.cycle_next = next;
+                        }
+                        true => break,
+                    }
+                }
+
+                let elem = &mut self.cycle[self.cycle_next];
                 #update_uniforms_statement
                 #update_descriptor_statements
 
-                let elem = self.cycle.get(fence).unwrap();
-                #write_uniforms_statement
-                #write_updated_descriptor_statements
+                {
+                    let writable_set: &mut ::sierra::WritableDescriptorSet = unsafe {
+                        // # Safety
+                        // Loop above guaratees uniqueness.
+                        elem.set.as_writtable()
+                    };
+
+                    let mut writes = ::sierra::arrayvec::ArrayVec::<_, #max_writes>::new();
+                    #write_uniforms_statement
+                    #write_updated_descriptor_statements
+
+                    device.update_descriptor_sets(&mut [::sierra::UpdateDescriptorSet {
+                        set: writable_set,
+                        writes: &writes,
+                        copies: &[],
+                    }]);
+                }
 
                 #updated_descriptor_assertions
 
-                ::std::result::Result::Ok(elem)
+                self.cycle_next += 1;
+                ::std::result::Result::Ok(&*elem)
             }
 
             pub fn raw_layout(&self) -> &::sierra::DescriptorSetLayout {
                 &self.layout
-            }
-
-            fn new_cycle_elem(&self, device: &::sierra::Device) -> ::std::result::Result<#elem_ident, ::sierra::DescriptorsAllocationError> {
-                ::std::result::Result::Ok(#elem_ident {
-                    set: device.create_descriptor_set(::sierra::DescriptorSetInfo {
-                        layout: self.layout.clone(),
-                    })?,
-                    #new_cycle_elem_descriptors
-                    #new_cycle_elem_uniforms_buffer
-                })
             }
         }
 
@@ -285,12 +331,10 @@ pub(super) fn generate(input: &Input) -> TokenStream {
             fn update<'a, 'b: 'a>(
                 &'b mut self,
                 input: &#ident,
-                fence: usize,
                 device: &::sierra::Device,
-                writes: &mut impl ::std::iter::Extend<::sierra::WriteDescriptorSet<'a>>,
                 encoder: &mut ::sierra::Encoder<'a>,
             ) -> ::std::result::Result<&'b #elem_ident, ::sierra::DescriptorsAllocationError> {
-                self.update(input, fence, device, writes, encoder)
+                self.update(input, device, encoder)
             }
 
             fn raw_layout(&self) -> &::sierra::DescriptorSetLayout {

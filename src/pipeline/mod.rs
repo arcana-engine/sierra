@@ -6,7 +6,7 @@ pub use {
     self::{compute::*, graphics::*, ray_tracing::*},
     crate::{
         backend::PipelineLayout,
-        descriptor::{UpdatedDescriptors, UpdatedPipelineDescriptors, WriteDescriptorSet},
+        descriptor::{UpdatedDescriptors, UpdatedPipelineDescriptors},
         encode::{Encoder, EncoderCommon},
     },
 };
