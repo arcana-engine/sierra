@@ -128,8 +128,8 @@ fn parse_layout_attr(attr: &syn::Attribute) -> syn::Result<Option<PipelineLaoyut
                 })?;
 
                 layout = find_unique(
-                    args.iter().filter_map(|arg| match arg {
-                        PushConstantArgument::Layout(layout) => Some(*layout),
+                    args.iter().map(|arg| match arg {
+                        PushConstantArgument::Layout(layout) => *layout,
                     }),
                     attr,
                     "Only one strucutre layout can be specifeid",

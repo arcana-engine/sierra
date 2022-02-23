@@ -40,7 +40,7 @@ impl<const N: usize> TypedDescriptorBinding for [Buffer; N] {
 
     #[inline]
     fn get_descriptors(&self, _device: &Device) -> Result<[BufferRange; N], OutOfMemory> {
-        Ok(self.clone().map(|buffer| BufferRange::whole(buffer)))
+        Ok(self.clone().map(BufferRange::whole))
     }
 }
 

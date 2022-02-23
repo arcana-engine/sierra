@@ -91,7 +91,7 @@ fn fs_main() -> [[location(0)]] vec4<f32> {
         sierra::DynamicGraphicsPipeline::new(sierra::graphics_pipeline_desc!(
             layout: pipeline_layout.raw().clone(),
             vertex_shader: sierra::VertexShader::new(shader_module.clone(), "vs_main"),
-            fragment_shader: Some(sierra::FragmentShader::new(shader_module.clone(), "fs_main")),
+            fragment_shader: Some(sierra::FragmentShader::new(shader_module, "fs_main")),
         ));
 
     event_loop.run(move |event, _target, flow| {
@@ -152,3 +152,212 @@ fn fs_main() -> [[location(0)]] vec4<f32> {
         }
     })
 }
+
+// #[allow(dead_code)]
+// pub struct Main {
+//     target: sierra::Image,
+// }
+// impl Main {
+//     pub fn instance() -> MainInstance {
+//         MainInstance::new()
+//     }
+// }
+// pub struct MainInstance {
+//     render_pass: Option<::sierra::RenderPass>,
+//     framebuffers: ::std::vec::Vec<::sierra::Framebuffer>,
+// }
+// impl MainInstance {
+//     pub fn new() -> Self {
+//         MainInstance {
+//             render_pass: None,
+//             framebuffers: ::std::vec::Vec::new(),
+//         }
+//     }
+//     pub fn update_framebuffer(
+//         &mut self,
+//         input: &Main,
+//         device: &::sierra::Device,
+//     ) -> ::std::result::Result<&::sierra::Framebuffer, ::sierra::FramebufferError> {
+//         let mut render_pass_compatible;
+//         if let Some(render_pass) = &self.render_pass {
+//             render_pass_compatible = true;
+//             let a = render_pass.info().attachments[0usize];
+//             if a.format != ::sierra::Attachment::format(&input.target) {
+//                 render_pass_compatible = false;
+//             } else if let Some(samples) = ::sierra::Attachment::samples(&input.target) {
+//                 if a.samples != samples {
+//                     render_pass_compatible = false;
+//                 }
+//             } else if a.initial_layout
+//                 != ::std::option::Option::map(::std::option::Option::None, ::sierra::Layout::from)
+//             {
+//                 render_pass_compatible = false;
+//             } else if a.final_layout != ::sierra::Layout::from(sierra::Layout::Present) {
+//                 render_pass_compatible = false;
+//             }
+//         } else {
+//             render_pass_compatible = false;
+//         }
+//         if !render_pass_compatible {
+//             if self.render_pass.is_some() {
+//             } else {
+//             }
+//             self.render_pass = None;
+//             let mut attachments = ::std::vec::Vec::with_capacity(1usize);
+//             attachments.push(::sierra::AttachmentInfo {
+//                 format: ::sierra::Attachment::format(&input.target),
+//                 samples: ::sierra::Attachment::samples(&input.target).unwrap_or_default(),
+//                 load_op: ::sierra::LoadOp::Clear,
+//                 store_op: ::sierra::StoreOp::Store,
+//                 initial_layout: ::std::option::Option::None,
+//                 final_layout: sierra::Layout::Present,
+//             });
+//             let mut subpasses = ::std::vec::Vec::with_capacity(1usize);
+//             subpasses.push(::sierra::Subpass {
+//                 colors: {
+//                     let mut colors = ::std::vec::Vec::with_capacity(1usize);
+//                     colors.push((0u32, ::sierra::Layout::ColorAttachmentOptimal));
+//                     colors
+//                 },
+//                 depth: None,
+//             });
+//             let mut dependencies = ::std::vec::Vec::with_capacity(0usize);
+//             let render_pass = self
+//                 .render_pass
+//                 .get_or_insert(::sierra::Device::create_render_pass(
+//                     device,
+//                     ::sierra::RenderPassInfo {
+//                         attachments,
+//                         subpasses,
+//                         dependencies,
+//                     },
+//                 )?);
+//             let framebuffer_info = match self.framebuffers.iter().find(|fb| {
+//                 let fbinfo = fb.info();
+//                 if true {
+//                     {
+//                         match (&fbinfo.attachments.len(), &1usize) {
+//                             (left_val, right_val) => {
+//                                 if !(*left_val == *right_val) {
+//                                     panic!();
+//                                 }
+//                             }
+//                         }
+//                     };
+//                 };
+//                 if !::sierra::Attachment::eq(&input.target, &fbinfo.attachments[0usize]) {
+//                     return false;
+//                 }
+//                 true
+//             }) {
+//                 Some(fb) => ::sierra::FramebufferInfo {
+//                     render_pass: ::std::clone::Clone::clone(render_pass),
+//                     attachments: ::std::clone::Clone::clone(&fb.info().attachments),
+//                     extent: fb.info().extent,
+//                 },
+//                 None => {
+//                     let mut fb_extent = ::sierra::Extent2d {
+//                         width: !0,
+//                         height: !0,
+//                     };
+//                     fb_extent = ::sierra::Extent2d::min(
+//                         &fb_extent,
+//                         &::sierra::Attachment::max_extent(&input.target),
+//                     );
+//                     let mut attachments = ::std::vec::Vec::with_capacity(1usize);
+//                     attachments.push(::sierra::Attachment::get_view(
+//                         &input.target,
+//                         device,
+//                         ::sierra::ImageUsage::empty() | ::sierra::ImageUsage::COLOR_ATTACHMENT,
+//                         fb_extent,
+//                     )?);
+//                     ::sierra::FramebufferInfo {
+//                         render_pass: ::std::clone::Clone::clone(render_pass),
+//                         attachments,
+//                         extent: fb_extent,
+//                     }
+//                 }
+//             };
+//             self.framebuffers.clear();
+//             self.framebuffers.push(::sierra::Device::create_framebuffer(
+//                 device,
+//                 framebuffer_info,
+//             )?);
+//         } else {
+//             let render_pass = self.render_pass.as_ref().unwrap();
+//             let framebuffer = match self.framebuffers.iter().position(|fb| {
+//                 let fbinfo = fb.info();
+//                 if true {
+//                     {
+//                         match (&fbinfo.attachments.len(), &1usize) {
+//                             (left_val, right_val) => {
+//                                 if !(*left_val == *right_val) {
+//                                     panic!()
+//                                 }
+//                             }
+//                         }
+//                     };
+//                 };
+//                 if !::sierra::Attachment::eq(&input.target, &fbinfo.attachments[0usize]) {
+//                     return false;
+//                 }
+//                 true
+//             }) {
+//                 Some(fb_index) => {
+//                     let fb = self.framebuffers.remove(fb_index);
+//                     self.framebuffers.push(fb);
+//                 }
+//                 None => {
+//                     let mut fb_extent = ::sierra::Extent2d {
+//                         width: !0,
+//                         height: !0,
+//                     };
+//                     fb_extent = ::sierra::Extent2d::min(
+//                         &fb_extent,
+//                         &::sierra::Attachment::max_extent(&input.target),
+//                     );
+//                     let mut attachments = ::std::vec::Vec::with_capacity(1usize);
+//                     attachments.push(::sierra::Attachment::get_view(
+//                         &input.target,
+//                         device,
+//                         ::sierra::ImageUsage::empty() | ::sierra::ImageUsage::COLOR_ATTACHMENT,
+//                         fb_extent,
+//                     )?);
+//                     let framebuffer = ::sierra::Device::create_framebuffer(
+//                         device,
+//                         ::sierra::FramebufferInfo {
+//                             render_pass: ::std::clone::Clone::clone(render_pass),
+//                             attachments,
+//                             extent: fb_extent,
+//                         },
+//                     )?;
+//                     self.framebuffers.push(framebuffer);
+//                     while self.framebuffers.len() > 3 {
+//                         self.framebuffers.remove(0);
+//                     }
+//                 }
+//             };
+//         }
+//         Ok(self.framebuffers.last().unwrap())
+//     }
+// }
+// impl ::sierra::RenderPassInstance for MainInstance {
+//     type Input = Main;
+//     fn begin_render_pass<'a, 'b>(
+//         &'a mut self,
+//         input: &Main,
+//         device: &::sierra::Device,
+//         encoder: &'b mut ::sierra::Encoder<'a>,
+//     ) -> ::std::result::Result<::sierra::RenderPassEncoder<'b, 'a>, ::sierra::FramebufferError>
+//     {
+//         let fb = self.update_framebuffer(input, device)?;
+//         Ok(encoder.with_framebuffer(
+//             fb,
+//             encoder
+//                 .scope()
+//                 .to_scope([::sierra::ClearValue::from(sierra::ClearColor(
+//                     0.3, 0.1, 0.8, 1.0,
+//                 ))]),
+//         ))
+//     }
+// }

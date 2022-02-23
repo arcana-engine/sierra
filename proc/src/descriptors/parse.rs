@@ -97,8 +97,8 @@ pub(super) fn parse(
         )?;
 
         cycle_capacity = find_unique(
-            args.iter().filter_map(|arg| match arg {
-                DescriptorsArgument::Capacity(value) => Some(*value),
+            args.iter().map(|arg| match arg {
+                DescriptorsArgument::Capacity(value) => *value,
             }),
             &attr,
             "Up to one `capacity` argument expected",

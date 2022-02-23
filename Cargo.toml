@@ -31,7 +31,7 @@ smallvec = { version = "1.5", features = ["const_new"] }
 thiserror = "1.0"
 tracing = "0.1"
 ordered-float = "2.0"
-bytemuck = { version = "1.4", features = ["derive"] }
+bytemuck = { version = "1.4", features = ["derive", "min_const_generics"] }
 erupt = { version = "0.22", optional = true, features = ["loading"] }
 gpu-alloc = { version = "0.5", optional = true, features = ["tracing"] }
 gpu-descriptor = { version = "0.2", optional = true, features = ["tracing"] }

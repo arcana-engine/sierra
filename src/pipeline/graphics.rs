@@ -687,9 +687,7 @@ impl Default for ColorBlend {
                 alpha_op: BlendOp::Add,
             }),
             write_mask: ComponentMask::RGBA,
-            constants: Static {
-                value: [0.0.into(), 0.0.into(), 0.0.into(), 0.0.into()],
-            },
+            constants: Static { value: [0.0; 4] },
         }
     }
 }

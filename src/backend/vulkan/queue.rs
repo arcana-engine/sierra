@@ -139,7 +139,7 @@ impl Queue {
             assert_owner!(semaphore, self.device);
         }
 
-        if let Some(fence) = fence.as_deref_mut() {
+        if let Some(fence) = fence.as_mut() {
             assert_owner!(fence, self.device);
             let epoch = self.device.epochs().next_epoch(self.id);
             fence.arm(self.id, epoch, &self.device);

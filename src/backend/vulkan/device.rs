@@ -631,8 +631,6 @@ impl Device {
             assert_owner!(fragment_shader.module(), self);
         }
 
-        let vertex_shader_entry: CString;
-        let fragment_shader_entry: CString;
         let mut shader_stages = Vec::with_capacity(2);
         let mut dynamic_states = Vec::with_capacity(7);
 
@@ -664,7 +662,7 @@ impl Device {
             .vertex_binding_descriptions(&vertex_binding_descriptions)
             .vertex_attribute_descriptions(&vertex_attribute_descriptions);
 
-        vertex_shader_entry = entry_name_to_cstr(info.vertex_shader.entry());
+        let vertex_shader_entry = entry_name_to_cstr(info.vertex_shader.entry());
 
         shader_stages.push(
             vk1_0::PipelineShaderStageCreateInfoBuilder::new()
@@ -692,6 +690,8 @@ impl Device {
         let mut depth_stencil_state = None;
 
         let mut color_blend_state = None;
+
+        let fragment_shader_entry;
 
         let with_rasterizer = if let Some(rasterizer) = &info.rasterizer {
             let mut builder = vk1_0::PipelineViewportStateCreateInfoBuilder::new();
@@ -877,12 +877,7 @@ impl Device {
                     });
 
                     match constants {
-                        State::Static {
-                            value: [x, y, z, w],
-                        } => {
-                            builder =
-                                builder.blend_constants([x.into(), y.into(), z.into(), w.into()])
-                        }
+                        State::Static { value } => builder = builder.blend_constants(value),
                         State::Dynamic => dynamic_states.push(vk1_0::DynamicState::BLEND_CONSTANTS),
                     }
 
@@ -2120,6 +2115,7 @@ impl Device {
 
         let group_size_usize = usize::try_from(group_size).map_err(|_| out_of_host_memory())?;
 
+        #[allow(clippy::redundant_closure)]
         let total_size_usize = group_size_usize
             .checked_mul(info.groups.len())
             .unwrap_or_else(|| host_memory_space_overlow());

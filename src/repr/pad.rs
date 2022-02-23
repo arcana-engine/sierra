@@ -7,7 +7,10 @@ pub struct Padded<T, P> {
     pub pad: P,
 }
 
-pub unsafe trait Padding: Copy + 'static {}
+/// # Safety
+///
+/// This trait must be implemented only for `Pod` types with alignment requirement of 1.
+pub unsafe trait Padding: Pod + 'static {}
 unsafe impl<const N: usize> Padding for [u8; N] {}
 
 unsafe impl<T: Zeroable, P: Padding> Zeroable for Padded<T, P> {}

@@ -40,8 +40,8 @@ pub(super) fn parse_uniform_attr(attr: &syn::Attribute) -> syn::Result<Option<Un
                 })?;
 
                 layout = find_unique(
-                    args.iter().filter_map(|arg| match arg {
-                        UniformArgument::Layout(layout) => Some(*layout),
+                    args.iter().map(|arg| match arg {
+                        UniformArgument::Layout(layout) => *layout,
                     }),
                     attr,
                     "Only one layout attribute expected",

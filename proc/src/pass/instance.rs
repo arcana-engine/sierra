@@ -19,25 +19,29 @@ pub(super) fn generate(input: &Input) -> TokenStream {
             let initial_layout = initial_layout(&a.load_op);
             let check_final_layout = final_layout(&a.store_op).map(|final_layout| {
                 quote::quote!(else if a.final_layout != ::sierra::Layout::from(#final_layout) {
-                    tracing::debug!("Final layout is incompatible. Old {:?}, new {:?}", a.final_layout, #final_layout);
+                    ::sierra::tracing::debug!("Final layout is incompatible. Old {:?}, new {:?}", a.final_layout, #final_layout);
                     render_pass_compatible = false;
                 } )
             });
 
             quote::quote!(
                 let a = render_pass.info().attachments[#index];
-                if a.format != ::sierra::Attachment::format(&input.#member) {
-                    tracing::debug!("Format is incompatible. Old {:?}, new {:?}", a.format, ::sierra::Attachment::format(&input.#member));
-                    render_pass_compatible = false;
-                } else if let Some(samples) = ::sierra::Attachment::samples(&input.#member) {
-                    if a.samples != samples {
-                        tracing::debug!("Samples count is incompatible. Old {:?}, new {:?}", a.samples, ::sierra::Attachment::samples(&input.#member));
+
+                #[allow(clippy::cmp_owned)]
+                {
+                    if a.format != ::sierra::Attachment::format(&input.#member) {
+                        ::sierra::tracing::debug!("Format is incompatible. Old {:?}, new {:?}", a.format, ::sierra::Attachment::format(&input.#member));
                         render_pass_compatible = false;
-                    }
-                } else if a.initial_layout != ::std::option::Option::map(#initial_layout, ::sierra::Layout::from) {
-                    tracing::debug!("Initial layout is incompatible. Old {:?}, new {:?}", a.initial_layout, ::std::option::Option::map(#initial_layout, ::sierra::Layout::from));
-                    render_pass_compatible = false;
-                } #check_final_layout
+                    } else if let Some(samples) = ::sierra::Attachment::samples(&input.#member) {
+                        if a.samples != samples {
+                            ::sierra::tracing::debug!("Samples count is incompatible. Old {:?}, new {:?}", a.samples, ::sierra::Attachment::samples(&input.#member));
+                            render_pass_compatible = false;
+                        }
+                    } else if a.initial_layout != ::std::option::Option::map(#initial_layout, ::sierra::Layout::from) {
+                        ::sierra::tracing::debug!("Initial layout is incompatible. Old {:?}, new {:?}", a.initial_layout, ::std::option::Option::map(#initial_layout, ::sierra::Layout::from));
+                        render_pass_compatible = false;
+                    } #check_final_layout
+                }
             )
         })
         .collect::<TokenStream>();
@@ -235,9 +239,9 @@ pub(super) fn generate(input: &Input) -> TokenStream {
 
                 if !render_pass_compatible {
                     if self.render_pass.is_some() {
-                        tracing::debug!("Recreating render pass");
+                        ::sierra::tracing::debug!("Recreating render pass");
                     } else {
-                        tracing::debug!("Creating render pass");
+                        ::sierra::tracing::debug!("Creating render pass");
                     }
 
                     self.render_pass = None;
@@ -266,7 +270,7 @@ pub(super) fn generate(input: &Input) -> TokenStream {
                         true
                     }) {
                         Some(fb) => {
-                            tracing::trace!("Found framebuffer with compatible attachments");
+                            ::sierra::tracing::trace!("Found framebuffer with compatible attachments");
 
                             ::sierra::FramebufferInfo {
                                 render_pass: ::std::clone::Clone::clone(render_pass),
@@ -275,7 +279,7 @@ pub(super) fn generate(input: &Input) -> TokenStream {
                             }
                         }
                         None => {
-                            tracing::debug!("Framebuffer with compatible attachments not found");
+                            ::sierra::tracing::debug!("Framebuffer with compatible attachments not found");
 
                             let mut fb_extent = ::sierra::Extent2d { width: !0, height: !0 };
                             #find_fb_extent
@@ -305,13 +309,13 @@ pub(super) fn generate(input: &Input) -> TokenStream {
                         true
                     }) {
                         Some(fb_index) => {
-                            tracing::trace!("Found framebuffer with compatible attachments");
+                            ::sierra::tracing::trace!("Found framebuffer with compatible attachments");
 
                             let fb = self.framebuffers.remove(fb_index);
                             self.framebuffers.push(fb);
                         },
                         None => {
-                            tracing::debug!("Framebuffer with compatible attachments not found");
+                            ::sierra::tracing::debug!("Framebuffer with compatible attachments not found");
 
                             let mut fb_extent = ::sierra::Extent2d { width: !0, height: !0 };
                             #find_fb_extent

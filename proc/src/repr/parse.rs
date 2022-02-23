@@ -46,8 +46,8 @@ pub(super) fn parse(
 
     let layouts = attrs
         .iter()
-        .filter_map(|attr| match attr {
-            ReprAttribute::Layout(layout) => Some(*layout),
+        .map(|attr| match attr {
+            ReprAttribute::Layout(layout) => *layout,
         })
         .collect::<Vec<_>>();
 
