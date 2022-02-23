@@ -9,7 +9,9 @@ mod parse;
 mod sampler;
 mod uniform;
 
-use {proc_macro2::TokenStream, quote::TokenStreamExt as _, std::collections::HashSet};
+use proc_macro2::TokenStream;
+
+use crate::kw;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BindingFlag {
@@ -18,38 +20,36 @@ pub enum BindingFlag {
     UpdateUnused,
 }
 
-fn binding_flag_tokens(stage: BindingFlag) -> TokenStream {
-    match stage {
-        BindingFlag::UpdateAfterBind => {
-            quote::quote!(::sierra::DescriptorBindingFlags::UPDATE_AFTER_BIND)
+impl BindingFlag {
+    pub fn flag(&self) -> u32 {
+        match self {
+            BindingFlag::UpdateAfterBind => 0x00000001,
+            BindingFlag::PartiallyBound => 0x00000002,
+            BindingFlag::UpdateUnused => 0x00000004,
         }
-        BindingFlag::PartiallyBound => {
-            quote::quote!(::sierra::DescriptorBindingFlags::PARTIALLY_BOUND)
-        }
-        BindingFlag::UpdateUnused => {
-            quote::quote!(::sierra::DescriptorBindingFlags::UPDATE_UNUSED_WHILE_PENDING)
+    }
+
+    fn parse(stream: syn::parse::ParseStream) -> syn::Result<Self> {
+        let lookahead1 = stream.lookahead1();
+        if lookahead1.peek(kw::UpdateAfterBind) {
+            stream.parse::<kw::UpdateAfterBind>()?;
+            Ok(BindingFlag::UpdateAfterBind)
+        } else if lookahead1.peek(kw::PartiallyBound) {
+            stream.parse::<kw::PartiallyBound>()?;
+            Ok(BindingFlag::PartiallyBound)
+        } else if lookahead1.peek(kw::UpdateUnused) {
+            stream.parse::<kw::UpdateUnused>()?;
+            Ok(BindingFlag::UpdateUnused)
+        } else {
+            Err(lookahead1.error())
         }
     }
 }
 
-fn combined_binding_flags(flags: impl IntoIterator<Item = BindingFlag>) -> TokenStream {
-    let mut flags = flags.into_iter();
-    if let Some(head) = flags.next() {
-        let or = proc_macro2::Punct::new('|', proc_macro2::Spacing::Alone);
-        let mut stream = binding_flag_tokens(head);
-        for stage in flags {
-            stream.append(or.clone());
-            stream.extend(binding_flag_tokens(stage));
-        }
-        stream
-    } else {
-        quote::quote!(::sierra::DescriptorBindingFlags::empty())
-    }
-}
-
-fn combined_binding_flags_dedup(flags: impl IntoIterator<Item = BindingFlag>) -> TokenStream {
-    let flags = flags.into_iter().collect::<HashSet<_>>();
-    combined_binding_flags(flags)
+fn combined_binding_flags(flags: impl IntoIterator<Item = BindingFlag>) -> u32 {
+    flags
+        .into_iter()
+        .fold(0, |flags, binding| flags | binding.flag())
 }
 
 pub fn descriptors(
@@ -67,5 +67,24 @@ pub fn descriptors(
                 .collect::<proc_macro2::TokenStream>()
         }
         Err(err) => err.into_compile_error(),
+    }
+}
+
+pub fn binding_flags(tokens: proc_macro::TokenStream) -> TokenStream {
+    let result = syn::parse::Parser::parse(
+        |stream: syn::parse::ParseStream| {
+            stream.parse_terminated::<_, syn::Token![,]>(|stream: syn::parse::ParseStream| {
+                BindingFlag::parse(stream)
+            })
+        },
+        tokens,
+    );
+
+    match result {
+        Err(err) => err.into_compile_error(),
+        Ok(flags) => {
+            let flags = combined_binding_flags(flags);
+            quote::quote!(#flags)
+        }
     }
 }

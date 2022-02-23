@@ -11,6 +11,8 @@ pub use {
     },
 };
 
+use bytemuck::Pod;
+
 use crate::{descriptor::DescriptorSetLayout, shader::ShaderStageFlags, Device, OutOfMemory};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -47,10 +49,32 @@ pub trait TypedPipelineLayout {
     fn bind_ray_tracing<'a, D>(&'a self, updated_descriptors: &D, encoder: &mut EncoderCommon<'a>)
     where
         D: UpdatedPipelineDescriptors<Self>;
+
+    fn push_constants<'a, P>(&'a self, push_constants: &P, encoder: &mut EncoderCommon<'a>)
+    where
+        P: PipelinePushConstants<Self>;
 }
 
 pub trait PipelineInput {
     type Layout: TypedPipelineLayout;
 
     fn layout(device: &Device) -> Result<Self::Layout, OutOfMemory>;
+}
+
+/// Extension trait for push constants, specifying stages, offset and size in the typed pipeline.
+///
+/// This trait is intended to be implemented by proc macro `#[pipeline]`
+/// for types marked as `#[push]`.
+pub trait PipelinePushConstants<P: ?Sized> {
+    /// Stage flags for which push constants are enabled.
+    const STAGES: ShaderStageFlags;
+
+    /// Offset of the instance of push constants.
+    const OFFSET: u32;
+
+    /// Shader repr type matching push constants layout.
+    type Repr: Pod;
+
+    /// Function to convert push constants into correct repr.
+    fn to_repr(&self) -> Self::Repr;
 }

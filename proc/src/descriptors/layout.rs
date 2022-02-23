@@ -1,10 +1,10 @@
 use {
     super::{
-        buffer, combined_binding_flags_dedup, image,
+        buffer, combined_binding_flags, image,
         instance::instance_type_name,
         parse::{Descriptor, DescriptorType, Input},
     },
-    crate::stage::{combined_stages_tokens, combined_stages_tokens_dedup},
+    crate::stage::combined_stages_flags,
     proc_macro2::TokenStream,
     std::convert::TryFrom as _,
 };
@@ -30,9 +30,8 @@ pub(super) fn generate(input: &Input) -> TokenStream {
         .collect::<Vec<_>>();
 
     if !input.uniforms.is_empty() {
-        let stages = combined_stages_tokens_dedup(
-            input.uniforms.iter().flat_map(|u| u.stages.iter().copied()),
-        );
+        let stages =
+            combined_stages_flags(input.uniforms.iter().flat_map(|u| u.stages.iter().copied()));
 
         let binding = u32::try_from(bindings.len()).expect("Too many descriptors");
         bindings.push(quote::quote!(
@@ -147,8 +146,8 @@ fn generate_layout_binding(descriptor: &Descriptor, binding: u32) -> TokenStream
         }
     };
 
-    let stages = combined_stages_tokens(descriptor.stages.iter().copied());
-    let flags = combined_binding_flags_dedup(descriptor.flags.iter().copied());
+    let stages = combined_stages_flags(descriptor.stages.iter().copied());
+    let flags = combined_binding_flags(descriptor.flags.iter().copied());
 
     let ty = &descriptor.field.ty;
 
@@ -157,8 +156,8 @@ fn generate_layout_binding(descriptor: &Descriptor, binding: u32) -> TokenStream
             binding: #binding,
             ty: ::sierra::DescriptorType::#desc_ty,
             count: <#ty as ::sierra::TypedDescriptorBinding>::COUNT,
-            stages: #stages,
-            flags: #flags,
+            stages: ::sierra::ShaderStageFlags::from_bits_truncate(#stages),
+            flags: ::sierra::DescriptorBindingFlags::from_bits_truncate(#flags),
         }
     )
 }

@@ -16,13 +16,14 @@ fn generate_uniform_struct(input: &Input) -> TokenStream {
         .iter()
         .map(|u| {
             let field_type = &u.field.ty;
+            let sierra_layout = u.uniform.layout.sierra_type();
 
             let val_ident = quote::format_ident!("val_{}", u.member);
             let pad_ident = quote::format_ident!("pad_{}", u.member);
 
-            let field_align_mask = quote::quote!(<#field_type as ::sierra::ShaderRepr<::sierra::Std140>>::ALIGN_MASK);
+            let field_align_mask = quote::quote!(<#field_type as ::sierra::ShaderRepr<#sierra_layout>>::ALIGN_MASK);
             let pad_size = quote::quote!(::sierra::pad_size(#field_align_mask, #last_offset));
-            let field_repr = quote::quote!(<#field_type as ::sierra::ShaderRepr<::sierra::Std140>>::Type);
+            let field_repr = quote::quote!(<#field_type as ::sierra::ShaderRepr<#sierra_layout>>::Type);
             let next_offset = quote::quote!(::sierra::next_offset(#field_align_mask, #last_offset, ::std::mem::size_of::<#field_repr>()));
 
             // let offset = last_offset.clone();
@@ -40,9 +41,10 @@ fn generate_uniform_struct(input: &Input) -> TokenStream {
         .map(|u| {
             let member = &u.member;
             let val_ident = quote::format_ident!("val_{}", u.member);
+            let sierra_layout = u.uniform.layout.sierra_type();
 
             quote::quote! {
-                ::sierra::ShaderRepr::<::sierra::Std140>::copy_to_repr(&input.#member, &mut self.#val_ident);
+                ::sierra::ShaderRepr::<#sierra_layout>::copy_to_repr(&input.#member, &mut self.#val_ident);
             }
         })
         .collect();
@@ -84,8 +86,8 @@ fn generate_uniform_struct(input: &Input) -> TokenStream {
             pub end_pad: [u8; #pad_size],
         }
 
-        unsafe impl ::sierra::Zeroable for #uniforms_ident {}
-        unsafe impl ::sierra::Pod for #uniforms_ident {}
+        unsafe impl ::sierra::bytemuck::Zeroable for #uniforms_ident {}
+        unsafe impl ::sierra::bytemuck::Pod for #uniforms_ident {}
 
         impl #uniforms_ident {
             fn copy_from_input(&mut self, input: &#ident) {

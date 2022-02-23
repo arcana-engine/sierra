@@ -22,7 +22,7 @@ proc-verbose-docs = ["sierra-proc/verbose-docs"]
 
 [dependencies]
 sierra-proc = { version = "=0.4.0", path = "proc" }
-layered-bitset = { version = "0.1.0" }
+bitsetium = { version = "0.0.2" }
 bitflags = "1.2"
 raw-window-handle = "0.4"
 serde = { version = "1.0", optional = true, features = ["derive", "rc"] }
@@ -31,7 +31,7 @@ smallvec = { version = "1.5", features = ["const_new"] }
 thiserror = "1.0"
 tracing = "0.1"
 ordered-float = "2.0"
-bytemuck = "1.4"
+bytemuck = { version = "1.4", features = ["derive"] }
 erupt = { version = "0.22", optional = true, features = ["loading"] }
 gpu-alloc = { version = "0.5", optional = true, features = ["tracing"] }
 gpu-descriptor = { version = "0.2", optional = true, features = ["tracing"] }

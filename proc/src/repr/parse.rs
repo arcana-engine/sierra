@@ -1,41 +1,58 @@
-pub struct Field {
-    pub ident: syn::Ident,
-    pub ty: syn::Type,
-}
+use crate::{kw, StructLayout};
 
-pub struct Input {
-    pub fields: Vec<Field>,
+pub(super) struct Input {
     pub item_struct: syn::ItemStruct,
+    pub layouts: Vec<StructLayout>,
 }
 
-pub fn parse(attr: proc_macro::TokenStream, item: proc_macro::TokenStream) -> syn::Result<Input> {
-    if !attr.is_empty() {
-        return Err(syn::Error::new_spanned(
-            proc_macro2::TokenStream::from(attr),
-            "#[shader_repr] attribute does not accept arguments",
-        ));
-    }
+enum ReprAttribute {
+    Layout(StructLayout),
+}
 
+pub(super) fn parse(
+    attr: proc_macro::TokenStream,
+    item: proc_macro::TokenStream,
+) -> syn::Result<Input> {
     let item_struct = syn::parse::<syn::ItemStruct>(item)?;
 
-    let fields = item_struct
-        .fields
-        .iter()
-        .map(|field| {
-            let ident = field
-                .ident
-                .clone()
-                .ok_or_else(|| syn::Error::new_spanned(field, "Tuple structs are not supported"))?;
+    match &item_struct.fields {
+        syn::Fields::Unit => {}
+        syn::Fields::Named(_) => {}
+        syn::Fields::Unnamed(fields) => {
+            return Err(syn::Error::new_spanned(
+                fields,
+                "Tuple structs are not supported",
+            ));
+        }
+    }
 
-            Ok(Field {
-                ty: field.ty.clone(),
-                ident,
+    let attrs = syn::parse::Parser::parse(
+        |stream: syn::parse::ParseStream| {
+            stream.parse_terminated::<_, syn::Token![,]>(|stream: syn::parse::ParseStream| {
+                let lookahead1 = stream.lookahead1();
+                if lookahead1.peek(kw::std140) {
+                    stream.parse::<kw::std140>()?;
+                    Ok(ReprAttribute::Layout(StructLayout::Std140))
+                } else if lookahead1.peek(kw::std430) {
+                    stream.parse::<kw::std430>()?;
+                    Ok(ReprAttribute::Layout(StructLayout::Std430))
+                } else {
+                    Err(lookahead1.error())
+                }
             })
+        },
+        attr,
+    )?;
+
+    let layouts = attrs
+        .iter()
+        .filter_map(|attr| match attr {
+            ReprAttribute::Layout(layout) => Some(*layout),
         })
-        .collect::<Result<Vec<_>, syn::Error>>()?;
+        .collect::<Vec<_>>();
 
     Ok(Input {
-        fields,
         item_struct,
+        layouts,
     })
 }

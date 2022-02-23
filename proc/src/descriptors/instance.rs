@@ -163,7 +163,7 @@ pub(super) fn generate(input: &Input) -> TokenStream {
         quote::quote!(
             let write_uniforms;
             if elem.uniforms_buffer.is_none() {
-                let mut uniforms: #uniforms_ident = ::sierra::Zeroable::zeroed();
+                let mut uniforms: #uniforms_ident = ::sierra::bytemuck::Zeroable::zeroed();
                 uniforms.copy_from_input(input);
                 let buffer = device.create_buffer(::sierra::BufferInfo {
                     align: 255,

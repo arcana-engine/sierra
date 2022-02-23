@@ -1,4 +1,4 @@
-use crate::find_unique;
+use crate::{find_unique, kw};
 
 #[derive(Clone)]
 pub struct Buffer {
@@ -30,18 +30,25 @@ pub(super) fn parse_buffer_attr(attr: &syn::Attribute) -> syn::Result<Option<Buf
         return Ok(None);
     }
 
-    let args = attr.parse_args_with(|stream: syn::parse::ParseStream<'_>| {
-        if stream.is_empty() {
-            Ok(Default::default())
-        } else {
-            let args = stream.parse_terminated::<_, syn::Token![,]>(|stream| {
-                let ident = stream.parse::<syn::Ident>()?;
+    let mut texel = false;
+    let mut kind = Kind::Uniform;
 
-                match ident {
-                    ident if ident == "uniform" => Ok(Argument::Uniform),
-                    ident if ident == "storage" => Ok(Argument::Storage),
-                    ident if ident == "texel" => Ok(Argument::Texel),
-                    _ => Err(stream.error(format!("Unrecognized argument '{}'", ident))),
+    if !attr.tokens.is_empty() {
+        let args = attr.parse_args_with(|stream: syn::parse::ParseStream<'_>| {
+            let args = stream.parse_terminated::<_, syn::Token![,]>(|stream| {
+                let lookahead1 = stream.lookahead1();
+
+                if lookahead1.peek(kw::uniform) {
+                    stream.parse::<kw::uniform>()?;
+                    Ok(Argument::Uniform)
+                } else if lookahead1.peek(kw::storage) {
+                    stream.parse::<kw::storage>()?;
+                    Ok(Argument::Storage)
+                } else if lookahead1.peek(kw::texel) {
+                    stream.parse::<kw::texel>()?;
+                    Ok(Argument::Texel)
+                } else {
+                    Err(lookahead1.error())
                 }
             })?;
 
@@ -50,31 +57,29 @@ pub(super) fn parse_buffer_attr(attr: &syn::Attribute) -> syn::Result<Option<Buf
             } else {
                 Ok(args)
             }
-        }
-    })?;
+        })?;
 
-    let texel = find_unique(
-        args.iter().filter_map(|arg| match arg {
-            Argument::Texel => Some(()),
-            _ => None,
-        }),
-        attr,
-        "Expected at most one `uniform` or `storage` argument",
-    )?;
+        texel = find_unique(
+            args.iter().filter_map(|arg| match arg {
+                Argument::Texel => Some(()),
+                _ => None,
+            }),
+            attr,
+            "Expected at most one `uniform` or `storage` argument",
+        )?
+        .is_some();
 
-    let kind = find_unique(
-        args.iter().filter_map(|arg| match arg {
-            Argument::Uniform => Some(Kind::Uniform),
-            Argument::Storage => Some(Kind::Storage),
-            _ => None,
-        }),
-        attr,
-        "Expected at most one `uniform` or `storage` argument",
-    )?
-    .unwrap_or(Kind::Uniform);
+        kind = find_unique(
+            args.iter().filter_map(|arg| match arg {
+                Argument::Uniform => Some(Kind::Uniform),
+                Argument::Storage => Some(Kind::Storage),
+                _ => None,
+            }),
+            attr,
+            "Expected at most one `uniform` or `storage` argument",
+        )?
+        .unwrap_or(Kind::Uniform);
+    }
 
-    Ok(Some(Buffer {
-        kind,
-        texel: texel.is_some(),
-    }))
+    Ok(Some(Buffer { kind, texel }))
 }

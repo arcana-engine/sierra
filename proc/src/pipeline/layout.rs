@@ -1,4 +1,7 @@
-use {super::parse::Input, proc_macro2::TokenStream, std::convert::TryFrom};
+use {
+    super::parse::Input, crate::stage::combined_stages_flags, proc_macro2::TokenStream,
+    std::convert::TryFrom,
+};
 
 pub(super) fn layout_type_name(input: &Input) -> syn::Ident {
     quote::format_ident!("{}Layout", input.item_struct.ident)
@@ -68,6 +71,43 @@ pub(super) fn generate(input: &Input) -> TokenStream {
         })
         .collect::<TokenStream>();
 
+    let (_, push_constants_descs, push_constants_impls) = input
+        .push_constants
+        .iter()
+        .fold((quote::quote!(0), quote::quote!{}, quote::quote!{}), |(mut offset, mut desc, mut impls), push_constants| {
+            let field_type = &push_constants.ty;
+            let sierra_layout = push_constants.layout.sierra_type();
+            let stages = combined_stages_flags(push_constants.stages.iter().copied());
+
+            let field_align_mask = quote::quote!(<#field_type as ::sierra::ShaderRepr<#sierra_layout>>::ALIGN_MASK);
+            let this_offset = quote::quote!(::sierra::align_offset(#field_align_mask, #offset));
+            let field_repr = quote::quote!(<#field_type as ::sierra::ShaderRepr<#sierra_layout>>::Type);
+
+            offset = quote::quote!(::sierra::next_offset(#field_align_mask, #offset, ::sierra::size_of::<#field_repr>()));
+
+            desc.extend(quote::quote!(
+                ::sierra::PushConstant {
+                    stages: ::sierra::ShaderStageFlags::from_bits_truncate(#stages),
+                    offset: #this_offset as u32,
+                    size: ::std::mem::size_of::<#field_repr>() as u32,
+                },
+            ));
+            
+            impls.extend(quote::quote!(
+                impl ::sierra::PipelinePushConstants<#layout_ident> for #field_type {
+                    const STAGES: ::sierra::ShaderStageFlags = ::sierra::ShaderStageFlags::from_bits_truncate(#stages);
+                    const OFFSET: u32 = #this_offset as u32;
+
+                    type Repr = #field_repr;
+
+                    fn to_repr(&self) -> #field_repr {
+                        <#field_type as ::sierra::ShaderRepr<#sierra_layout>>::to_repr(self)
+                    }
+                }
+            ));
+            (offset, desc, impls)
+        });
+
     let vis = &input.item_struct.vis;
     let ident = &input.item_struct.ident;
 
@@ -96,7 +136,7 @@ pub(super) fn generate(input: &Input) -> TokenStream {
 
                 let pipeline_layout = device.create_pipeline_layout(::sierra::PipelineLayoutInfo {
                     sets: ::std::vec![#(#raw_set_layouts),*],
-                    push_constants: ::std::vec::Vec::new(),
+                    push_constants: ::std::vec![#push_constants_descs],
                 })?;
 
                 Ok(#layout_ident {
@@ -150,6 +190,18 @@ pub(super) fn generate(input: &Input) -> TokenStream {
                     &[],
                 )
             }
+
+            fn push_constants<'a, P>(&'a self, push_constants: &P, encoder: &mut ::sierra::EncoderCommon<'a>)
+            where
+                P: ::sierra::PipelinePushConstants<Self>,
+            {
+                encoder.push_constants_pod(
+                    &self.pipeline_layout,
+                    P::STAGES,
+                    P::OFFSET,
+                    encoder.scope().to_scope([P::to_repr(push_constants)])
+                );
+            }
         }
 
         impl ::sierra::TypedPipelineLayout for #layout_ident {
@@ -181,9 +233,17 @@ pub(super) fn generate(input: &Input) -> TokenStream {
             {
                 self.bind_ray_tracing(updated_descriptors, encoder);
             }
+
+            fn push_constants<'a, P>(&'a self, push_constants: &P, encoder: &mut ::sierra::EncoderCommon<'a>)
+            where
+                P: ::sierra::PipelinePushConstants<Self>,
+            {
+                self.push_constants(push_constants, encoder);
+            }
         }
 
         #pipeline_descriptors
 
+        #push_constants_impls
     )
 }

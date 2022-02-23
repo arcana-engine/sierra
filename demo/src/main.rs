@@ -10,10 +10,19 @@ pub struct Descriptors {
     pub views: sierra::BufferView,
 }
 
+#[sierra::shader_repr(std140)]
+struct Foo {
+    foo: u32,
+    bar: f32,
+}
+
 #[sierra::pipeline]
 pub struct Pipeline {
+    #[set]
     descriptors: Descriptors,
-    sparse: sierra::SparseDescriptorSet<sierra::SampledImageDescriptor, 32>,
+
+    #[push(std430)]
+    foo: Foo,
 }
 
 #[sierra::pass]
@@ -104,6 +113,9 @@ fn fs_main() -> [[location(0)]] vec4<f32> {
 
                 render_pass_encoder
                     .bind_dynamic_graphics_pipeline(&mut graphics_pipeline, &device)?;
+
+                render_pass_encoder.push_constants(&pipeline_layout, &Foo { foo: 0, bar: 1.0 });
+
                 render_pass_encoder.draw(0..3, 0..1);
                 drop(render_pass_encoder);
 

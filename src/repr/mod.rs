@@ -7,17 +7,20 @@ mod pad;
 mod scalar;
 mod vec;
 
-pub use {
-    self::{mat::*, native::*, pad::*, scalar::*, vec::*},
-    bytemuck::{Pod, Zeroable},
-};
+use bytemuck::{Pod, Zeroable};
+
+pub use self::{mat::*, native::*, pad::*, scalar::*, vec::*};
 
 pub const fn pad_size(align_mask: usize, offset: usize) -> usize {
     align_mask - ((offset + align_mask) & align_mask)
 }
 
+pub const fn align_offset(align_mask: usize, offset: usize) -> usize {
+    (offset + align_mask) & !align_mask
+}
+
 pub const fn next_offset(align_mask: usize, offset: usize, size: usize) -> usize {
-    size + offset + pad_size(align_mask, offset)
+    size + align_offset(align_mask, offset)
 }
 
 /// Default layout for [`Repr`].
@@ -42,6 +45,12 @@ pub trait ShaderRepr<T = Std140> {
 
     /// Copy data in this type into its representation.
     fn copy_to_repr(&self, repr: &mut Self::Type);
+
+    fn to_repr(&self) -> Self::Type {
+        let mut repr = Zeroable::zeroed();
+        self.copy_to_repr(&mut repr);
+        repr
+    }
 }
 
 impl<T> ShaderRepr<Std140> for T

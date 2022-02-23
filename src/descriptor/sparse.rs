@@ -1,12 +1,14 @@
+use crate::{DescriptorSetWrite, UpdateDescriptorSet};
+
 use {
     super::{
         DescriptorBindingFlags, DescriptorSet, DescriptorSetInfo, DescriptorSetLayout,
         DescriptorSetLayoutBinding, DescriptorSetLayoutFlags, DescriptorSetLayoutInfo,
         DescriptorsAllocationError, DescriptorsInput, DescriptorsInstance, DescriptorsLayout,
-        TypedDescriptor, UpdatedDescriptors, WriteDescriptorSet,
+        TypedDescriptor, UpdatedDescriptors,
     },
     crate::{encode::Encoder, shader::ShaderStageFlags, Device, OutOfMemory},
-    layered_bitset::{BitSet, BitSet4096, BitSetMut},
+    bitsetium::{BitEmpty, BitSearch, BitSet, BitSetLimit, BitTest, Bits4096},
     std::{
         collections::hash_map::{Entry, HashMap},
         hash::Hash,
@@ -79,7 +81,7 @@ pub struct SparseDescriptorsInstance<T: TypedDescriptor> {
     indices: HashMap<T::Descriptor, u32>,
 
     upper_bounds: u32,
-    unused: BitSet4096,
+    unused: Bits4096,
 
     updates: Vec<T::Descriptor>,
 }
@@ -103,39 +105,47 @@ where
 {
     type Updated = SparseDescriptorSet;
 
-    fn update<'a>(
-        &'a mut self,
+    fn update<'a, 'b: 'a>(
+        &'b mut self,
         _input: &SparseDescriptors<T, CAP, STAGES>,
         device: &Device,
-        writes: &mut impl Extend<WriteDescriptorSet<'a>>,
         _encoder: &mut Encoder<'a>,
-    ) -> Result<&'a SparseDescriptorSet, DescriptorsAllocationError> {
+    ) -> Result<&'b SparseDescriptorSet, DescriptorsAllocationError> {
         if self.set.is_none() {
             self.set = Some(SparseDescriptorSet {
-                raw: device.create_descriptor_set(DescriptorSetInfo {
-                    layout: self.layout.clone(),
-                })?,
+                raw: device
+                    .create_descriptor_set(DescriptorSetInfo {
+                        layout: self.layout.clone(),
+                    })?
+                    .share(),
             });
         }
 
         let set = self.set.as_mut().unwrap();
         let indices = &self.indices;
 
+        let mut writes = smallvec::SmallVec::<[_; 32]>::new();
+
         writes.extend(self.updates.drain(..).filter_map(|descriptor| {
             let (descriptor, idx) = indices.get_key_value(&descriptor)?;
 
-            Some(WriteDescriptorSet {
-                set: unsafe {
-                    // # Safety
-                    //
-                    // None
-                    set.raw.as_writtable()
-                },
+            Some(DescriptorSetWrite {
                 binding: 0,
                 element: *idx,
                 descriptors: T::descriptors(std::slice::from_ref(descriptor)),
             })
         }));
+
+        device.update_descriptor_sets(&mut [UpdateDescriptorSet {
+            set: unsafe {
+                // # Safety
+                //
+                // None
+                set.raw.as_writtable()
+            },
+            writes: &writes,
+            copies: &[],
+        }]);
 
         Ok(set)
     }
@@ -156,7 +166,7 @@ where
             set: None,
             upper_bounds: 0,
             indices: HashMap::new(),
-            unused: BitSet4096::default(),
+            unused: Bits4096::empty(),
             updates: Vec::with_capacity(cap as usize),
         }
     }
@@ -173,9 +183,9 @@ where
     {
         match self.indices.entry(descriptor.clone()) {
             Entry::Occupied(entry) => *entry.get(),
-            Entry::Vacant(entry) => match self.unused.find_set(0) {
+            Entry::Vacant(entry) => match self.unused.find_first_set(0) {
                 None => {
-                    if self.upper_bounds == BitSet4096::UPPER_BOUND {
+                    if self.upper_bounds == Bits4096::MAX_SET_INDEX as u32 {
                         panic!("Too many resources inserted");
                     }
                     self.updates.push(descriptor.clone());
@@ -183,17 +193,11 @@ where
                     self.upper_bounds += 1;
                     self.upper_bounds - 1
                 }
-                Some(idx) => *entry.insert(idx),
+                Some(idx) => *entry.insert(idx as u32),
             },
         }
     }
 
-    /// Returns index for specified resource inside this array.
-    /// Inserts resource if not in array yet.
-    ///
-    /// # Panics
-    ///
-    ///
     pub fn remove(&mut self, descriptor: T::Descriptor) -> bool
     where
         T::Descriptor: Hash + Eq,
@@ -204,7 +208,7 @@ where
                 if *idx == self.upper_bounds {
                     self.upper_bounds -= 1;
 
-                    while self.upper_bounds > 0 && self.unused.get(self.upper_bounds - 1) {
+                    while self.upper_bounds > 0 && self.unused.test(self.upper_bounds - 1) {
                         self.unused.set(self.upper_bounds - 1, false);
                         debug_assert!(self.unused.find_set(self.upper_bounds - 1).is_none());
                         self.upper_bounds -= 1;

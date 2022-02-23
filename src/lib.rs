@@ -77,7 +77,7 @@ pub use sierra_proc::{descriptors, graphics_pipeline_desc, pass, pipeline, shade
 
 /// Re-exporting for code-gen.
 #[doc(hidden)]
-pub use {arrayvec, scoped_arena, smallvec};
+pub use {arrayvec, bytemuck, scoped_arena, smallvec};
 
 /// Image size is defined to `u32` which is standard for graphics API of today.
 pub type ImageSize = u32;

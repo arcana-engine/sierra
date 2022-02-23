@@ -1,4 +1,5 @@
 pub use crate::backend::CommandBuffer;
+use crate::PipelinePushConstants;
 use {
     crate::{
         accel::AccelerationStructureBuildGeometryInfo,
@@ -382,7 +383,7 @@ impl<'a> EncoderCommon<'a> {
         layout.bind_ray_tracing(descriptors, self);
     }
 
-    pub fn push_constants<T>(
+    pub fn push_constants_pod<T>(
         &mut self,
         layout: &'a PipelineLayout,
         stages: ShaderStageFlags,
@@ -402,6 +403,13 @@ impl<'a> EncoderCommon<'a> {
                 data: cast_slice(data),
             },
         );
+    }
+
+    pub fn push_constants<P>(&mut self, layout: &'a P, constants: &'a impl PipelinePushConstants<P>)
+    where
+        P: TypedPipelineLayout,
+    {
+        layout.push_constants(constants, self);
     }
 }
 

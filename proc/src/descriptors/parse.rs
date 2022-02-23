@@ -1,20 +1,25 @@
-use {
-    super::{
-        acceleration_structure::{parse_acceleration_structure_attr, AccelerationStructure},
-        buffer::{parse_buffer_attr, Buffer},
-        image::{parse_image_attr, Image},
-        sampler::{parse_sampler_attr, Sampler},
-        uniform::parse_uniform_attr,
-        BindingFlag,
-    },
-    crate::{find_unique_attribute, stage::Stage, take_attributes},
-    std::convert::TryFrom as _,
-    syn::spanned::Spanned as _,
+use std::convert::TryFrom as _;
+
+use syn::spanned::Spanned as _;
+
+use crate::{
+    find_unique_attribute,
+    stage::{take_stages, Stage},
+    take_attributes,
 };
 
-pub struct Input {
+use super::{
+    acceleration_structure::{parse_acceleration_structure_attr, AccelerationStructure},
+    buffer::{parse_buffer_attr, Buffer},
+    image::{parse_image_attr, Image},
+    sampler::{parse_sampler_attr, Sampler},
+    uniform::{parse_uniform_attr, Uniform},
+    BindingFlag,
+};
+
+pub(super) struct Input {
     pub descriptors: Vec<Descriptor>,
-    pub uniforms: Vec<Uniform>,
+    pub uniforms: Vec<UniformField>,
     pub item_struct: syn::ItemStruct,
 }
 
@@ -27,6 +32,7 @@ pub struct Descriptor {
 }
 
 impl Descriptor {
+    #[inline]
     fn validate(&self, item_struct: &syn::ItemStruct) -> syn::Result<()> {
         match &self.desc_ty {
             DescriptorType::Sampler(args) => args.validate(item_struct),
@@ -37,16 +43,17 @@ impl Descriptor {
     }
 }
 
-pub struct Uniform {
+pub(super) struct UniformField {
     pub stages: Vec<Stage>,
     pub field: syn::Field,
     pub member: syn::Member,
+    pub uniform: Uniform,
 }
 
-impl Uniform {
+impl UniformField {
     #[inline]
-    fn validate(&self, _item_struct: &syn::ItemStruct) -> syn::Result<()> {
-        Ok(())
+    fn validate(&self, item_struct: &syn::ItemStruct) -> syn::Result<()> {
+        self.uniform.validate(item_struct)
     }
 }
 
@@ -57,7 +64,10 @@ pub enum DescriptorType {
     AccelerationStructure(AccelerationStructure),
 }
 
-pub fn parse(attr: proc_macro::TokenStream, item: proc_macro::TokenStream) -> syn::Result<Input> {
+pub(super) fn parse(
+    attr: proc_macro::TokenStream,
+    item: proc_macro::TokenStream,
+) -> syn::Result<Input> {
     if !attr.is_empty() {
         return Err(syn::Error::new_spanned(
             proc_macro2::TokenStream::from(attr),
@@ -107,11 +117,11 @@ enum FieldAttribute {
     Image(Image),
     Buffer(Buffer),
     AccelerationStructure(AccelerationStructure),
-    Uniform,
+    Uniform(Uniform),
 }
 
 enum Field {
-    Uniform(Uniform),
+    Uniform(UniformField),
     Descriptor(Descriptor),
 }
 
@@ -124,53 +134,16 @@ fn parse_input_field(field: &mut syn::Field, field_index: u32) -> syn::Result<Op
 
     match ty {
         Some(ty) => {
-            let stages: Vec<_> =
-                take_attributes(&mut field.attrs, |attr| match attr.path.get_ident() {
-                    Some(ident) if ident == "stages" => attr
-                        .parse_args_with(|stream: syn::parse::ParseStream<'_>| {
-                            let stages = stream.parse_terminated::<_, syn::Token![,]>(
-                                |stream| match stream.parse::<syn::Ident>()? {
-                                    i if i == "Vertex" => Ok(Stage::Vertex),
-                                    i if i == "TessellationControl" => {
-                                        Ok(Stage::TessellationControl)
-                                    }
-                                    i if i == "TessellationEvaluation" => {
-                                        Ok(Stage::TessellationEvaluation)
-                                    }
-                                    i if i == "Geometry" => Ok(Stage::Geometry),
-                                    i if i == "Fragment" => Ok(Stage::Fragment),
-                                    i if i == "Compute" => Ok(Stage::Compute),
-                                    i if i == "Raygen" => Ok(Stage::Raygen),
-                                    i if i == "AnyHit" => Ok(Stage::AnyHit),
-                                    i if i == "ClosestHit" => Ok(Stage::ClosestHit),
-                                    i if i == "Miss" => Ok(Stage::Miss),
-                                    i if i == "Intersection" => Ok(Stage::Intersection),
-                                    i => Err(stream.error(format!("Unrecognized stage `{}`", i))),
-                                },
-                            )?;
-                            Ok(stages)
-                        })
-                        .map(Some),
-                    _ => Ok(None),
-                })?
-                .into_iter()
-                .flatten()
-                .collect();
+            let stages = take_stages(&mut field.attrs)?;
 
-            let flags: Vec<_> = if matches!(ty, FieldAttribute::Uniform) {
+            let flags: Vec<_> = if matches!(ty, FieldAttribute::Uniform(_)) {
                 Vec::new()
             } else {
                 take_attributes(&mut field.attrs, |attr| match attr.path.get_ident() {
                     Some(ident) if ident == "flags" => attr
                         .parse_args_with(|stream: syn::parse::ParseStream<'_>| {
-                            let stages = stream.parse_terminated::<_, syn::Token![,]>(
-                                |stream| match stream.parse::<syn::Ident>()? {
-                                    i if i == "UpdateAfterBind" => Ok(BindingFlag::UpdateAfterBind),
-                                    i if i == "PartiallyBound" => Ok(BindingFlag::PartiallyBound),
-                                    i if i == "UpdateUnused" => Ok(BindingFlag::UpdateUnused),
-                                    i => Err(stream.error(format!("Unrecognized flags `{}`", i))),
-                                },
-                            )?;
+                            let stages =
+                                stream.parse_terminated::<_, syn::Token![,]>(BindingFlag::parse)?;
                             Ok(stages)
                         })
                         .map(Some),
@@ -218,10 +191,11 @@ fn parse_input_field(field: &mut syn::Field, field_index: u32) -> syn::Result<Op
                     member,
                     field: field.clone(),
                 }),
-                FieldAttribute::Uniform => Field::Uniform(Uniform {
+                FieldAttribute::Uniform(uniform) => Field::Uniform(UniformField {
                     field: field.clone(),
                     stages,
                     member,
+                    uniform,
                 }),
             }))
         }
@@ -236,6 +210,6 @@ fn parse_input_field_attr(attr: &syn::Attribute) -> syn::Result<Option<FieldAttr
     on_first_ok!(
         parse_acceleration_structure_attr(attr)?.map(FieldAttribute::AccelerationStructure)
     );
-    on_first_ok!(parse_uniform_attr(attr)?.map(|_| FieldAttribute::Uniform));
+    on_first_ok!(parse_uniform_attr(attr)?.map(FieldAttribute::Uniform));
     Ok(None)
 }

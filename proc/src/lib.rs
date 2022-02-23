@@ -17,6 +17,28 @@ mod pipeline;
 mod repr;
 mod stage;
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum StructLayout {
+    Std140,
+    Std430,
+}
+
+impl StructLayout {
+    pub fn name(&self) -> &'static str {
+        match self {
+            StructLayout::Std140 => "Std140",
+            StructLayout::Std430 => "Std430",
+        }
+    }
+
+    pub fn sierra_type(&self) -> proc_macro2::TokenStream {
+        match self {
+            StructLayout::Std140 => quote::quote!(::sierra::Std140),
+            StructLayout::Std430 => quote::quote!(::sierra::Std430),
+        }
+    }
+}
+
 #[proc_macro_attribute]
 pub fn descriptors(
     attr: proc_macro::TokenStream,
@@ -52,6 +74,16 @@ pub fn pass(
 #[proc_macro]
 pub fn graphics_pipeline_desc(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     graphics_pipeline::graphics_pipeline_desc(item).into()
+}
+
+#[proc_macro]
+pub fn shader_stages(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    stage::shader_stages(tokens).into()
+}
+
+#[proc_macro]
+pub fn binding_flags(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    descriptors::binding_flags(tokens).into()
 }
 
 fn take_attributes<T>(
@@ -106,31 +138,17 @@ fn find_unique_attribute<T>(
     }
 }
 
-// fn get_unique_attribute<T>(
-//     attrs: &mut Vec<syn::Attribute>,
-//     mut f: impl FnMut(&syn::Attribute) -> syn::Result<Option<T>>,
-//     spanned: &impl quote::ToTokens,
-//     msg: impl std::fmt::Display,
-// ) -> syn::Result<T> {
-//     let mut found = None;
-//     for (index, attr) in attrs.iter().enumerate() {
-//         if let Some(v) = f(attr)? {
-//             if found.is_none() {
-//                 found = Some((index, v));
-//             } else {
-//                 return Err(syn::Error::new_spanned(attr, msg));
-//             }
-//         }
-//     }
-
-//     match found {
-//         Some((i, v)) => {
-//             attrs.remove(i);
-//             Ok(v)
-//         }
-//         None => Err(syn::Error::new_spanned(spanned, msg)),
-//     }
-// }
+fn get_unique_attribute<T>(
+    attrs: &mut Vec<syn::Attribute>,
+    f: impl FnMut(&syn::Attribute) -> syn::Result<Option<T>>,
+    spanned: &impl quote::ToTokens,
+    msg: impl std::fmt::Display,
+) -> syn::Result<T> {
+    match find_unique_attribute(attrs, f, &msg)? {
+        Some(v) => Ok(v),
+        None => Err(syn::Error::new_spanned(spanned, msg)),
+    }
+}
 
 fn find_unique<I>(
     iter: I,
@@ -210,4 +228,33 @@ fn validate_member(member: &syn::Member, item_struct: &syn::ItemStruct) -> syn::
             "Unexpected member reference for unit-struct",
         )),
     }
+}
+
+mod kw {
+    syn::custom_keyword!(sampled);
+    syn::custom_keyword!(uniform);
+    syn::custom_keyword!(storage);
+    syn::custom_keyword!(texel);
+    syn::custom_keyword!(subpass);
+    syn::custom_keyword!(color);
+    syn::custom_keyword!(depth);
+    syn::custom_keyword!(clear);
+    syn::custom_keyword!(load);
+    syn::custom_keyword!(store);
+    syn::custom_keyword!(std140);
+    syn::custom_keyword!(std430);
+    syn::custom_keyword!(Vertex);
+    syn::custom_keyword!(TessellationControl);
+    syn::custom_keyword!(TessellationEvaluation);
+    syn::custom_keyword!(Geometry);
+    syn::custom_keyword!(Fragment);
+    syn::custom_keyword!(Compute);
+    syn::custom_keyword!(Raygen);
+    syn::custom_keyword!(AnyHit);
+    syn::custom_keyword!(ClosestHit);
+    syn::custom_keyword!(Miss);
+    syn::custom_keyword!(Intersection);
+    syn::custom_keyword!(UpdateAfterBind);
+    syn::custom_keyword!(PartiallyBound);
+    syn::custom_keyword!(UpdateUnused);
 }

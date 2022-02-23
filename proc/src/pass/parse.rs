@@ -1,8 +1,8 @@
-use {
-    crate::{find_unique, find_unique_attribute, take_attributes, validate_member},
-    std::{collections::HashSet, convert::TryFrom as _},
-    syn::{parse::ParseStream, spanned::Spanned as _},
-};
+use std::{collections::HashSet, convert::TryFrom as _};
+
+use syn::{parse::ParseStream, spanned::Spanned as _};
+
+use crate::{find_unique, find_unique_attribute, kw, take_attributes, validate_member};
 
 pub struct Input {
     pub item_struct: syn::ItemStruct,
@@ -185,19 +185,8 @@ pub fn parse(attr: proc_macro::TokenStream, item: proc_macro::TokenStream) -> sy
 }
 
 enum SubpassArg {
-    Color {
-        #[allow(dead_code)]
-        ident: syn::Ident,
-        #[allow(dead_code)]
-        assign: syn::Token![=],
-        member: syn::Member,
-    },
-    Depth {
-        ident: syn::Ident,
-        #[allow(dead_code)]
-        assign: syn::Token![=],
-        member: syn::Member,
-    },
+    Color { member: syn::Member },
+    Depth { kw: kw::depth, member: syn::Member },
 }
 
 fn parse_subpass_attr(attr: &syn::Attribute) -> syn::Result<Option<SubpassAttribute>> {
@@ -209,27 +198,19 @@ fn parse_subpass_attr(attr: &syn::Attribute) -> syn::Result<Option<SubpassAttrib
     let args = attr
         .parse_args_with(|stream: syn::parse::ParseStream<'_>| {
             stream.parse_terminated::<_, syn::Token![,]>(|stream: syn::parse::ParseStream<'_>| {
-                let ident = stream.parse::<syn::Ident>()?;
-                match () {
-                    () if ident == "color" => {
-                        let assign = stream.parse::<syn::Token![=]>()?;
-                        let member = stream.parse::<syn::Member>()?;
-                        Ok(SubpassArg::Color {
-                            ident,
-                            assign,
-                            member,
-                        })
-                    }
-                    () if ident == "depth" => {
-                        let assign = stream.parse::<syn::Token![=]>()?;
-                        let member = stream.parse::<syn::Member>()?;
-                        Ok(SubpassArg::Depth {
-                            ident,
-                            assign,
-                            member,
-                        })
-                    }
-                    () => Err(stream.error(format!("Unrecognized subpass argument {}", ident))),
+                let lookahead1 = stream.lookahead1();
+                if lookahead1.peek(kw::color) {
+                    let _kw = stream.parse::<kw::color>()?;
+                    let _eq = stream.parse::<syn::Token![=]>()?;
+                    let member = stream.parse::<syn::Member>()?;
+                    Ok(SubpassArg::Color { member })
+                } else if lookahead1.peek(kw::depth) {
+                    let kw = stream.parse::<kw::depth>()?;
+                    let _eq = stream.parse::<syn::Token![=]>()?;
+                    let member = stream.parse::<syn::Member>()?;
+                    Ok(SubpassArg::Depth { kw, member })
+                } else {
+                    Err(lookahead1.error())
                 }
             })
         })
@@ -241,14 +222,13 @@ fn parse_subpass_attr(attr: &syn::Attribute) -> syn::Result<Option<SubpassAttrib
     for arg in args {
         match arg {
             SubpassArg::Color { member, .. } => colors.push(member),
-            SubpassArg::Depth { ident, member, .. } => {
+            SubpassArg::Depth { kw, member, .. } => {
                 if depth.is_some() {
                     return Err(syn::Error::new_spanned(
-                        ident,
+                        kw,
                         "At most one `depth` argument for `subpass` attribute can be specified",
                     ));
                 }
-
                 depth = Some(member);
             }
         }
@@ -299,11 +279,16 @@ fn parse_attachment_attr(attr: &syn::Attribute) -> syn::Result<Option<Attachment
     if attr.path.get_ident().map_or(true, |i| i != "attachment") {
         Ok(None)
     } else {
-        attr.parse_args_with(|stream: ParseStream| {
-            let args = stream.parse_terminated::<_, syn::Token![,]>(|stream: ParseStream| {
-                let ident = stream.parse::<syn::Ident>()?;
-                match () {
-                    () if ident == "clear" => {
+        let mut load_op = LoadOp::DontCare;
+        let mut store_op = StoreOp::DontCare;
+
+        if !attr.tokens.is_empty() {
+            let args = attr.parse_args_with(|stream: ParseStream| {
+                stream.parse_terminated::<_, syn::Token![,]>(|stream: ParseStream| {
+                    let lookahead1 = stream.lookahead1();
+
+                    if lookahead1.peek(kw::clear) {
+                        let _kw = stream.parse::<kw::clear>()?;
                         let value;
                         syn::parenthesized!(value in stream);
 
@@ -317,8 +302,8 @@ fn parse_attachment_attr(attr: &syn::Attribute) -> syn::Result<Option<Attachment
                         };
 
                         Ok(AttachmentAttributeArgument::LoadOp(LoadOp::Clear(value)))
-                    }
-                    () if ident == "load" => {
+                    } else if lookahead1.peek(kw::load) {
+                        let _kw = stream.parse::<kw::load>()?;
                         let value;
                         syn::parenthesized!(value in stream);
 
@@ -332,8 +317,8 @@ fn parse_attachment_attr(attr: &syn::Attribute) -> syn::Result<Option<Attachment
                         };
 
                         Ok(AttachmentAttributeArgument::LoadOp(LoadOp::Load(layout)))
-                    }
-                    () if ident == "store" => {
+                    } else if lookahead1.peek(kw::store) {
+                        let _kw = stream.parse::<kw::store>()?;
                         let value;
                         syn::parenthesized!(value in stream);
 
@@ -347,15 +332,13 @@ fn parse_attachment_attr(attr: &syn::Attribute) -> syn::Result<Option<Attachment
                         };
 
                         Ok(AttachmentAttributeArgument::StoreOp(StoreOp::Store(layout)))
+                    } else {
+                        Err(lookahead1.error())
                     }
-                    _ => Err(stream.error(format!(
-                        "Unexpected argument `{}` for `attachment` attribute",
-                        ident
-                    ))),
-                }
+                })
             })?;
 
-            let load_op = find_unique(
+            load_op = find_unique(
                 args.iter().filter_map(|arg| match arg {
                     AttachmentAttributeArgument::LoadOp(load_op) => Some(load_op),
                     _ => None,
@@ -366,7 +349,7 @@ fn parse_attachment_attr(attr: &syn::Attribute) -> syn::Result<Option<Attachment
             .cloned()
             .unwrap_or(LoadOp::DontCare);
 
-            let store_op = find_unique(
+            store_op = find_unique(
                 args.iter().filter_map(|arg| match arg {
                     AttachmentAttributeArgument::StoreOp(store_op) => Some(store_op),
                     _ => None,
@@ -376,10 +359,9 @@ fn parse_attachment_attr(attr: &syn::Attribute) -> syn::Result<Option<Attachment
             )?
             .cloned()
             .unwrap_or(StoreOp::DontCare);
+        }
 
-            Ok(AttachmentAttribute { load_op, store_op })
-        })
-        .map(Some)
+        Ok(Some(AttachmentAttribute { load_op, store_op }))
     }
 }
 
