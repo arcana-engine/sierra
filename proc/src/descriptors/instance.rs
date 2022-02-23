@@ -1,6 +1,7 @@
 use {
     super::{
         buffer, image,
+        image::{Image, Layout},
         layout::layout_type_name,
         parse::{DescriptorType, Input},
     },
@@ -24,9 +25,18 @@ pub(super) fn generate(input: &Input) -> TokenStream {
         .map(|input| {
             let descriptor_field = quote::format_ident!("descriptor_{}", input.member);
             let ty = &input.field.ty;
-            quote::quote_spanned!(
-                input.field.ty.span() => pub #descriptor_field: ::std::option::Option<<#ty as ::sierra::TypedDescriptorBinding>::Descriptors>,
-            )
+            match &input.desc_ty {
+                DescriptorType::Image(Image { layout: Some(_), .. }) => {
+                    quote::quote_spanned!(
+                        input.field.ty.span() => pub #descriptor_field: ::std::option::Option<<#ty as ::sierra::TypedImageDescriptorBinding>::Descriptors>,
+                    )
+                }
+                _ => {
+                    quote::quote_spanned!(
+                        input.field.ty.span() => pub #descriptor_field: ::std::option::Option<<#ty as ::sierra::TypedDescriptorBinding>::Descriptors>,
+                    )
+                }
+            }
         })
         .collect();
 
@@ -39,20 +49,44 @@ pub(super) fn generate(input: &Input) -> TokenStream {
             let descriptor_field = quote::format_ident!("descriptor_{}", input.member);
             let write_descriptor = quote::format_ident!("write_{}_descriptor", input.member);
 
-            let stream = quote::quote!(
-                let #write_descriptor;
-                match &elem.#descriptor_field {
-                    Some(descriptors) if sierra::TypedDescriptorBinding::eq(&input.#field, descriptors) => {
-                        #write_descriptor = false;
-                    }
-                    _ => {
-                        elem.#descriptor_field = Some(::sierra::TypedDescriptorBinding::get_descriptors(&input.#field, device)?);
-                        #write_descriptor = true;
-                    }
-                }
-            );
+            match &input.desc_ty {
+                DescriptorType::Image(Image { layout: Some(layout), .. }) => {
+                    let layout_tokens = match layout {
+                        Layout::Expr(expr) => {
+                            quote::quote!(#expr)
+                        }
+                        Layout::Member(layout) => {
+                            quote::quote!(self.#layout)
+                        }
+                    };
 
-            stream
+                    quote::quote!(
+                        let #write_descriptor;
+                        match &elem.#descriptor_field {
+                            Some(descriptors) if sierra::TypedImageDescriptorBinding::eq(&input.#field, descriptors, #layout_tokens) => {
+                                #write_descriptor = false;
+                            }
+                            _ => {
+                                elem.#descriptor_field = Some(::sierra::TypedImageDescriptorBinding::get_descriptors(&input.#field, device, #layout_tokens)?);
+                                #write_descriptor = true;
+                            }
+                        }
+                    )
+                }
+                _ => quote::quote!(
+                    let #write_descriptor;
+                    match &elem.#descriptor_field {
+                        Some(descriptors) if sierra::TypedDescriptorBinding::eq(&input.#field, descriptors) => {
+                            #write_descriptor = false;
+                        }
+                        _ => {
+                            elem.#descriptor_field = Some(::sierra::TypedDescriptorBinding::get_descriptors(&input.#field, device)?);
+                            #write_descriptor = true;
+                        }
+                    }
+                ),
+            }
+
         })
         .collect();
 
@@ -66,10 +100,10 @@ pub(super) fn generate(input: &Input) -> TokenStream {
                 DescriptorType::Sampler(_) => Some(quote::quote_spanned! {
                     span => <::sierra::SamplerDescriptor as ::sierra::TypedDescriptor>::descriptors(descriptors)
                 }),
-                DescriptorType::Image(image::Image { kind: image::Kind::Sampled}) => Some(quote::quote_spanned! {
+                DescriptorType::Image(image::Image { kind: image::Kind::Sampled,..}) => Some(quote::quote_spanned! {
                     span => <::sierra::SampledImageDescriptor as ::sierra::TypedDescriptor>::descriptors(descriptors)
                 }),
-                DescriptorType::Image(image::Image { kind: image::Kind::Storage }) => Some(quote::quote_spanned! {
+                DescriptorType::Image(image::Image { kind: image::Kind::Storage,.. }) => Some(quote::quote_spanned! {
                     span => <::sierra::StorageImageDescriptor as ::sierra::TypedDescriptor>::descriptors(descriptors)
                 }),
                 DescriptorType::AccelerationStructure(_) => Some(quote::quote_spanned! {
@@ -193,7 +227,7 @@ pub(super) fn generate(input: &Input) -> TokenStream {
             }
 
             let (uniforms, buffer) = elem.uniforms_buffer.as_ref().unwrap();
-            encoder.update_buffer(&buffer.buffer, 0, ::std::slice::from_ref(uniforms));
+            encoder.update_buffer(scope.to_scope(buffer.buffer.clone()), 0, scope.to_scope([*uniforms]));
         )
     };
 
@@ -210,11 +244,13 @@ pub(super) fn generate(input: &Input) -> TokenStream {
 
     let max_writes = input.descriptors.len() + (!input.uniforms.is_empty()) as usize;
 
+    let cycle_capacity = input.cycle_capacity;
+
     quote::quote!(
         #doc_attr
         #vis struct #instance_ident {
             pub layout: ::sierra::DescriptorSetLayout,
-            pub cycle: ::sierra::arrayvec::ArrayVec<#elem_ident, 5>,
+            pub cycle: ::sierra::arrayvec::ArrayVec<#elem_ident, #cycle_capacity>,
             pub cycle_next: usize,
         }
 
@@ -240,12 +276,12 @@ pub(super) fn generate(input: &Input) -> TokenStream {
                 }
             }
 
-            pub fn update<'a, 'b: 'a>(
-                &'b mut self,
+            pub fn update(
+                &mut self,
                 input: &#ident,
                 device: &::sierra::Device,
-                encoder: &mut ::sierra::Encoder<'a>,
-            ) -> ::std::result::Result<&'b #elem_ident, ::sierra::DescriptorsAllocationError> {
+                encoder: &mut ::sierra::Encoder,
+            ) -> ::std::result::Result<&#elem_ident, ::sierra::DescriptorsAllocationError> {
                 if self.cycle.is_empty() {
                     self.cycle.push(#elem_ident {
                         set: device.create_descriptor_set(::sierra::DescriptorSetInfo {
@@ -292,6 +328,8 @@ pub(super) fn generate(input: &Input) -> TokenStream {
                     }
                 }
 
+                let scope = encoder.scope();
+
                 let elem = &mut self.cycle[self.cycle_next];
                 #update_uniforms_statement
                 #update_descriptor_statements
@@ -328,12 +366,12 @@ pub(super) fn generate(input: &Input) -> TokenStream {
         impl ::sierra::DescriptorsInstance<#ident> for #instance_ident {
             type Updated = #elem_ident;
 
-            fn update<'a, 'b: 'a>(
-                &'b mut self,
+            fn update(
+                &mut self,
                 input: &#ident,
                 device: &::sierra::Device,
-                encoder: &mut ::sierra::Encoder<'a>,
-            ) -> ::std::result::Result<&'b #elem_ident, ::sierra::DescriptorsAllocationError> {
+                encoder: &mut ::sierra::Encoder,
+            ) -> ::std::result::Result<&#elem_ident, ::sierra::DescriptorsAllocationError> {
                 self.update(input, device, encoder)
             }
 

@@ -15,6 +15,7 @@ fn generate_uniform_struct(input: &Input) -> TokenStream {
     let fields: TokenStream = input.uniforms
         .iter()
         .map(|u| {
+            let vis = &u.field.vis;
             let field_type = &u.field.ty;
             let sierra_layout = u.uniform.layout.sierra_type();
 
@@ -31,7 +32,7 @@ fn generate_uniform_struct(input: &Input) -> TokenStream {
 
             quote::quote! {
                 pub #pad_ident: [u8; #pad_size],
-                pub #val_ident: #field_repr,
+                #vis #val_ident: #field_repr,
             }
         })
         .collect();

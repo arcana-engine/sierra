@@ -1,9 +1,10 @@
 use std::convert::TryFrom as _;
 
+use proc_macro2::TokenStream;
 use syn::spanned::Spanned as _;
 
 use crate::{
-    find_unique_attribute,
+    find_unique, find_unique_attribute, kw,
     stage::{take_stages, Stage},
     take_attributes,
 };
@@ -21,6 +22,7 @@ pub(super) struct Input {
     pub descriptors: Vec<Descriptor>,
     pub uniforms: Vec<UniformField>,
     pub item_struct: syn::ItemStruct,
+    pub cycle_capacity: usize,
 }
 
 pub struct Descriptor {
@@ -64,15 +66,44 @@ pub enum DescriptorType {
     AccelerationStructure(AccelerationStructure),
 }
 
+enum DescriptorsArgument {
+    Capacity(usize),
+}
+
 pub(super) fn parse(
     attr: proc_macro::TokenStream,
     item: proc_macro::TokenStream,
 ) -> syn::Result<Input> {
+    let mut cycle_capacity = 5;
+
     if !attr.is_empty() {
-        return Err(syn::Error::new_spanned(
-            proc_macro2::TokenStream::from(attr),
-            "#[descriptors] attribute does not accept arguments",
-        ));
+        let attr = TokenStream::from(attr);
+
+        let args = syn::parse::Parser::parse2(
+            |stream: syn::parse::ParseStream| {
+                stream.parse_terminated::<_, syn::Token![,]>(|stream: syn::parse::ParseStream| {
+                    let lookahead1 = stream.lookahead1();
+                    if lookahead1.peek(kw::capacity) {
+                        stream.parse::<kw::capacity>()?;
+                        stream.parse::<syn::Token![=]>()?;
+                        let value = stream.parse::<syn::LitInt>()?;
+                        Ok(DescriptorsArgument::Capacity(value.base10_parse()?))
+                    } else {
+                        Err(lookahead1.error())
+                    }
+                })
+            },
+            attr.clone(),
+        )?;
+
+        cycle_capacity = find_unique(
+            args.iter().filter_map(|arg| match arg {
+                DescriptorsArgument::Capacity(value) => Some(*value),
+            }),
+            &attr,
+            "Up to one `capacity` argument expected",
+        )?
+        .unwrap_or(5);
     }
 
     let mut item_struct = syn::parse::<syn::ItemStruct>(item)?;
@@ -106,6 +137,7 @@ pub(super) fn parse(
     }
 
     Ok(Input {
+        cycle_capacity,
         item_struct,
         descriptors,
         uniforms,

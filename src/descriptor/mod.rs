@@ -94,9 +94,9 @@ pub struct DescriptorSetCopy<'a> {
 /// Accesses to this descriptor will assume that view
 /// is in that layout.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct ImageViewDescriptor {
+pub struct ImageDescriptor<I> {
     /// Descriptor image resource.
-    pub view: ImageView,
+    pub image: I,
 
     /// View's layout when descriptor is accessed.
     pub layout: Layout,
@@ -129,10 +129,10 @@ pub enum Descriptors<'a> {
     CombinedImageSampler(&'a [CombinedImageSampler]),
 
     /// Sampled image descriptors.
-    SampledImage(&'a [ImageViewDescriptor]),
+    SampledImage(&'a [ImageDescriptor<ImageView>]),
 
     /// Storage image descriptors.
-    StorageImage(&'a [ImageViewDescriptor]),
+    StorageImage(&'a [ImageDescriptor<ImageView>]),
 
     /// Uniform texel buffer descriptors.
     UniformTexelBuffer(&'a [BufferView]),
@@ -153,7 +153,7 @@ pub enum Descriptors<'a> {
     StorageBufferDynamic(&'a [BufferRange]),
 
     /// Input attachments.
-    InputAttachment(&'a [ImageViewDescriptor]),
+    InputAttachment(&'a [ImageDescriptor<ImageView>]),
 
     /// Acceleration structures.
     AccelerationStructure(&'a [AccelerationStructure]),
@@ -235,18 +235,18 @@ impl TypedDescriptor for CombinedImageSamplerDescriptor {
 
 impl TypedDescriptor for SampledImageDescriptor {
     const TYPE: DescriptorType = DescriptorType::SampledImage;
-    type Descriptor = ImageViewDescriptor;
+    type Descriptor = ImageDescriptor<ImageView>;
 
-    fn descriptors(slice: &[ImageViewDescriptor]) -> Descriptors<'_> {
+    fn descriptors(slice: &[ImageDescriptor<ImageView>]) -> Descriptors<'_> {
         Descriptors::SampledImage(slice)
     }
 }
 
 impl TypedDescriptor for StorageImageDescriptor {
     const TYPE: DescriptorType = DescriptorType::StorageImage;
-    type Descriptor = ImageViewDescriptor;
+    type Descriptor = ImageDescriptor<ImageView>;
 
-    fn descriptors(slice: &[ImageViewDescriptor]) -> Descriptors<'_> {
+    fn descriptors(slice: &[ImageDescriptor<ImageView>]) -> Descriptors<'_> {
         Descriptors::StorageImage(slice)
     }
 }
@@ -307,9 +307,9 @@ impl TypedDescriptor for StorageTexelBufferDescriptor {
 
 impl TypedDescriptor for InputAttachmentDescriptor {
     const TYPE: DescriptorType = DescriptorType::InputAttachment;
-    type Descriptor = ImageViewDescriptor;
+    type Descriptor = ImageDescriptor<ImageView>;
 
-    fn descriptors(slice: &[ImageViewDescriptor]) -> Descriptors<'_> {
+    fn descriptors(slice: &[ImageDescriptor<ImageView>]) -> Descriptors<'_> {
         Descriptors::InputAttachment(slice)
     }
 }
@@ -349,12 +349,12 @@ pub trait DescriptorsInstance<I: ?Sized> {
 
     /// Performs necessary updates to the descriptors according to the input.
     /// Returns update descriptors instance that can be bound to the encoder with correct pipline.
-    fn update<'a, 'b: 'a>(
-        &'b mut self,
+    fn update(
+        &mut self,
         input: &I,
         device: &Device,
-        encoder: &mut Encoder<'a>,
-    ) -> Result<&'b Self::Updated, DescriptorsAllocationError>;
+        encoder: &mut Encoder,
+    ) -> Result<&Self::Updated, DescriptorsAllocationError>;
 
     fn raw_layout(&self) -> &DescriptorSetLayout;
 }
@@ -401,6 +401,49 @@ pub trait TypedDescriptorBinding {
     /// and no update is required.
     fn eq(&self, descriptors: &Self::Descriptors) -> bool;
 
-    /// Returns `BufferRange` equivalent to self.
+    /// Returns `Descriptors` equivalent to self.
     fn get_descriptors(&self, device: &Device) -> Result<Self::Descriptors, OutOfMemory>;
+}
+
+/// Trait for all types that can be used as descriptor.
+pub trait TypedImageDescriptorBinding {
+    /// Number of descriptors in the binding.
+    const COUNT: u32;
+
+    /// Flags necessary for this binding type.
+    const FLAGS: DescriptorBindingFlags;
+
+    /// Descriptors value.
+    type Descriptors: AsRef<[ImageDescriptor<ImageView>]>;
+
+    /// Compare with image view currently bound to descriptor set.
+    /// Returns `true` if self is equivalent specified image view,
+    /// and no update is required.
+    fn eq(&self, descriptors: &Self::Descriptors, layout: Layout) -> bool;
+
+    /// Returns `Descriptors` equivalent to self.
+    fn get_descriptors(
+        &self,
+        device: &Device,
+        layout: Layout,
+    ) -> Result<Self::Descriptors, OutOfMemory>;
+}
+
+impl<T> TypedDescriptorBinding for T
+where
+    T: TypedImageDescriptorBinding,
+{
+    const COUNT: u32 = T::COUNT;
+    const FLAGS: DescriptorBindingFlags = T::FLAGS;
+    type Descriptors = T::Descriptors;
+
+    #[inline]
+    fn eq(&self, descriptors: &Self::Descriptors) -> bool {
+        self.eq(descriptors, Layout::ShaderReadOnlyOptimal)
+    }
+
+    #[inline]
+    fn get_descriptors(&self, device: &Device) -> Result<Self::Descriptors, OutOfMemory> {
+        self.get_descriptors(device, Layout::ShaderReadOnlyOptimal)
+    }
 }

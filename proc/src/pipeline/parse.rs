@@ -11,12 +11,11 @@ pub(super) struct Input {
 }
 
 pub(super) struct Set {
-    pub ident: syn::Ident,
-    pub ty: syn::Type,
+    pub field: syn::Field,
 }
 
 pub(super) struct PushConstants {
-    pub ty: syn::Type,
+    pub field: syn::Field,
     pub stages: Vec<Stage>,
     pub layout: StructLayout,
 }
@@ -72,14 +71,13 @@ fn parse_layout_field(field: &mut syn::Field) -> syn::Result<LayoutField> {
 
     match attr {
         PipelineLaoyutAttribute::Set => Ok(LayoutField::Set(Set {
-            ident,
-            ty: field.ty.clone(),
+            field: field.clone(),
         })),
         PipelineLaoyutAttribute::PushConstants { layout } => {
             let stages = take_stages(&mut field.attrs)?;
 
             Ok(LayoutField::PushConstants(PushConstants {
-                ty: field.ty.clone(),
+                field: field.clone(),
                 stages,
                 layout,
             }))

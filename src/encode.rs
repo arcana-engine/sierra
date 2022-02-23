@@ -21,7 +21,6 @@ use {
         stage::PipelineStageFlags,
         Device, Extent3d, IndexType, Offset3d, OutOfMemory, Rect2d,
     },
-    arrayvec::ArrayVec,
     bytemuck::{cast_slice, Pod},
     scoped_arena::Scope,
     std::{fmt::Debug, mem::size_of_val, ops::Range},
@@ -194,44 +193,14 @@ pub enum Command<'a> {
     },
 }
 
-#[derive(Debug)]
-struct Commands<'a> {
-    buckets: &'a mut ArrayVec<&'a mut ArrayVec<Command<'a>, 1024>, 1024>,
-}
-
-impl<'a> Commands<'a> {
-    pub fn new(scope: &'a Scope<'a>) -> Self {
-        Commands {
-            buckets: scope.to_scope_with(ArrayVec::new),
-        }
-    }
-
-    pub fn push(&mut self, scope: &'a Scope<'a>, mut command: Command<'a>) {
-        if let Some(last) = self.buckets.last_mut() {
-            match last.try_push(command) {
-                Ok(()) => return,
-                Err(err) => command = err.element(),
-            }
-        }
-
-        let bucket = scope.to_scope_with(ArrayVec::new);
-        bucket.push(command);
-        self.buckets.push(bucket);
-    }
-
-    pub fn drain(&mut self) -> impl Iterator<Item = Command<'a>> + '_ {
-        self.buckets.drain(..).flat_map(|bucket| bucket.drain(..))
-    }
-}
-
 /// Basis for encoding capabilities.
 /// Implements encoding of commands that can be inside and outside of render
 /// pass.
 #[derive(Debug)]
 pub struct EncoderCommon<'a> {
     capabilities: QueueCapabilityFlags,
-    commands: Commands<'a>,
     scope: &'a Scope<'a>,
+    command_buffer: CommandBuffer,
 }
 
 impl<'a> EncoderCommon<'a> {
@@ -242,48 +211,48 @@ impl<'a> EncoderCommon<'a> {
     pub fn set_viewport(&mut self, viewport: Viewport) {
         assert!(self.capabilities.supports_graphics());
 
-        self.commands
-            .push(self.scope, Command::SetViewport { viewport })
+        self.command_buffer
+            .write(self.scope, Command::SetViewport { viewport });
     }
 
     pub fn set_scissor(&mut self, scissor: Rect2d) {
         assert!(self.capabilities.supports_graphics());
 
-        self.commands
-            .push(self.scope, Command::SetScissor { scissor })
+        self.command_buffer
+            .write(self.scope, Command::SetScissor { scissor })
     }
 
-    pub fn bind_graphics_pipeline(&mut self, pipeline: &'a GraphicsPipeline) {
+    pub fn bind_graphics_pipeline(&mut self, pipeline: &GraphicsPipeline) {
         assert!(self.capabilities.supports_graphics());
 
-        self.commands
-            .push(self.scope, Command::BindGraphicsPipeline { pipeline })
+        self.command_buffer
+            .write(self.scope, Command::BindGraphicsPipeline { pipeline })
     }
 
-    pub fn bind_compute_pipeline(&mut self, pipeline: &'a ComputePipeline) {
+    pub fn bind_compute_pipeline(&mut self, pipeline: &ComputePipeline) {
         assert!(self.capabilities.supports_compute());
-        self.commands
-            .push(self.scope, Command::BindComputePipeline { pipeline })
+        self.command_buffer
+            .write(self.scope, Command::BindComputePipeline { pipeline })
     }
 
-    pub fn bind_ray_tracing_pipeline(&mut self, pipeline: &'a RayTracingPipeline) {
+    pub fn bind_ray_tracing_pipeline(&mut self, pipeline: &RayTracingPipeline) {
         assert!(self.capabilities.supports_compute());
 
-        self.commands
-            .push(self.scope, Command::BindRayTracingPipeline { pipeline })
+        self.command_buffer
+            .write(self.scope, Command::BindRayTracingPipeline { pipeline })
     }
 
-    pub fn bind_vertex_buffers(&mut self, first: u32, buffers: &'a [(&'a Buffer, u64)]) {
+    pub fn bind_vertex_buffers(&mut self, first: u32, buffers: &[(&Buffer, u64)]) {
         assert!(self.capabilities.supports_graphics());
 
-        self.commands
-            .push(self.scope, Command::BindVertexBuffers { first, buffers })
+        self.command_buffer
+            .write(self.scope, Command::BindVertexBuffers { first, buffers })
     }
 
-    pub fn bind_index_buffer(&mut self, buffer: &'a Buffer, offset: u64, index_type: IndexType) {
+    pub fn bind_index_buffer(&mut self, buffer: &Buffer, offset: u64, index_type: IndexType) {
         assert!(self.capabilities.supports_graphics());
 
-        self.commands.push(
+        self.command_buffer.write(
             self.scope,
             Command::BindIndexBuffer {
                 buffer,
@@ -295,14 +264,14 @@ impl<'a> EncoderCommon<'a> {
 
     pub fn bind_graphics_descriptor_sets(
         &mut self,
-        layout: &'a PipelineLayout,
+        layout: &PipelineLayout,
         first_set: u32,
-        sets: &'a [&'a DescriptorSet],
-        dynamic_offsets: &'a [u32],
+        sets: &[&DescriptorSet],
+        dynamic_offsets: &[u32],
     ) {
         assert!(self.capabilities.supports_graphics());
 
-        self.commands.push(
+        self.command_buffer.write(
             self.scope,
             Command::BindGraphicsDescriptorSets {
                 layout,
@@ -315,7 +284,7 @@ impl<'a> EncoderCommon<'a> {
 
     pub fn bind_graphics_descriptors<P>(
         &mut self,
-        layout: &'a P,
+        layout: &P,
         descriptors: &impl UpdatedPipelineDescriptors<P>,
     ) where
         P: TypedPipelineLayout,
@@ -325,14 +294,14 @@ impl<'a> EncoderCommon<'a> {
 
     pub fn bind_compute_descriptor_sets(
         &mut self,
-        layout: &'a PipelineLayout,
+        layout: &PipelineLayout,
         first_set: u32,
-        sets: &'a [&'a DescriptorSet],
-        dynamic_offsets: &'a [u32],
+        sets: &[&DescriptorSet],
+        dynamic_offsets: &[u32],
     ) {
         assert!(self.capabilities.supports_compute());
 
-        self.commands.push(
+        self.command_buffer.write(
             self.scope,
             Command::BindComputeDescriptorSets {
                 layout,
@@ -345,7 +314,7 @@ impl<'a> EncoderCommon<'a> {
 
     pub fn bind_compute_descriptors<P>(
         &mut self,
-        layout: &'a P,
+        layout: &P,
         descriptors: &impl UpdatedPipelineDescriptors<P>,
     ) where
         P: TypedPipelineLayout,
@@ -355,14 +324,14 @@ impl<'a> EncoderCommon<'a> {
 
     pub fn bind_ray_tracing_descriptor_sets(
         &mut self,
-        layout: &'a PipelineLayout,
+        layout: &PipelineLayout,
         first_set: u32,
-        sets: &'a [&'a DescriptorSet],
-        dynamic_offsets: &'a [u32],
+        sets: &[&DescriptorSet],
+        dynamic_offsets: &[u32],
     ) {
         assert!(self.capabilities.supports_compute());
 
-        self.commands.push(
+        self.command_buffer.write(
             self.scope,
             Command::BindRayTracingDescriptorSets {
                 layout,
@@ -375,7 +344,7 @@ impl<'a> EncoderCommon<'a> {
 
     pub fn bind_ray_tracing_descriptors<P>(
         &mut self,
-        layout: &'a P,
+        layout: &P,
         descriptors: &impl UpdatedPipelineDescriptors<P>,
     ) where
         P: TypedPipelineLayout,
@@ -385,16 +354,16 @@ impl<'a> EncoderCommon<'a> {
 
     pub fn push_constants_pod<T>(
         &mut self,
-        layout: &'a PipelineLayout,
+        layout: &PipelineLayout,
         stages: ShaderStageFlags,
         offset: u32,
-        data: &'a [T],
+        data: &[T],
     ) where
         T: Pod,
     {
         assert!(arith_le(size_of_val(data), u32::max_value()));
 
-        self.commands.push(
+        self.command_buffer.write(
             self.scope,
             Command::PushConstants {
                 layout,
@@ -405,7 +374,7 @@ impl<'a> EncoderCommon<'a> {
         );
     }
 
-    pub fn push_constants<P>(&mut self, layout: &'a P, constants: &'a impl PipelinePushConstants<P>)
+    pub fn push_constants<P>(&mut self, layout: &P, constants: &impl PipelinePushConstants<P>)
     where
         P: TypedPipelineLayout,
     {
@@ -417,7 +386,6 @@ impl<'a> EncoderCommon<'a> {
 #[derive(Debug)]
 pub struct Encoder<'a> {
     inner: EncoderCommon<'a>,
-    command_buffer: CommandBuffer,
 }
 
 impl<'a> std::ops::Deref for Encoder<'a> {
@@ -443,10 +411,9 @@ impl<'a> Encoder<'a> {
         Encoder {
             inner: EncoderCommon {
                 capabilities,
-                commands: Commands::new(scope),
                 scope,
+                command_buffer,
             },
-            command_buffer,
         }
     }
 
@@ -462,11 +429,11 @@ impl<'a> Encoder<'a> {
     pub fn with_framebuffer(
         &mut self,
         framebuffer: &'a Framebuffer,
-        clears: &'a [ClearValue],
+        clears: &[ClearValue],
     ) -> RenderPassEncoder<'_, 'a> {
         assert!(self.inner.capabilities.supports_graphics());
 
-        self.inner.commands.push(
+        self.inner.command_buffer.write(
             self.scope,
             Command::BeginRenderPass {
                 framebuffer,
@@ -505,7 +472,7 @@ impl<'a> Encoder<'a> {
     }
 
     /// Updates a buffer's contents from host memory
-    pub fn update_buffer<T>(&mut self, buffer: &'a Buffer, offset: u64, data: &'a [T])
+    pub fn update_buffer<T>(&mut self, buffer: &Buffer, offset: u64, data: &[T])
     where
         T: Pod,
     {
@@ -520,7 +487,7 @@ impl<'a> Encoder<'a> {
             std::slice::from_raw_parts(data.as_ptr() as *const u8, std::mem::size_of_val(data))
         };
 
-        self.inner.commands.push(
+        self.inner.command_buffer.write(
             self.scope,
             Command::UpdateBuffer {
                 buffer,
@@ -533,7 +500,7 @@ impl<'a> Encoder<'a> {
     /// Builds acceleration structures.
     pub fn build_acceleration_structure(
         &mut self,
-        infos: &'a [AccelerationStructureBuildGeometryInfo<'a>],
+        infos: &[AccelerationStructureBuildGeometryInfo],
     ) {
         assert!(self.inner.capabilities.supports_compute());
 
@@ -564,7 +531,7 @@ impl<'a> Encoder<'a> {
             }
         }
 
-        self.inner.commands.push(
+        self.inner.command_buffer.write(
             self.inner.scope,
             Command::BuildAccelerationStructure { infos },
         )
@@ -573,7 +540,7 @@ impl<'a> Encoder<'a> {
     pub fn trace_rays(&mut self, shader_binding_table: &'a ShaderBindingTable, extent: Extent3d) {
         assert!(self.inner.capabilities.supports_compute());
 
-        self.inner.commands.push(
+        self.inner.command_buffer.write(
             self.inner.scope,
             Command::TraceRays {
                 shader_binding_table,
@@ -584,9 +551,9 @@ impl<'a> Encoder<'a> {
 
     pub fn copy_buffer(
         &mut self,
-        src_buffer: &'a Buffer,
-        dst_buffer: &'a Buffer,
-        regions: &'a [BufferCopy],
+        src_buffer: &Buffer,
+        dst_buffer: &Buffer,
+        regions: &[BufferCopy],
     ) {
         #[cfg(debug_assertions)]
         {
@@ -596,7 +563,7 @@ impl<'a> Encoder<'a> {
             }
         }
 
-        self.inner.commands.push(
+        self.inner.command_buffer.write(
             self.inner.scope,
             Command::CopyBuffer {
                 src_buffer,
@@ -608,13 +575,13 @@ impl<'a> Encoder<'a> {
 
     pub fn copy_image(
         &mut self,
-        src_image: &'a Image,
+        src_image: &Image,
         src_layout: Layout,
-        dst_image: &'a Image,
+        dst_image: &Image,
         dst_layout: Layout,
-        regions: &'a [ImageCopy],
+        regions: &[ImageCopy],
     ) {
-        self.inner.commands.push(
+        self.inner.command_buffer.write(
             self.inner.scope,
             Command::CopyImage {
                 src_image,
@@ -628,12 +595,12 @@ impl<'a> Encoder<'a> {
 
     pub fn copy_buffer_to_image(
         &mut self,
-        src_buffer: &'a Buffer,
-        dst_image: &'a Image,
+        src_buffer: &Buffer,
+        dst_image: &Image,
         dst_layout: Layout,
-        regions: &'a [BufferImageCopy],
+        regions: &[BufferImageCopy],
     ) {
-        self.inner.commands.push(
+        self.inner.command_buffer.write(
             self.inner.scope,
             Command::CopyBufferImage {
                 src_buffer,
@@ -646,16 +613,16 @@ impl<'a> Encoder<'a> {
 
     pub fn blit_image(
         &mut self,
-        src_image: &'a Image,
+        src_image: &Image,
         src_layout: Layout,
-        dst_image: &'a Image,
+        dst_image: &Image,
         dst_layout: Layout,
-        regions: &'a [ImageBlit],
+        regions: &[ImageBlit],
         filter: Filter,
     ) {
         assert!(self.inner.capabilities.supports_graphics());
 
-        self.inner.commands.push(
+        self.inner.command_buffer.write(
             self.inner.scope,
             Command::BlitImage {
                 src_image,
@@ -672,8 +639,8 @@ impl<'a> Encoder<'a> {
         assert!(self.inner.capabilities.supports_compute());
 
         self.inner
-            .commands
-            .push(self.inner.scope, Command::Dispatch { x, y, z });
+            .command_buffer
+            .write(self.inner.scope, Command::Dispatch { x, y, z });
     }
 
     pub fn memory_barrier(
@@ -683,7 +650,7 @@ impl<'a> Encoder<'a> {
         dst: PipelineStageFlags,
         dst_acc: AccessFlags,
     ) {
-        self.inner.commands.push(
+        self.inner.command_buffer.write(
             self.inner.scope,
             Command::PipelineBarrier {
                 src,
@@ -702,9 +669,9 @@ impl<'a> Encoder<'a> {
         &mut self,
         src: PipelineStageFlags,
         dst: PipelineStageFlags,
-        images: &'a [ImageMemoryBarrier<'a>],
+        images: &[ImageMemoryBarrier],
     ) {
-        self.inner.commands.push(
+        self.inner.command_buffer.write(
             self.inner.scope,
             Command::PipelineBarrier {
                 src,
@@ -720,9 +687,9 @@ impl<'a> Encoder<'a> {
         &mut self,
         src: PipelineStageFlags,
         dst: PipelineStageFlags,
-        buffers: &'a [BufferMemoryBarrier<'a>],
+        buffers: &[BufferMemoryBarrier],
     ) {
-        self.inner.commands.push(
+        self.inner.command_buffer.write(
             self.inner.scope,
             Command::PipelineBarrier {
                 src,
@@ -737,11 +704,12 @@ impl<'a> Encoder<'a> {
     /// Flushes commands recorded into this encoder to the underlying command
     /// buffer.
     pub fn finish(mut self) -> CommandBuffer {
-        self.command_buffer
-            .write(self.inner.commands.drain(), self.inner.scope)
+        self.inner
+            .command_buffer
+            .end()
             .expect("TODO: Handle command buffer writing error");
 
-        self.command_buffer
+        self.inner.command_buffer
     }
 }
 
@@ -764,7 +732,7 @@ impl<'a, 'b> RenderPassEncoder<'a, 'b> {
     }
 
     pub fn draw(&mut self, vertices: Range<u32>, instances: Range<u32>) {
-        self.inner.commands.push(
+        self.inner.command_buffer.write(
             self.scope,
             Command::Draw {
                 vertices,
@@ -774,7 +742,7 @@ impl<'a, 'b> RenderPassEncoder<'a, 'b> {
     }
 
     pub fn draw_indexed(&mut self, indices: Range<u32>, vertex_offset: i32, instances: Range<u32>) {
-        self.inner.commands.push(
+        self.inner.command_buffer.write(
             self.scope,
             Command::DrawIndexed {
                 indices,
@@ -786,7 +754,7 @@ impl<'a, 'b> RenderPassEncoder<'a, 'b> {
 
     pub fn bind_dynamic_graphics_pipeline(
         &mut self,
-        pipeline: &'b mut DynamicGraphicsPipeline,
+        pipeline: &mut DynamicGraphicsPipeline,
         device: &Device,
     ) -> Result<(), OutOfMemory> {
         assert!(self.capabilities.supports_graphics());
@@ -817,7 +785,9 @@ impl<'a, 'b> RenderPassEncoder<'a, 'b> {
 
 impl Drop for RenderPassEncoder<'_, '_> {
     fn drop(&mut self) {
-        self.inner.commands.push(self.scope, Command::EndRenderPass);
+        self.inner
+            .command_buffer
+            .write(self.scope, Command::EndRenderPass);
     }
 }
 

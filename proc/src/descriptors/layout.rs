@@ -39,7 +39,7 @@ pub(super) fn generate(input: &Input) -> TokenStream {
                 binding: #binding,
                 ty: ::sierra::DescriptorType::UniformBuffer,
                 count: 1,
-                stages: #stages,
+                stages: ::sierra::ShaderStageFlags::from_bits_truncate(#stages),
                 flags: ::sierra::DescriptorBindingFlags::empty(),
             }
         ));
@@ -109,11 +109,13 @@ fn generate_layout_binding(descriptor: &Descriptor, binding: u32) -> TokenStream
         }
         DescriptorType::Image(image::Image {
             kind: image::Kind::Sampled,
+            ..
         }) => {
             quote::format_ident!("SampledImage")
         }
         DescriptorType::Image(image::Image {
             kind: image::Kind::Storage,
+            ..
         }) => {
             quote::format_ident!("StorageImage")
         }
@@ -150,14 +152,30 @@ fn generate_layout_binding(descriptor: &Descriptor, binding: u32) -> TokenStream
     let flags = combined_binding_flags(descriptor.flags.iter().copied());
 
     let ty = &descriptor.field.ty;
-
-    quote::quote!(
-        ::sierra::DescriptorSetLayoutBinding {
-            binding: #binding,
-            ty: ::sierra::DescriptorType::#desc_ty,
-            count: <#ty as ::sierra::TypedDescriptorBinding>::COUNT,
-            stages: ::sierra::ShaderStageFlags::from_bits_truncate(#stages),
-            flags: ::sierra::DescriptorBindingFlags::from_bits_truncate(#flags),
+    match &descriptor.desc_ty {
+        DescriptorType::Image(image::Image {
+            layout: Some(_), ..
+        }) => {
+            quote::quote!(
+                ::sierra::DescriptorSetLayoutBinding {
+                    binding: #binding,
+                    ty: ::sierra::DescriptorType::#desc_ty,
+                    count: <#ty as ::sierra::TypedImageDescriptorBinding>::COUNT,
+                    stages: ::sierra::ShaderStageFlags::from_bits_truncate(#stages),
+                    flags: ::sierra::DescriptorBindingFlags::from_bits_truncate(#flags),
+                }
+            )
         }
-    )
+        _ => {
+            quote::quote!(
+                ::sierra::DescriptorSetLayoutBinding {
+                    binding: #binding,
+                    ty: ::sierra::DescriptorType::#desc_ty,
+                    count: <#ty as ::sierra::TypedDescriptorBinding>::COUNT,
+                    stages: ::sierra::ShaderStageFlags::from_bits_truncate(#stages),
+                    flags: ::sierra::DescriptorBindingFlags::from_bits_truncate(#flags),
+                }
+            )
+        }
+    }
 }

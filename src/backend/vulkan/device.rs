@@ -182,9 +182,15 @@ impl WeakDevice {
     }
 }
 
-impl PartialEq<WeakDevice> for WeakDevice {
-    fn eq(&self, weak: &WeakDevice) -> bool {
-        std::ptr::eq(weak.inner.as_ptr(), self.inner.as_ptr())
+impl PartialEq<Device> for Device {
+    fn eq(&self, weak: &Device) -> bool {
+        Arc::ptr_eq(&weak.inner, &self.inner)
+    }
+}
+
+impl PartialEq<Device> for &'_ Device {
+    fn eq(&self, weak: &Device) -> bool {
+        Arc::ptr_eq(&weak.inner, &self.inner)
     }
 }
 
@@ -194,15 +200,21 @@ impl PartialEq<WeakDevice> for Device {
     }
 }
 
-impl PartialEq<WeakDevice> for &'_ WeakDevice {
+impl PartialEq<WeakDevice> for &'_ Device {
+    fn eq(&self, weak: &WeakDevice) -> bool {
+        std::ptr::eq(weak.inner.as_ptr(), &*self.inner)
+    }
+}
+
+impl PartialEq<WeakDevice> for WeakDevice {
     fn eq(&self, weak: &WeakDevice) -> bool {
         std::ptr::eq(weak.inner.as_ptr(), self.inner.as_ptr())
     }
 }
 
-impl PartialEq<WeakDevice> for &'_ Device {
+impl PartialEq<WeakDevice> for &'_ WeakDevice {
     fn eq(&self, weak: &WeakDevice) -> bool {
-        std::ptr::eq(weak.inner.as_ptr(), &*self.inner)
+        std::ptr::eq(weak.inner.as_ptr(), self.inner.as_ptr())
     }
 }
 
@@ -2333,11 +2345,11 @@ impl Device {
                             assert_owner!(combo.sampler, self);
                         }
                     }
-                    Descriptors::SampledImage(views)
-                    | Descriptors::StorageImage(views)
-                    | Descriptors::InputAttachment(views) => {
-                        for view in views {
-                            assert_owner!(view.view, self);
+                    Descriptors::SampledImage(slice)
+                    | Descriptors::StorageImage(slice)
+                    | Descriptors::InputAttachment(slice) => {
+                        for image in slice {
+                            assert_owner!(image.image, self);
                         }
                     }
                     Descriptors::UniformBuffer(regions)
@@ -2431,10 +2443,10 @@ impl Device {
                     Descriptors::SampledImage(slice) => {
                         let start = images.len();
 
-                        images.extend(slice.iter().map(|view| {
+                        images.extend(slice.iter().map(|image| {
                             vk1_0::DescriptorImageInfoBuilder::new()
-                                .image_view(view.view.handle())
-                                .image_layout(view.layout.to_erupt())
+                                .image_view(image.image.handle())
+                                .image_layout(image.layout.to_erupt())
                         }));
 
                         ranges.push(start..images.len());
@@ -2442,10 +2454,10 @@ impl Device {
                     Descriptors::StorageImage(slice) => {
                         let start = images.len();
 
-                        images.extend(slice.iter().map(|view| {
+                        images.extend(slice.iter().map(|image| {
                             vk1_0::DescriptorImageInfoBuilder::new()
-                                .image_view(view.view.handle())
-                                .image_layout(view.layout.to_erupt())
+                                .image_view(image.image.handle())
+                                .image_layout(image.layout.to_erupt())
                         }));
 
                         ranges.push(start..images.len());
@@ -2516,10 +2528,10 @@ impl Device {
                     Descriptors::InputAttachment(slice) => {
                         let start = images.len();
 
-                        images.extend(slice.iter().map(|view| {
+                        images.extend(slice.iter().map(|image| {
                             vk1_0::DescriptorImageInfoBuilder::new()
-                                .image_view(view.view.handle())
-                                .image_layout(view.layout.to_erupt())
+                                .image_view(image.image.handle())
+                                .image_layout(image.layout.to_erupt())
                         }));
 
                         ranges.push(start..images.len());

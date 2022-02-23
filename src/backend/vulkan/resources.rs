@@ -30,7 +30,7 @@ use crate::{
     shader::ShaderModuleInfo,
     view::ImageViewInfo,
     BufferRange, BufferViewInfo, CombinedImageSampler, DescriptorType, Descriptors, DeviceAddress,
-    ImageViewDescriptor,
+    ImageDescriptor,
 };
 
 use self::resource_counting::{resource_allocated, resource_freed};
@@ -45,6 +45,7 @@ struct BufferInner {
 }
 
 impl Drop for BufferInner {
+    #[inline]
     fn drop(&mut self) {
         resource_freed();
 
@@ -72,6 +73,7 @@ unsafe impl Send for Buffer {}
 unsafe impl Sync for Buffer {}
 
 impl PartialEq for Buffer {
+    #[inline]
     fn eq(&self, rhs: &Self) -> bool {
         std::ptr::eq(&*self.inner, &*rhs.inner)
     }
@@ -80,6 +82,7 @@ impl PartialEq for Buffer {
 impl Eq for Buffer {}
 
 impl Hash for Buffer {
+    #[inline]
     fn hash<H>(&self, hasher: &mut H)
     where
         H: Hasher,
@@ -121,18 +124,22 @@ impl Debug for Buffer {
 }
 
 impl Buffer {
+    #[inline]
     pub fn info(&self) -> &BufferInfo {
         &self.info
     }
 
+    #[inline]
     pub fn address(&self) -> Option<DeviceAddress> {
         self.address
     }
 
+    #[inline]
     pub(super) fn is_owned_by(&self, owner: &impl PartialEq<WeakDevice>) -> bool {
         *owner == self.inner.owner
     }
 
+    #[inline]
     pub(super) fn handle(&self) -> vk1_0::Buffer {
         debug_assert!(!self.handle.is_null());
         self.handle
@@ -162,6 +169,7 @@ impl From<MappableBuffer> for Buffer {
 }
 
 impl PartialEq for MappableBuffer {
+    #[inline]
     fn eq(&self, rhs: &Self) -> bool {
         std::ptr::eq(self, rhs)
     }
@@ -170,6 +178,7 @@ impl PartialEq for MappableBuffer {
 impl Eq for MappableBuffer {}
 
 impl Hash for MappableBuffer {
+    #[inline]
     fn hash<H>(&self, hasher: &mut H)
     where
         H: Hasher,
@@ -215,16 +224,19 @@ impl Debug for MappableBuffer {
 impl Deref for MappableBuffer {
     type Target = Buffer;
 
+    #[inline]
     fn deref(&self) -> &Buffer {
         &self.buffer
     }
 }
 
 impl MappableBuffer {
+    #[inline]
     pub fn share(self) -> Buffer {
         self.buffer
     }
 
+    #[inline]
     pub(super) fn new(
         info: BufferInfo,
         owner: WeakDevice,
@@ -257,6 +269,7 @@ impl MappableBuffer {
     /// # Safety
     ///
     /// MemoryBlock must not be replaced
+    #[inline]
     pub(super) unsafe fn memory_block(&mut self) -> &mut MemoryBlock<vk1_0::DeviceMemory> {
         // exclusive access
         &mut *self.inner.memory_block.get()
@@ -281,6 +294,7 @@ struct BufferViewInner {
 }
 
 impl Drop for BufferViewInner {
+    #[inline]
     fn drop(&mut self) {
         resource_freed();
 
@@ -305,6 +319,7 @@ impl Debug for BufferView {
 }
 
 impl PartialEq for BufferView {
+    #[inline]
     fn eq(&self, rhs: &Self) -> bool {
         self.handle == rhs.handle
     }
@@ -313,6 +328,7 @@ impl PartialEq for BufferView {
 impl Eq for BufferView {}
 
 impl Hash for BufferView {
+    #[inline]
     fn hash<H>(&self, hasher: &mut H)
     where
         H: Hasher,
@@ -322,6 +338,7 @@ impl Hash for BufferView {
 }
 
 impl BufferView {
+    #[inline]
     pub fn info(&self) -> &BufferViewInfo {
         &self.inner.info
     }
@@ -340,10 +357,12 @@ impl BufferView {
         }
     }
 
+    #[inline]
     pub(super) fn is_owned_by(&self, owner: &impl PartialEq<WeakDevice>) -> bool {
         *owner == self.inner.owner
     }
 
+    #[inline]
     pub(super) fn handle(&self) -> vk1_0::BufferView {
         debug_assert!(!self.handle.is_null());
         self.handle
@@ -361,6 +380,7 @@ enum ImageFlavor {
 }
 
 impl ImageFlavor {
+    #[inline]
     fn uid(&self) -> u64 {
         match *self {
             ImageFlavor::SwapchainImage { uid } => uid.get(),
@@ -404,6 +424,7 @@ impl Drop for ImageInner {
 }
 
 impl PartialEq for Image {
+    #[inline]
     fn eq(&self, rhs: &Self) -> bool {
         (self.handle, self.inner.flavor.uid()) == (rhs.handle, rhs.inner.flavor.uid())
     }
@@ -412,6 +433,7 @@ impl PartialEq for Image {
 impl Eq for Image {}
 
 impl Hash for Image {
+    #[inline]
     fn hash<H>(&self, hasher: &mut H)
     where
         H: Hasher,
@@ -445,10 +467,12 @@ impl Debug for Image {
 }
 
 impl Image {
+    #[inline]
     pub fn info(&self) -> &ImageInfo {
         &self.info
     }
 
+    #[inline]
     pub(super) fn new(
         info: ImageInfo,
         owner: WeakDevice,
@@ -471,6 +495,7 @@ impl Image {
         }
     }
 
+    #[inline]
     pub(super) fn new_swapchain(
         info: ImageInfo,
         owner: WeakDevice,
@@ -487,16 +512,19 @@ impl Image {
         }
     }
 
+    #[inline]
     pub(super) fn is_owned_by(&self, owner: &impl PartialEq<WeakDevice>) -> bool {
         *owner == self.inner.owner
     }
 
+    #[inline]
     pub(super) fn handle(&self) -> vk1_0::Image {
         debug_assert!(!self.handle.is_null());
         self.handle
     }
 
     /// Must be called only for retired swapchain.
+    #[inline]
     pub(super) fn try_dispose(mut self) -> Result<(), Self> {
         assert!(matches!(
             self.inner.flavor,
@@ -530,6 +558,7 @@ struct ImageViewInner {
 }
 
 impl Drop for ImageViewInner {
+    #[inline]
     fn drop(&mut self) {
         resource_freed();
 
@@ -554,6 +583,7 @@ impl Debug for ImageView {
 }
 
 impl PartialEq for ImageView {
+    #[inline]
     fn eq(&self, rhs: &Self) -> bool {
         self.handle == rhs.handle
     }
@@ -562,6 +592,7 @@ impl PartialEq for ImageView {
 impl Eq for ImageView {}
 
 impl Hash for ImageView {
+    #[inline]
     fn hash<H>(&self, hasher: &mut H)
     where
         H: Hasher,
@@ -571,10 +602,12 @@ impl Hash for ImageView {
 }
 
 impl ImageView {
+    #[inline]
     pub fn info(&self) -> &ImageViewInfo {
         &self.inner.info
     }
 
+    #[inline]
     pub(super) fn new(
         info: ImageViewInfo,
         owner: WeakDevice,
@@ -589,10 +622,12 @@ impl ImageView {
         }
     }
 
+    #[inline]
     pub(super) fn is_owned_by(&self, owner: &impl PartialEq<WeakDevice>) -> bool {
         *owner == self.inner.owner
     }
 
+    #[inline]
     pub(super) fn handle(&self) -> vk1_0::ImageView {
         debug_assert!(!self.handle.is_null());
         self.handle
@@ -619,6 +654,7 @@ pub struct Fence {
 }
 
 impl Drop for Fence {
+    #[inline]
     fn drop(&mut self) {
         resource_freed();
 
@@ -668,6 +704,7 @@ impl Debug for Fence {
 }
 
 impl PartialEq for Fence {
+    #[inline]
     fn eq(&self, rhs: &Self) -> bool {
         self.handle == rhs.handle
     }
@@ -676,6 +713,7 @@ impl PartialEq for Fence {
 impl Eq for Fence {}
 
 impl Hash for Fence {
+    #[inline]
     fn hash<H>(&self, hasher: &mut H)
     where
         H: Hasher,
@@ -685,6 +723,7 @@ impl Hash for Fence {
 }
 
 impl Fence {
+    #[inline]
     pub(super) fn new(owner: WeakDevice, handle: vk1_0::Fence, index: usize) -> Self {
         resource_allocated();
 
@@ -696,16 +735,19 @@ impl Fence {
         }
     }
 
+    #[inline]
     pub(super) fn is_owned_by(&self, owner: &impl PartialEq<WeakDevice>) -> bool {
         *owner == self.owner
     }
 
+    #[inline]
     pub(super) fn handle(&self) -> vk1_0::Fence {
         debug_assert!(!self.handle.is_null());
         self.handle
     }
 
     /// Called when submitted to a queue for signal.
+    #[inline]
     pub(super) fn arm(&mut self, queue: QueueId, epoch: u64, device: &Device) {
         debug_assert!(self.is_owned_by(device));
         match &self.state {
@@ -728,6 +770,7 @@ impl Fence {
     }
 
     /// Called when device knows fence is signalled.
+    #[inline]
     pub(super) fn signalled(&mut self) -> Option<(QueueId, u64)> {
         match self.state {
             FenceState::Signalled => None,
@@ -742,6 +785,7 @@ impl Fence {
     }
 
     /// Called when device resets the fence.
+    #[inline]
     pub(super) fn reset(&mut self, device: &Device) {
         match &self.state {
             FenceState::Signalled | FenceState::UnSignalled => {
@@ -773,6 +817,7 @@ pub struct Semaphore {
 }
 
 impl Drop for Semaphore {
+    #[inline]
     fn drop(&mut self) {
         resource_freed();
 
@@ -797,6 +842,7 @@ impl Debug for Semaphore {
 }
 
 impl PartialEq for Semaphore {
+    #[inline]
     fn eq(&self, rhs: &Self) -> bool {
         self.handle == rhs.handle
     }
@@ -805,6 +851,7 @@ impl PartialEq for Semaphore {
 impl Eq for Semaphore {}
 
 impl Hash for Semaphore {
+    #[inline]
     fn hash<H>(&self, hasher: &mut H)
     where
         H: Hasher,
@@ -814,6 +861,7 @@ impl Hash for Semaphore {
 }
 
 impl Semaphore {
+    #[inline]
     pub(super) fn new(owner: WeakDevice, handle: vk1_0::Semaphore, index: usize) -> Self {
         resource_allocated();
 
@@ -824,10 +872,12 @@ impl Semaphore {
         }
     }
 
+    #[inline]
     pub(super) fn is_owned_by(&self, owner: &impl PartialEq<WeakDevice>) -> bool {
         *owner == self.owner
     }
 
+    #[inline]
     pub(super) fn handle(&self) -> vk1_0::Semaphore {
         debug_assert!(!self.handle.is_null());
         self.handle
@@ -852,6 +902,7 @@ struct RenderPassInner {
 }
 
 impl Drop for RenderPassInner {
+    #[inline]
     fn drop(&mut self) {
         resource_freed();
 
@@ -875,6 +926,7 @@ impl Debug for RenderPass {
 }
 
 impl PartialEq for RenderPass {
+    #[inline]
     fn eq(&self, rhs: &Self) -> bool {
         self.handle == rhs.handle
     }
@@ -883,6 +935,7 @@ impl PartialEq for RenderPass {
 impl Eq for RenderPass {}
 
 impl Hash for RenderPass {
+    #[inline]
     fn hash<H>(&self, hasher: &mut H)
     where
         H: Hasher,
@@ -892,10 +945,12 @@ impl Hash for RenderPass {
 }
 
 impl RenderPass {
+    #[inline]
     pub fn info(&self) -> &RenderPassInfo {
         &self.inner.info
     }
 
+    #[inline]
     pub(super) fn new(
         info: RenderPassInfo,
         owner: WeakDevice,
@@ -910,10 +965,12 @@ impl RenderPass {
         }
     }
 
+    #[inline]
     pub(super) fn is_owned_by(&self, owner: &impl PartialEq<WeakDevice>) -> bool {
         *owner == self.inner.owner
     }
 
+    #[inline]
     pub(super) fn handle(&self) -> vk1_0::RenderPass {
         debug_assert!(!self.handle.is_null());
         self.handle
@@ -933,6 +990,7 @@ struct SamplerInner {
 }
 
 impl Drop for SamplerInner {
+    #[inline]
     fn drop(&mut self) {
         resource_freed();
 
@@ -956,6 +1014,7 @@ impl Debug for Sampler {
 }
 
 impl PartialEq for Sampler {
+    #[inline]
     fn eq(&self, rhs: &Self) -> bool {
         self.handle == rhs.handle
     }
@@ -964,6 +1023,7 @@ impl PartialEq for Sampler {
 impl Eq for Sampler {}
 
 impl Hash for Sampler {
+    #[inline]
     fn hash<H>(&self, hasher: &mut H)
     where
         H: Hasher,
@@ -973,10 +1033,12 @@ impl Hash for Sampler {
 }
 
 impl Sampler {
+    #[inline]
     pub fn info(&self) -> &SamplerInfo {
         &self.info
     }
 
+    #[inline]
     pub(super) fn new(
         info: SamplerInfo,
         owner: WeakDevice,
@@ -992,10 +1054,12 @@ impl Sampler {
         }
     }
 
+    #[inline]
     pub(super) fn is_owned_by(&self, owner: &impl PartialEq<WeakDevice>) -> bool {
         *owner == self.inner.owner
     }
 
+    #[inline]
     pub(super) fn handle(&self) -> vk1_0::Sampler {
         debug_assert!(!self.handle.is_null());
         self.handle
@@ -1018,6 +1082,7 @@ struct FramebufferInner {
 }
 
 impl Drop for FramebufferInner {
+    #[inline]
     fn drop(&mut self) {
         resource_freed();
 
@@ -1041,6 +1106,7 @@ impl Debug for Framebuffer {
 }
 
 impl PartialEq for Framebuffer {
+    #[inline]
     fn eq(&self, rhs: &Self) -> bool {
         self.handle == rhs.handle
     }
@@ -1049,6 +1115,7 @@ impl PartialEq for Framebuffer {
 impl Eq for Framebuffer {}
 
 impl Hash for Framebuffer {
+    #[inline]
     fn hash<H>(&self, hasher: &mut H)
     where
         H: Hasher,
@@ -1058,10 +1125,12 @@ impl Hash for Framebuffer {
 }
 
 impl Framebuffer {
+    #[inline]
     pub fn info(&self) -> &FramebufferInfo {
         &self.inner.info
     }
 
+    #[inline]
     pub(super) fn new(
         info: FramebufferInfo,
         owner: WeakDevice,
@@ -1076,10 +1145,12 @@ impl Framebuffer {
         }
     }
 
+    #[inline]
     pub(super) fn is_owned_by(&self, owner: &impl PartialEq<WeakDevice>) -> bool {
         *owner == self.inner.owner
     }
 
+    #[inline]
     pub(super) fn handle(&self) -> vk1_0::Framebuffer {
         debug_assert!(!self.handle.is_null());
         self.handle
@@ -1106,6 +1177,7 @@ struct ShaderModuleInner {
 }
 
 impl Drop for ShaderModuleInner {
+    #[inline]
     fn drop(&mut self) {
         resource_freed();
 
@@ -1129,6 +1201,7 @@ impl Debug for ShaderModule {
 }
 
 impl PartialEq for ShaderModule {
+    #[inline]
     fn eq(&self, rhs: &Self) -> bool {
         self.handle == rhs.handle
     }
@@ -1137,6 +1210,7 @@ impl PartialEq for ShaderModule {
 impl Eq for ShaderModule {}
 
 impl Hash for ShaderModule {
+    #[inline]
     fn hash<H>(&self, hasher: &mut H)
     where
         H: Hasher,
@@ -1146,10 +1220,12 @@ impl Hash for ShaderModule {
 }
 
 impl ShaderModule {
+    #[inline]
     pub fn info(&self) -> &ShaderModuleInfo {
         &self.inner.info
     }
 
+    #[inline]
     pub(super) fn new(
         info: ShaderModuleInfo,
         owner: WeakDevice,
@@ -1164,10 +1240,12 @@ impl ShaderModule {
         }
     }
 
+    #[inline]
     pub(super) fn is_owned_by(&self, owner: &impl PartialEq<WeakDevice>) -> bool {
         *owner == self.inner.owner
     }
 
+    #[inline]
     pub(super) fn handle(&self) -> vk1_0::ShaderModule {
         debug_assert!(!self.handle.is_null());
         self.handle
@@ -1195,6 +1273,7 @@ struct DescriptorSetLayoutInner {
 }
 
 impl Drop for DescriptorSetLayoutInner {
+    #[inline]
     fn drop(&mut self) {
         resource_freed();
 
@@ -1220,6 +1299,7 @@ impl Debug for DescriptorSetLayout {
 }
 
 impl PartialEq for DescriptorSetLayout {
+    #[inline]
     fn eq(&self, rhs: &Self) -> bool {
         self.handle == rhs.handle
     }
@@ -1228,6 +1308,7 @@ impl PartialEq for DescriptorSetLayout {
 impl Eq for DescriptorSetLayout {}
 
 impl Hash for DescriptorSetLayout {
+    #[inline]
     fn hash<H>(&self, hasher: &mut H)
     where
         H: Hasher,
@@ -1237,10 +1318,12 @@ impl Hash for DescriptorSetLayout {
 }
 
 impl DescriptorSetLayout {
+    #[inline]
     pub fn info(&self) -> &DescriptorSetLayoutInfo {
         &self.inner.info
     }
 
+    #[inline]
     pub(super) fn new(
         info: DescriptorSetLayoutInfo,
         owner: WeakDevice,
@@ -1261,15 +1344,18 @@ impl DescriptorSetLayout {
         }
     }
 
+    #[inline]
     pub(super) fn is_owned_by(&self, owner: &impl PartialEq<WeakDevice>) -> bool {
         *owner == self.inner.owner
     }
 
+    #[inline]
     pub(super) fn handle(&self) -> vk1_0::DescriptorSetLayout {
         debug_assert!(!self.handle.is_null());
         self.handle
     }
 
+    #[inline]
     pub(super) fn total_count(&self) -> &DescriptorTotalCount {
         &self.inner.total_count
     }
@@ -1292,10 +1378,10 @@ pub(super) enum ReferencedDescriptors {
     CombinedImageSampler(Box<[Option<CombinedImageSampler>]>),
 
     /// Sampled image descriptors.
-    SampledImage(Box<[Option<ImageViewDescriptor>]>),
+    SampledImage(Box<[Option<ImageDescriptor<ImageView>>]>),
 
     /// Storage image descriptors.
-    StorageImage(Box<[Option<ImageViewDescriptor>]>),
+    StorageImage(Box<[Option<ImageDescriptor<ImageView>>]>),
 
     /// Uniform texel buffer descriptors.
     UniformTexelBuffer(Box<[Option<BufferView>]>),
@@ -1316,13 +1402,14 @@ pub(super) enum ReferencedDescriptors {
     StorageBufferDynamic(Box<[Option<BufferRange>]>),
 
     /// Input attachments.
-    InputAttachment(Box<[Option<ImageViewDescriptor>]>),
+    InputAttachment(Box<[Option<ImageDescriptor<ImageView>>]>),
 
     /// Acceleration structures.
     AccelerationStructure(Box<[Option<AccelerationStructure>]>),
 }
 
 impl Drop for DescriptorSetInner {
+    #[inline]
     fn drop(&mut self) {
         resource_freed();
 
@@ -1361,6 +1448,7 @@ impl Debug for WritableDescriptorSet {
 }
 
 impl PartialEq for WritableDescriptorSet {
+    #[inline]
     fn eq(&self, rhs: &Self) -> bool {
         self.descriptor_set.handle == rhs.descriptor_set.handle
     }
@@ -1369,6 +1457,7 @@ impl PartialEq for WritableDescriptorSet {
 impl Eq for WritableDescriptorSet {}
 
 impl Hash for WritableDescriptorSet {
+    #[inline]
     fn hash<H>(&self, hasher: &mut H)
     where
         H: Hasher,
@@ -1378,10 +1467,12 @@ impl Hash for WritableDescriptorSet {
 }
 
 impl WritableDescriptorSet {
+    #[inline]
     pub fn info(&self) -> &DescriptorSetInfo {
         &self.inner().info
     }
 
+    #[inline]
     pub fn share(self) -> DescriptorSet {
         self.descriptor_set
     }
@@ -1462,18 +1553,22 @@ impl WritableDescriptorSet {
         }
     }
 
+    #[inline]
     fn inner(&self) -> &DescriptorSetInner {
         unsafe { &*self.descriptor_set.inner.get() }
     }
 
+    #[inline]
     fn inner_mut(&mut self) -> &mut DescriptorSetInner {
         unsafe { &mut *self.descriptor_set.inner.get() }
     }
 
+    #[inline]
     pub(super) fn is_owned_by(&self, owner: &impl PartialEq<WeakDevice>) -> bool {
         *owner == self.inner().owner
     }
 
+    #[inline]
     pub(super) fn handle(&self) -> vk1_0::DescriptorSet {
         debug_assert!(!self.inner().set.raw().is_null());
         self.descriptor_set.handle
@@ -1623,6 +1718,7 @@ impl Debug for DescriptorSet {
 }
 
 impl PartialEq for DescriptorSet {
+    #[inline]
     fn eq(&self, rhs: &Self) -> bool {
         self.handle == rhs.handle
     }
@@ -1631,6 +1727,7 @@ impl PartialEq for DescriptorSet {
 impl Eq for DescriptorSet {}
 
 impl Hash for DescriptorSet {
+    #[inline]
     fn hash<H>(&self, hasher: &mut H)
     where
         H: Hasher,
@@ -1640,10 +1737,12 @@ impl Hash for DescriptorSet {
 }
 
 impl DescriptorSet {
+    #[inline]
     pub fn info(&self) -> &DescriptorSetInfo {
         &self.inner().info
     }
 
+    #[inline]
     pub fn try_into_writable(self) -> Result<WritableDescriptorSet, Self> {
         if self.is_writtable() {
             Ok(unsafe { self.into_writable() })
@@ -1655,12 +1754,14 @@ impl DescriptorSet {
     /// # Safety
     ///
     /// Caller must ensure that writes would not create races.
+    #[inline]
     pub unsafe fn into_writable(self) -> WritableDescriptorSet {
         WritableDescriptorSet {
             descriptor_set: self,
         }
     }
 
+    #[inline]
     pub fn try_as_writtable(&mut self) -> Option<&mut WritableDescriptorSet> {
         if self.is_writtable() {
             Some(unsafe { self.as_writtable() })
@@ -1672,6 +1773,7 @@ impl DescriptorSet {
     /// # Safety
     ///
     /// Caller must ensure that writes would not create races.
+    #[inline]
     pub unsafe fn as_writtable(&mut self) -> &mut WritableDescriptorSet {
         // Single strong reference guarantees uniqueness.
         // `[repr(transparent)]` allows this cast.
@@ -1681,6 +1783,7 @@ impl DescriptorSet {
     /// Check if descriptor set is writtable.
     /// Caller should have exclusive access to the reference,
     /// otherwise descriptor set can become unwrittable at any moment.
+    #[inline]
     pub fn is_writtable(&self) -> bool {
         debug_assert_eq!(
             Arc::weak_count(&self.inner),
@@ -1690,14 +1793,17 @@ impl DescriptorSet {
         Arc::strong_count(&self.inner) == 1
     }
 
+    #[inline]
     fn inner(&self) -> &DescriptorSetInner {
         unsafe { &*self.inner.get() }
     }
 
+    #[inline]
     pub(super) fn is_owned_by(&self, owner: &impl PartialEq<WeakDevice>) -> bool {
         *owner == self.inner().owner
     }
 
+    #[inline]
     pub(super) fn handle(&self) -> vk1_0::DescriptorSet {
         debug_assert!(!self.inner().set.raw().is_null());
         self.handle
@@ -1721,6 +1827,7 @@ struct PipelineLayoutInner {
 }
 
 impl Drop for PipelineLayoutInner {
+    #[inline]
     fn drop(&mut self) {
         resource_freed();
 
@@ -1744,6 +1851,7 @@ impl Debug for PipelineLayout {
 }
 
 impl PartialEq for PipelineLayout {
+    #[inline]
     fn eq(&self, rhs: &Self) -> bool {
         self.handle == rhs.handle
     }
@@ -1752,6 +1860,7 @@ impl PartialEq for PipelineLayout {
 impl Eq for PipelineLayout {}
 
 impl Hash for PipelineLayout {
+    #[inline]
     fn hash<H>(&self, hasher: &mut H)
     where
         H: Hasher,
@@ -1761,10 +1870,12 @@ impl Hash for PipelineLayout {
 }
 
 impl PipelineLayout {
+    #[inline]
     pub fn info(&self) -> &PipelineLayoutInfo {
         &self.inner.info
     }
 
+    #[inline]
     pub(super) fn new(
         info: PipelineLayoutInfo,
         owner: WeakDevice,
@@ -1779,10 +1890,12 @@ impl PipelineLayout {
         }
     }
 
+    #[inline]
     pub(super) fn is_owned_by(&self, owner: &impl PartialEq<WeakDevice>) -> bool {
         *owner == self.inner.owner
     }
 
+    #[inline]
     pub(super) fn handle(&self) -> vk1_0::PipelineLayout {
         debug_assert!(!self.handle.is_null());
         self.handle
@@ -1803,6 +1916,7 @@ struct ComputePipelineInner {
 }
 
 impl Drop for ComputePipelineInner {
+    #[inline]
     fn drop(&mut self) {
         resource_freed();
 
@@ -1826,6 +1940,7 @@ impl Debug for ComputePipeline {
 }
 
 impl PartialEq for ComputePipeline {
+    #[inline]
     fn eq(&self, rhs: &Self) -> bool {
         self.handle == rhs.handle
     }
@@ -1834,6 +1949,7 @@ impl PartialEq for ComputePipeline {
 impl Eq for ComputePipeline {}
 
 impl Hash for ComputePipeline {
+    #[inline]
     fn hash<H>(&self, hasher: &mut H)
     where
         H: Hasher,
@@ -1843,10 +1959,12 @@ impl Hash for ComputePipeline {
 }
 
 impl ComputePipeline {
+    #[inline]
     pub fn info(&self) -> &ComputePipelineInfo {
         &self.inner.info
     }
 
+    #[inline]
     pub(super) fn new(
         info: ComputePipelineInfo,
         owner: WeakDevice,
@@ -1861,10 +1979,12 @@ impl ComputePipeline {
         }
     }
 
+    #[inline]
     pub(super) fn is_owned_by(&self, owner: &impl PartialEq<WeakDevice>) -> bool {
         *owner == self.inner.owner
     }
 
+    #[inline]
     pub(super) fn handle(&self) -> vk1_0::Pipeline {
         debug_assert!(!self.handle.is_null());
         self.handle
@@ -1885,6 +2005,7 @@ struct GraphicsPipelineInner {
 }
 
 impl Drop for GraphicsPipelineInner {
+    #[inline]
     fn drop(&mut self) {
         resource_freed();
 
@@ -1908,6 +2029,7 @@ impl Debug for GraphicsPipeline {
 }
 
 impl PartialEq for GraphicsPipeline {
+    #[inline]
     fn eq(&self, rhs: &Self) -> bool {
         self.handle == rhs.handle
     }
@@ -1916,6 +2038,7 @@ impl PartialEq for GraphicsPipeline {
 impl Eq for GraphicsPipeline {}
 
 impl Hash for GraphicsPipeline {
+    #[inline]
     fn hash<H>(&self, hasher: &mut H)
     where
         H: Hasher,
@@ -1925,10 +2048,12 @@ impl Hash for GraphicsPipeline {
 }
 
 impl GraphicsPipeline {
+    #[inline]
     pub fn info(&self) -> &GraphicsPipelineInfo {
         &self.inner.info
     }
 
+    #[inline]
     pub(super) fn new(
         info: GraphicsPipelineInfo,
         owner: WeakDevice,
@@ -1943,10 +2068,12 @@ impl GraphicsPipeline {
         }
     }
 
+    #[inline]
     pub(super) fn is_owned_by(&self, owner: &impl PartialEq<WeakDevice>) -> bool {
         *owner == self.inner.owner
     }
 
+    #[inline]
     pub(super) fn handle(&self) -> vk1_0::Pipeline {
         debug_assert!(!self.handle.is_null());
         self.handle
@@ -1968,6 +2095,7 @@ struct AccelerationStructureInner {
 }
 
 impl Drop for AccelerationStructureInner {
+    #[inline]
     fn drop(&mut self) {
         resource_freed();
 
@@ -1992,6 +2120,7 @@ impl Debug for AccelerationStructure {
 }
 
 impl PartialEq for AccelerationStructure {
+    #[inline]
     fn eq(&self, rhs: &Self) -> bool {
         self.handle == rhs.handle
     }
@@ -2000,6 +2129,7 @@ impl PartialEq for AccelerationStructure {
 impl Eq for AccelerationStructure {}
 
 impl Hash for AccelerationStructure {
+    #[inline]
     fn hash<H>(&self, hasher: &mut H)
     where
         H: Hasher,
@@ -2009,14 +2139,17 @@ impl Hash for AccelerationStructure {
 }
 
 impl AccelerationStructure {
+    #[inline]
     pub fn info(&self) -> &AccelerationStructureInfo {
         &self.inner.info
     }
 
+    #[inline]
     pub fn address(&self) -> DeviceAddress {
         self.address
     }
 
+    #[inline]
     pub(super) fn new(
         info: AccelerationStructureInfo,
         owner: WeakDevice,
@@ -2033,10 +2166,12 @@ impl AccelerationStructure {
         }
     }
 
+    #[inline]
     pub(super) fn is_owned_by(&self, owner: &impl PartialEq<WeakDevice>) -> bool {
         *owner == self.inner.owner
     }
 
+    #[inline]
     pub(super) fn handle(&self) -> vkacc::AccelerationStructureKHR {
         debug_assert!(!self.handle.is_null());
         self.handle
@@ -2058,6 +2193,7 @@ struct RayTracingPipelineInner {
 }
 
 impl Drop for RayTracingPipelineInner {
+    #[inline]
     fn drop(&mut self) {
         resource_freed();
 
@@ -2081,6 +2217,7 @@ impl Debug for RayTracingPipeline {
 }
 
 impl PartialEq for RayTracingPipeline {
+    #[inline]
     fn eq(&self, rhs: &Self) -> bool {
         self.handle == rhs.handle
     }
@@ -2089,6 +2226,7 @@ impl PartialEq for RayTracingPipeline {
 impl Eq for RayTracingPipeline {}
 
 impl Hash for RayTracingPipeline {
+    #[inline]
     fn hash<H>(&self, hasher: &mut H)
     where
         H: Hasher,
@@ -2098,10 +2236,12 @@ impl Hash for RayTracingPipeline {
 }
 
 impl RayTracingPipeline {
+    #[inline]
     pub fn info(&self) -> &RayTracingPipelineInfo {
         &self.inner.info
     }
 
+    #[inline]
     pub(super) fn new(
         info: RayTracingPipelineInfo,
         owner: WeakDevice,
@@ -2122,15 +2262,18 @@ impl RayTracingPipeline {
         }
     }
 
+    #[inline]
     pub(super) fn is_owned_by(&self, owner: &impl PartialEq<WeakDevice>) -> bool {
         *owner == self.inner.owner
     }
 
+    #[inline]
     pub(super) fn handle(&self) -> vk1_0::Pipeline {
         debug_assert!(!self.handle.is_null());
         self.handle
     }
 
+    #[inline]
     pub(super) fn group_handlers(&self) -> &[u8] {
         &*self.inner.group_handlers
     }

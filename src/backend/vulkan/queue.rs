@@ -71,8 +71,8 @@ impl Queue {
 
     #[tracing::instrument]
     pub fn create_encoder<'a>(&mut self, scope: &'a Scope<'a>) -> Result<Encoder<'a>, OutOfMemory> {
-        match self.cbufs.pop() {
-            Some(cbuf) => Ok(Encoder::new(cbuf, self.capabilities, scope)),
+        let mut cbuf = match self.cbufs.pop() {
+            Some(cbuf) => cbuf,
             None => {
                 if self.pool == vk1_0::CommandPool::null() {
                     self.pool = unsafe {
@@ -100,10 +100,15 @@ impl Queue {
                 .result()
                 .map_err(oom_error_from_erupt)?;
 
-                let cbuf = CommandBuffer::new(buffers.remove(0), self.id, self.device.downgrade());
-
-                Ok(Encoder::new(cbuf, self.capabilities, scope))
+                CommandBuffer::new(buffers.remove(0), self.id, self.device.clone())
             }
+        };
+        match cbuf.begin() {
+            Err(err) => {
+                self.cbufs.push(cbuf);
+                Err(err)
+            }
+            Ok(()) => Ok(Encoder::new(cbuf, self.capabilities, scope)),
         }
     }
 

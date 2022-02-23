@@ -1,13 +1,19 @@
 #[sierra::descriptors]
-pub struct Descriptors {
-    #[image(sampled)]
-    pub foo: sierra::ImageView,
+struct Descriptors {
+    #[buffer(uniform, texel)]
+    views: sierra::BufferView,
 
     #[sampler]
-    pub bar: sierra::Sampler,
+    #[stages(Fragment)]
+    sampler: sierra::Sampler,
 
-    #[buffer(uniform, texel)]
-    pub views: sierra::BufferView,
+    #[image(sampled)]
+    #[stages(Fragment)]
+    albedo: sierra::ImageView,
+
+    #[uniform]
+    #[stages(Vertex, Fragment)]
+    foo: Foo,
 }
 
 #[sierra::shader_repr(std140)]
@@ -17,11 +23,12 @@ struct Foo {
 }
 
 #[sierra::pipeline]
-pub struct Pipeline {
+struct Pipeline {
     #[set]
     descriptors: Descriptors,
 
-    #[push(std430)]
+    #[push(std140)]
+    #[stages(Compute)]
     foo: Foo,
 }
 

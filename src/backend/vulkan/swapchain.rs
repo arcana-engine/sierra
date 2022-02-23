@@ -46,16 +46,19 @@ pub struct SwapchainImage<'a> {
 }
 
 impl SwapchainImage<'_> {
+    #[inline]
     pub(super) fn supported_families(&self) -> &[bool] {
         &*self.supported_families
     }
 
     /// Swapchain image.
+    #[inline]
     pub fn image(&self) -> &Image {
         self.image
     }
 
     /// Semaphores that should be waited upon before and signaled after last image access.
+    #[inline]
     pub fn wait_signal(&mut self) -> [&mut Semaphore; 2] {
         [&mut *self.wait, &mut *self.signal]
     }
@@ -64,22 +67,27 @@ impl SwapchainImage<'_> {
     /// If image is not optimal, user still can render to it and must present.
     ///
     /// For most users this is the hint that swapchain should be reconfigured.
+    #[inline]
     pub fn is_optimal(&self) -> bool {
         self.optimal
     }
 
+    #[inline]
     pub(super) fn index(&self) -> u32 {
         self.index
     }
 
+    #[inline]
     pub(super) fn is_owned_by(&self, owner: &impl PartialEq<WeakDevice>) -> bool {
         *owner == self.owner
     }
 
+    #[inline]
     pub(super) fn handle(&self) -> SwapchainKHR {
         self.handle
     }
 
+    #[inline]
     pub(super) fn presented(self) {
         self.acquired_counter.fetch_sub(1, Release);
         std::mem::forget(self);
@@ -163,6 +171,7 @@ impl Swapchain {
 }
 
 impl Swapchain {
+    #[inline]
     pub fn capabilities(&self) -> &SurfaceCapabilities {
         &self.surface_capabilities
     }
@@ -170,6 +179,7 @@ impl Swapchain {
     /// Update swapchain images for changed surface.
     /// Does nothing if not configured.
     #[tracing::instrument]
+    #[inline]
     pub fn update(&mut self) -> Result<(), SurfaceError> {
         if let Some(inner) = &self.inner {
             let usage = inner.usage;
