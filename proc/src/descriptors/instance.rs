@@ -276,6 +276,10 @@ pub(super) fn generate(input: &Input) -> TokenStream {
                 }
             }
 
+            pub fn clear(&mut self) {
+                self.cycle.clear();
+            }
+
             pub fn update(
                 &mut self,
                 input: &#ident,
