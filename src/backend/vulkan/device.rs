@@ -2157,8 +2157,6 @@ impl Device {
         &self,
         info: DescriptorSetLayoutInfo,
     ) -> Result<DescriptorSetLayout, OutOfMemory> {
-        tracing::error!("Creating new descriptor set");
-
         let handle = if vk1_0::make_api_version(0, 1, 2, 0) > self.inner.version {
             assert!(
                 info.bindings.iter().all(|binding| binding.flags.is_empty()),
