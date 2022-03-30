@@ -16,6 +16,7 @@ mod pass;
 mod pipeline;
 mod repr;
 mod stage;
+mod swizzle;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum StructLayout {
@@ -84,6 +85,11 @@ pub fn shader_stages(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream
 #[proc_macro]
 pub fn binding_flags(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream {
     descriptors::binding_flags(tokens).into()
+}
+
+#[proc_macro]
+pub fn swizzle(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    swizzle::swizzle(item).into()
 }
 
 fn take_attributes<T>(

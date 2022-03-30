@@ -73,7 +73,7 @@ pub use self::{
     view::*,
 };
 
-pub use sierra_proc::{descriptors, graphics_pipeline_desc, pass, pipeline, shader_repr};
+pub use sierra_proc::{descriptors, graphics_pipeline_desc, pass, pipeline, shader_repr, swizzle};
 
 /// Re-exporting for code-gen.
 #[doc(hidden)]
