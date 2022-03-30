@@ -297,19 +297,6 @@ pub enum CreateBufferError {
     UnsupportedUsage { usage: BufferUsage },
 }
 
-/// Possible error which can be returned from `create_image_*)`.
-#[derive(Clone, Copy, Debug, thiserror::Error, PartialEq, Eq)]
-pub enum CreateImageError {
-    #[error(transparent)]
-    OutOfMemory {
-        #[from]
-        source: OutOfMemory,
-    },
-
-    #[error("Parameters combination `{info:?}` is unsupported")]
-    Unsupported { info: ImageInfo },
-}
-
 /// Possible error that may occur during memory mapping.
 #[derive(Clone, Copy, Debug, thiserror::Error)]
 pub enum MapError {

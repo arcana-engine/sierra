@@ -4,7 +4,7 @@ use crate::{
     image::{Image, ImageInfo, ImageUsage, Samples, Samples1, SubresourceRange},
     render_pass::RenderPass,
     view::{ComponentMapping, ImageView, ImageViewInfo, ImageViewKind},
-    CreateImageError, CreateRenderPassError, Device, Extent2d, OutOfMemory,
+    CreateRenderPassError, Device, Extent2d, OutOfMemory,
 };
 
 /// Defines [`Framebuffer`] state.
@@ -50,7 +50,7 @@ pub trait Attachment {
         device: &Device,
         usage: ImageUsage,
         extent: Extent2d,
-    ) -> Result<ImageView, CreateImageError>;
+    ) -> Result<ImageView, OutOfMemory>;
 }
 
 impl Attachment for ImageView {
@@ -78,7 +78,7 @@ impl Attachment for ImageView {
         _device: &Device,
         usage: ImageUsage,
         mut extent: Extent2d,
-    ) -> Result<ImageView, CreateImageError> {
+    ) -> Result<ImageView, OutOfMemory> {
         assert_eq!(self.info().range.layer_count, 1);
         assert_eq!(self.info().range.level_count, 1);
 
@@ -122,7 +122,7 @@ impl Attachment for Image {
         device: &Device,
         usage: ImageUsage,
         extent: Extent2d,
-    ) -> Result<ImageView, CreateImageError> {
+    ) -> Result<ImageView, OutOfMemory> {
         assert!(self.info().usage.contains(usage));
         assert!(self.info().extent.into_2d() >= extent);
 
@@ -168,7 +168,7 @@ impl Attachment for Format {
         device: &Device,
         usage: ImageUsage,
         extent: Extent2d,
-    ) -> Result<ImageView, CreateImageError> {
+    ) -> Result<ImageView, OutOfMemory> {
         let image = device.create_image(ImageInfo {
             extent: extent.into(),
             format: *self,
@@ -232,15 +232,6 @@ impl From<CreateRenderPassError> for FramebufferError {
                 subpass,
                 attachment,
             },
-        }
-    }
-}
-
-impl From<CreateImageError> for FramebufferError {
-    fn from(err: CreateImageError) -> Self {
-        match err {
-            CreateImageError::OutOfMemory { source } => FramebufferError::OutOfMemory { source },
-            CreateImageError::Unsupported { info } => FramebufferError::Unsupported { info },
         }
     }
 }

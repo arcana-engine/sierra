@@ -70,7 +70,7 @@ use crate::{
     surface::{Surface, SurfaceError},
     swapchain::Swapchain,
     view::{ImageView, ImageViewInfo, ImageViewKind},
-    CreateImageError, DeviceAddress, IndexType, MapError, OutOfMemory,
+    DeviceAddress, IndexType, MapError, OutOfMemory,
 };
 
 use super::{
@@ -1001,7 +1001,7 @@ impl Device {
 
     /// Creates image with uninitialized content.
     #[tracing::instrument]
-    pub fn create_image(&self, info: ImageInfo) -> Result<Image, CreateImageError> {
+    pub fn create_image(&self, info: ImageInfo) -> Result<Image, OutOfMemory> {
         let image = unsafe {
             self.inner.logical.create_image(
                 &vk1_0::ImageCreateInfoBuilder::new()
@@ -1098,7 +1098,7 @@ impl Device {
     //     &self,
     //     info: ImageInfo,
     //     data: &[T],
-    // ) -> Result<Image, CreateImageError>
+    // ) -> Result<Image, OutOfMemory>
     // where
     //     T: Pod,
     // {
