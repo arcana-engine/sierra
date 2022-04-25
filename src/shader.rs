@@ -1,12 +1,12 @@
-pub use crate::backend::ShaderModule;
-use {
-    crate::{assert_error, OutOfMemory},
-    std::{
-        borrow::Cow,
-        convert::TryFrom,
-        fmt::{self, Debug, Display},
-    },
+use std::{
+    borrow::Cow,
+    convert::TryFrom,
+    fmt::{self, Debug, Display},
 };
+
+use crate::{assert_error, OutOfMemory};
+
+pub use crate::backend::ShaderModule;
 
 bitflags::bitflags! {
     /// Flags for each of graphics shaders.
@@ -24,7 +24,7 @@ bitflags::bitflags! {
         const MISS                      = 0b0100000000000;
         const INTERSECTION              = 0b1000000000000;
 
-        const ALL_GRAPHICS              = 0b011111;
+        const ALL_GRAPHICS              = 0b0000000011111;
         const ALL                       = !0;
     }
 }
