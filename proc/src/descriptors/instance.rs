@@ -26,11 +26,11 @@ pub(super) fn generate(input: &Input) -> TokenStream {
             let descriptor_field = quote::format_ident!("descriptor_{}", input.member);
             let ty = &input.field.ty;
             match &input.desc_ty {
-                DescriptorType::Image(Image { layout: Some(_), .. }) => {
-                    quote::quote_spanned!(
-                        input.field.ty.span() => pub #descriptor_field: ::std::option::Option<<#ty as ::sierra::TypedImageDescriptorBinding>::Descriptors>,
-                    )
-                }
+                // DescriptorType::Image(Image { layout: Some(_), .. }) => {
+                //     quote::quote_spanned!(
+                //         input.field.ty.span() => pub #descriptor_field: ::std::option::Option<<#ty as ::sierra::TypedImageDescriptorBinding>::Descriptors>,
+                //     )
+                // }
                 _ => {
                     quote::quote_spanned!(
                         input.field.ty.span() => pub #descriptor_field: ::std::option::Option<<#ty as ::sierra::TypedDescriptorBinding>::Descriptors>,
@@ -50,29 +50,29 @@ pub(super) fn generate(input: &Input) -> TokenStream {
             let write_descriptor = quote::format_ident!("write_{}_descriptor", input.member);
 
             match &input.desc_ty {
-                DescriptorType::Image(Image { layout: Some(layout), .. }) => {
-                    let layout_tokens = match layout {
-                        Layout::Expr(expr) => {
-                            quote::quote!(#expr)
-                        }
-                        Layout::Member(layout) => {
-                            quote::quote!(self.#layout)
-                        }
-                    };
+                // DescriptorType::Image(Image { layout: Some(layout), .. }) => {
+                //     let layout_tokens = match layout {
+                //         Layout::Expr(expr) => {
+                //             quote::quote!(#expr)
+                //         }
+                //         Layout::Member(layout) => {
+                //             quote::quote!(self.#layout)
+                //         }
+                //     };
 
-                    quote::quote!(
-                        let #write_descriptor;
-                        match &elem.#descriptor_field {
-                            Some(descriptors) if sierra::TypedImageDescriptorBinding::eq(&input.#field, descriptors, #layout_tokens) => {
-                                #write_descriptor = false;
-                            }
-                            _ => {
-                                elem.#descriptor_field = Some(::sierra::TypedImageDescriptorBinding::get_descriptors(&input.#field, device, #layout_tokens)?);
-                                #write_descriptor = true;
-                            }
-                        }
-                    )
-                }
+                //     quote::quote!(
+                //         let #write_descriptor;
+                //         match &elem.#descriptor_field {
+                //             Some(descriptors) if sierra::TypedImageDescriptorBinding::eq(&input.#field, descriptors, #layout_tokens) => {
+                //                 #write_descriptor = false;
+                //             }
+                //             _ => {
+                //                 elem.#descriptor_field = Some(::sierra::TypedImageDescriptorBinding::get_descriptors(&input.#field, device, #layout_tokens)?);
+                //                 #write_descriptor = true;
+                //             }
+                //         }
+                //     )
+                // }
                 _ => quote::quote!(
                     let #write_descriptor;
                     match &elem.#descriptor_field {

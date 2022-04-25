@@ -1,58 +1,52 @@
-use {
-    super::{
-        DescriptorBindingFlags, ImageDescriptor, TypedDescriptorBinding,
-        TypedImageDescriptorBinding,
-    },
-    crate::{
-        image::{Image, Layout},
-        view::{ImageView, ImageViewInfo},
-        Device, OutOfMemory,
-    },
+use crate::{
+    image::{Image, Layout},
+    view::{ImageView, ImageViewInfo},
+    Device, OutOfMemory,
 };
 
-impl TypedImageDescriptorBinding for Image {
+use super::{DescriptorBindingFlags, ImageDescriptor, TypedDescriptorBinding};
+
+impl TypedDescriptorBinding for Image {
     const COUNT: u32 = 1;
     const FLAGS: DescriptorBindingFlags = DescriptorBindingFlags::empty();
     type Descriptors = [ImageDescriptor<ImageView>; 1];
 
     #[inline]
-    fn eq(&self, descriptors: &[ImageDescriptor<ImageView>; 1], layout: Layout) -> bool {
-        descriptors[0].layout == layout && *self == descriptors[0].image.info().image
+    fn eq(&self, descriptors: &[ImageDescriptor<ImageView>; 1]) -> bool {
+        *self == descriptors[0].image.info().image
     }
 
     #[inline]
     fn get_descriptors(
         &self,
         device: &Device,
-        layout: Layout,
     ) -> Result<[ImageDescriptor<ImageView>; 1], OutOfMemory> {
         let view = device.create_image_view(ImageViewInfo::new(self.clone()))?;
         Ok([ImageDescriptor {
             image: view,
-            layout,
+            layout: Layout::ShaderReadOnlyOptimal,
         }])
     }
 }
 
-impl TypedImageDescriptorBinding for ImageView {
+impl TypedDescriptorBinding for ImageView {
     const COUNT: u32 = 1;
     const FLAGS: DescriptorBindingFlags = DescriptorBindingFlags::empty();
     type Descriptors = [ImageDescriptor<ImageView>; 1];
 
     #[inline]
-    fn eq(&self, descriptors: &[ImageDescriptor<ImageView>; 1], layout: Layout) -> bool {
-        descriptors[0].layout == layout && *self == descriptors[0].image
+    fn eq(&self, descriptors: &[ImageDescriptor<ImageView>; 1]) -> bool {
+        *self == descriptors[0].image
     }
 
     #[inline]
     fn get_descriptors(
         &self,
         _device: &Device,
-        layout: Layout,
     ) -> Result<[ImageDescriptor<ImageView>; 1], OutOfMemory> {
         Ok([ImageDescriptor {
             image: self.clone(),
-            layout,
+            layout: Layout::ShaderReadOnlyOptimal,
         }])
     }
 }
@@ -99,23 +93,22 @@ impl TypedDescriptorBinding for ImageDescriptor<ImageView> {
     }
 }
 
-impl<const N: usize> TypedImageDescriptorBinding for [Image; N] {
+impl<const N: usize> TypedDescriptorBinding for [Image; N] {
     const COUNT: u32 = N as u32;
     const FLAGS: DescriptorBindingFlags = DescriptorBindingFlags::empty();
     type Descriptors = [ImageDescriptor<ImageView>; N];
 
     #[inline]
-    fn eq(&self, descriptors: &[ImageDescriptor<ImageView>; N], laoyut: Layout) -> bool {
-        self.iter().zip(descriptors).all(|(me, descriptor)| {
-            descriptor.layout == laoyut && *me == descriptor.image.info().image
-        })
+    fn eq(&self, descriptors: &[ImageDescriptor<ImageView>; N]) -> bool {
+        self.iter()
+            .zip(descriptors)
+            .all(|(me, descriptor)| *me == descriptor.image.info().image)
     }
 
     #[inline]
     fn get_descriptors(
         &self,
         device: &Device,
-        laoyut: Layout,
     ) -> Result<[ImageDescriptor<ImageView>; N], OutOfMemory> {
         let mut result = arrayvec::ArrayVec::new();
 
@@ -124,7 +117,7 @@ impl<const N: usize> TypedImageDescriptorBinding for [Image; N] {
             unsafe {
                 result.push_unchecked(ImageDescriptor {
                     image: view,
-                    layout: laoyut,
+                    layout: Layout::ShaderReadOnlyOptimal,
                 });
             }
         }
@@ -133,23 +126,22 @@ impl<const N: usize> TypedImageDescriptorBinding for [Image; N] {
     }
 }
 
-impl<const N: usize> TypedImageDescriptorBinding for [ImageView; N] {
+impl<const N: usize> TypedDescriptorBinding for [ImageView; N] {
     const COUNT: u32 = N as u32;
     const FLAGS: DescriptorBindingFlags = DescriptorBindingFlags::empty();
     type Descriptors = [ImageDescriptor<ImageView>; N];
 
     #[inline]
-    fn eq(&self, descriptors: &[ImageDescriptor<ImageView>; N], laoyut: Layout) -> bool {
+    fn eq(&self, descriptors: &[ImageDescriptor<ImageView>; N]) -> bool {
         self.iter()
             .zip(descriptors)
-            .all(|(me, descriptor)| descriptor.layout == laoyut && *me == descriptor.image)
+            .all(|(me, descriptor)| *me == descriptor.image)
     }
 
     #[inline]
     fn get_descriptors(
         &self,
         _device: &Device,
-        laoyut: Layout,
     ) -> Result<[ImageDescriptor<ImageView>; N], OutOfMemory> {
         let mut result = arrayvec::ArrayVec::new();
 
@@ -157,7 +149,7 @@ impl<const N: usize> TypedImageDescriptorBinding for [ImageView; N] {
             unsafe {
                 result.push_unchecked(ImageDescriptor {
                     image: me.clone(),
-                    layout: laoyut,
+                    layout: Layout::ShaderReadOnlyOptimal,
                 });
             }
         }
@@ -218,28 +210,24 @@ impl<const N: usize> TypedDescriptorBinding for [ImageDescriptor<ImageView>; N] 
     }
 }
 
-impl<const N: usize> TypedImageDescriptorBinding for arrayvec::ArrayVec<Image, N> {
+impl<const N: usize> TypedDescriptorBinding for arrayvec::ArrayVec<Image, N> {
     const COUNT: u32 = N as u32;
     const FLAGS: DescriptorBindingFlags = DescriptorBindingFlags::PARTIALLY_BOUND;
     type Descriptors = arrayvec::ArrayVec<ImageDescriptor<ImageView>, N>;
 
     #[inline]
-    fn eq(
-        &self,
-        descriptors: &arrayvec::ArrayVec<ImageDescriptor<ImageView>, N>,
-        layout: Layout,
-    ) -> bool {
+    fn eq(&self, descriptors: &arrayvec::ArrayVec<ImageDescriptor<ImageView>, N>) -> bool {
         self.len() == descriptors.len()
-            && self.iter().zip(descriptors).all(|(me, descriptor)| {
-                descriptor.layout == layout && *me == descriptor.image.info().image
-            })
+            && self
+                .iter()
+                .zip(descriptors)
+                .all(|(me, descriptor)| *me == descriptor.image.info().image)
     }
 
     #[inline]
     fn get_descriptors(
         &self,
         device: &Device,
-        layout: Layout,
     ) -> Result<arrayvec::ArrayVec<ImageDescriptor<ImageView>, N>, OutOfMemory> {
         let mut result = arrayvec::ArrayVec::new();
 
@@ -248,7 +236,7 @@ impl<const N: usize> TypedImageDescriptorBinding for arrayvec::ArrayVec<Image, N
             unsafe {
                 result.push_unchecked(ImageDescriptor {
                     image: view,
-                    layout,
+                    layout: Layout::ShaderReadOnlyOptimal,
                 });
             }
         }
@@ -256,29 +244,24 @@ impl<const N: usize> TypedImageDescriptorBinding for arrayvec::ArrayVec<Image, N
         Ok(result)
     }
 }
-impl<const N: usize> TypedImageDescriptorBinding for arrayvec::ArrayVec<ImageView, N> {
+impl<const N: usize> TypedDescriptorBinding for arrayvec::ArrayVec<ImageView, N> {
     const COUNT: u32 = N as u32;
     const FLAGS: DescriptorBindingFlags = DescriptorBindingFlags::PARTIALLY_BOUND;
     type Descriptors = arrayvec::ArrayVec<ImageDescriptor<ImageView>, N>;
 
     #[inline]
-    fn eq(
-        &self,
-        descriptors: &arrayvec::ArrayVec<ImageDescriptor<ImageView>, N>,
-        layout: Layout,
-    ) -> bool {
+    fn eq(&self, descriptors: &arrayvec::ArrayVec<ImageDescriptor<ImageView>, N>) -> bool {
         self.len() == descriptors.len()
             && self
                 .iter()
                 .zip(descriptors)
-                .all(|(me, descriptor)| descriptor.layout == layout && *me == descriptor.image)
+                .all(|(me, descriptor)| *me == descriptor.image)
     }
 
     #[inline]
     fn get_descriptors(
         &self,
         _device: &Device,
-        layout: Layout,
     ) -> Result<arrayvec::ArrayVec<ImageDescriptor<ImageView>, N>, OutOfMemory> {
         let mut result = arrayvec::ArrayVec::new();
 
@@ -286,7 +269,7 @@ impl<const N: usize> TypedImageDescriptorBinding for arrayvec::ArrayVec<ImageVie
             unsafe {
                 result.push_unchecked(ImageDescriptor {
                     image: me.clone(),
-                    layout,
+                    layout: Layout::ShaderReadOnlyOptimal,
                 });
             }
         }

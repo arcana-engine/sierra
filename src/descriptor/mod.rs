@@ -4,13 +4,13 @@ mod layout;
 mod sampler;
 // mod sparse;
 
-pub use {
-    self::{buffer::*, image::*, layout::* /*, sparse::**/},
-    crate::{
-        backend::{DescriptorSet, WritableDescriptorSet},
-        queue::QueueId,
-        stage::PipelineStageFlags,
-    },
+use std::{rc::Rc, sync::Arc};
+
+pub use self::{buffer::*, image::*, layout::* /*, sparse::**/};
+pub use crate::{
+    backend::{DescriptorSet, WritableDescriptorSet},
+    queue::QueueId,
+    stage::PipelineStageFlags,
 };
 
 use crate::{
@@ -405,45 +405,77 @@ pub trait TypedDescriptorBinding {
     fn get_descriptors(&self, device: &Device) -> Result<Self::Descriptors, OutOfMemory>;
 }
 
-/// Trait for all types that can be used as descriptor.
-pub trait TypedImageDescriptorBinding {
-    /// Number of descriptors in the binding.
-    const COUNT: u32;
+// /// Trait for all types that can be used as descriptor.
+// pub trait TypedImageDescriptorBinding {
+//     /// Number of descriptors in the binding.
+//     const COUNT: u32;
 
-    /// Flags necessary for this binding type.
-    const FLAGS: DescriptorBindingFlags;
+//     /// Flags necessary for this binding type.
+//     const FLAGS: DescriptorBindingFlags;
 
-    /// Descriptors value.
-    type Descriptors: AsRef<[ImageDescriptor<ImageView>]>;
+//     /// Descriptors value.
+//     type Descriptors: AsRef<[ImageDescriptor<ImageView>]>;
 
-    /// Compare with image view currently bound to descriptor set.
-    /// Returns `true` if self is equivalent specified image view,
-    /// and no update is required.
-    fn eq(&self, descriptors: &Self::Descriptors, layout: Layout) -> bool;
+//     /// Compare with image view currently bound to descriptor set.
+//     /// Returns `true` if self is equivalent specified image view,
+//     /// and no update is required.
+//     fn eq(&self, descriptors: &Self::Descriptors, layout: Layout) -> bool;
 
-    /// Returns `Descriptors` equivalent to self.
-    fn get_descriptors(
-        &self,
-        device: &Device,
-        layout: Layout,
-    ) -> Result<Self::Descriptors, OutOfMemory>;
+//     /// Returns `Descriptors` equivalent to self.
+//     fn get_descriptors(
+//         &self,
+//         device: &Device,
+//         layout: Layout,
+//     ) -> Result<Self::Descriptors, OutOfMemory>;
+// }
+
+// impl<T> TypedDescriptorBinding for T
+// where
+//     T: TypedImageDescriptorBinding,
+// {
+//     const COUNT: u32 = T::COUNT;
+//     const FLAGS: DescriptorBindingFlags = T::FLAGS;
+//     type Descriptors = T::Descriptors;
+
+//     #[inline]
+//     fn eq(&self, descriptors: &Self::Descriptors) -> bool {
+//         self.eq(descriptors, Layout::ShaderReadOnlyOptimal)
+//     }
+
+//     #[inline]
+//     fn get_descriptors(&self, device: &Device) -> Result<Self::Descriptors, OutOfMemory> {
+//         self.get_descriptors(device, Layout::ShaderReadOnlyOptimal)
+//     }
+// }
+
+macro_rules! impl_for_refs {
+    () => {
+        impl_for_refs!(&T);
+        impl_for_refs!(&mut T);
+        impl_for_refs!(Box<T>);
+        impl_for_refs!(Rc<T>);
+        impl_for_refs!(Arc<T>);
+    };
+    ($ref_ty:ty) => {
+        impl<T> TypedDescriptorBinding for $ref_ty
+        where
+            T: TypedDescriptorBinding,
+        {
+            const COUNT: u32 = T::COUNT;
+            const FLAGS: DescriptorBindingFlags = T::FLAGS;
+            type Descriptors = T::Descriptors;
+
+            #[inline]
+            fn eq(&self, descriptors: &Self::Descriptors) -> bool {
+                T::eq(self, descriptors)
+            }
+
+            #[inline]
+            fn get_descriptors(&self, device: &Device) -> Result<Self::Descriptors, OutOfMemory> {
+                T::get_descriptors(&self, device)
+            }
+        }
+    };
 }
 
-impl<T> TypedDescriptorBinding for T
-where
-    T: TypedImageDescriptorBinding,
-{
-    const COUNT: u32 = T::COUNT;
-    const FLAGS: DescriptorBindingFlags = T::FLAGS;
-    type Descriptors = T::Descriptors;
-
-    #[inline]
-    fn eq(&self, descriptors: &Self::Descriptors) -> bool {
-        self.eq(descriptors, Layout::ShaderReadOnlyOptimal)
-    }
-
-    #[inline]
-    fn get_descriptors(&self, device: &Device) -> Result<Self::Descriptors, OutOfMemory> {
-        self.get_descriptors(device, Layout::ShaderReadOnlyOptimal)
-    }
-}
+impl_for_refs!();

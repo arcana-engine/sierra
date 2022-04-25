@@ -264,5 +264,5 @@ mod kw {
     syn::custom_keyword!(PartiallyBound);
     syn::custom_keyword!(UpdateUnused);
     syn::custom_keyword!(capacity);
-    syn::custom_keyword!(layout);
+    // syn::custom_keyword!(layout);
 }
