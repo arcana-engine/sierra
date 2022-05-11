@@ -63,7 +63,7 @@ pub trait TypedPipeline {
 
 /// Extension trait for push constants, specifying stages, offset and size in the typed pipeline.
 ///
-/// This trait is intended to be implemented by proc macro `#[pipeline]`
+/// This trait is intended to be implemented by proc macro `#[derive(TypedPipeline)]`
 /// for types marked as `#[push]`.
 pub trait PipelinePushConstants<P: ?Sized> {
     /// Stage flags for which push constants are enabled.
