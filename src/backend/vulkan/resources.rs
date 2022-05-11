@@ -1591,15 +1591,16 @@ impl WritableDescriptorSet {
                 }
                 _ => unreachable!(),
             },
-            Descriptors::CombinedImageSampler(slice) => match &mut inner.bindings[binding as usize]
-            {
-                ReferencedDescriptors::CombinedImageSampler(array) => {
-                    for (r, d) in array[element as usize..].iter_mut().zip(slice) {
-                        *r = Some(d.clone());
+            Descriptors::CombinedImageSampler(slice) => {
+                match &mut inner.bindings[binding as usize] {
+                    ReferencedDescriptors::CombinedImageSampler(array) => {
+                        for (r, d) in array[element as usize..].iter_mut().zip(slice) {
+                            *r = Some(d.clone());
+                        }
                     }
+                    _ => unreachable!(),
                 }
-                _ => unreachable!(),
-            },
+            }
             Descriptors::SampledImage(slice) => match &mut inner.bindings[binding as usize] {
                 ReferencedDescriptors::SampledImage(array) => {
                     for (r, d) in array[element as usize..].iter_mut().zip(slice) {
@@ -1632,24 +1633,26 @@ impl WritableDescriptorSet {
                 }
                 _ => unreachable!(),
             },
-            Descriptors::UniformBufferDynamic(slice) => match &mut inner.bindings[binding as usize]
-            {
-                ReferencedDescriptors::UniformBufferDynamic(array) => {
-                    for (r, d) in array[element as usize..].iter_mut().zip(slice) {
-                        *r = Some(d.clone());
+            Descriptors::UniformBufferDynamic(slice) => {
+                match &mut inner.bindings[binding as usize] {
+                    ReferencedDescriptors::UniformBufferDynamic(array) => {
+                        for (r, d) in array[element as usize..].iter_mut().zip(slice) {
+                            *r = Some(d.clone());
+                        }
                     }
+                    _ => unreachable!(),
                 }
-                _ => unreachable!(),
-            },
-            Descriptors::StorageBufferDynamic(slice) => match &mut inner.bindings[binding as usize]
-            {
-                ReferencedDescriptors::StorageBufferDynamic(array) => {
-                    for (r, d) in array[element as usize..].iter_mut().zip(slice) {
-                        *r = Some(d.clone());
+            }
+            Descriptors::StorageBufferDynamic(slice) => {
+                match &mut inner.bindings[binding as usize] {
+                    ReferencedDescriptors::StorageBufferDynamic(array) => {
+                        for (r, d) in array[element as usize..].iter_mut().zip(slice) {
+                            *r = Some(d.clone());
+                        }
                     }
+                    _ => unreachable!(),
                 }
-                _ => unreachable!(),
-            },
+            }
             Descriptors::UniformTexelBuffer(slice) => match &mut inner.bindings[binding as usize] {
                 ReferencedDescriptors::UniformTexelBuffer(array) => {
                     for (r, d) in array[element as usize..].iter_mut().zip(slice) {
@@ -1744,7 +1747,7 @@ impl DescriptorSet {
 
     #[inline]
     pub fn try_into_writable(self) -> Result<WritableDescriptorSet, Self> {
-        if self.is_writtable() {
+        if self.is_writable() {
             Ok(unsafe { self.into_writable() })
         } else {
             Err(self)
@@ -1763,8 +1766,8 @@ impl DescriptorSet {
 
     #[inline]
     pub fn try_as_writtable(&mut self) -> Option<&mut WritableDescriptorSet> {
-        if self.is_writtable() {
-            Some(unsafe { self.as_writtable() })
+        if self.is_writable() {
+            Some(unsafe { self.as_writable() })
         } else {
             None
         }
@@ -1774,7 +1777,7 @@ impl DescriptorSet {
     ///
     /// Caller must ensure that writes would not create races.
     #[inline]
-    pub unsafe fn as_writtable(&mut self) -> &mut WritableDescriptorSet {
+    pub unsafe fn as_writable(&mut self) -> &mut WritableDescriptorSet {
         // Single strong reference guarantees uniqueness.
         // `[repr(transparent)]` allows this cast.
         &mut *(self as *mut Self as *mut WritableDescriptorSet)
@@ -1784,7 +1787,7 @@ impl DescriptorSet {
     /// Caller should have exclusive access to the reference,
     /// otherwise descriptor set can become unwrittable at any moment.
     #[inline]
-    pub fn is_writtable(&self) -> bool {
+    pub fn is_writable(&self) -> bool {
         debug_assert_eq!(
             Arc::weak_count(&self.inner),
             0,

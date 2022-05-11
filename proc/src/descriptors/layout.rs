@@ -1,13 +1,14 @@
-use {
-    super::{
-        buffer, combined_binding_flags, image,
-        instance::instance_type_name,
-        parse::{Descriptor, DescriptorType, Input},
-    },
-    crate::stage::combined_stages_flags,
-    proc_macro2::TokenStream,
-    std::convert::TryFrom as _,
+use std::convert::TryFrom;
+
+use proc_macro2::TokenStream;
+
+use super::{
+    buffer, image,
+    instance::instance_type_name,
+    parse::{Descriptor, DescriptorType, Input},
 };
+
+use crate::stage::combined_stages_flags;
 
 pub(super) fn layout_type_name(input: &Input) -> syn::Ident {
     quote::format_ident!("{}Layout", input.item_struct.ident)
@@ -30,8 +31,12 @@ pub(super) fn generate(input: &Input) -> TokenStream {
         .collect::<Vec<_>>();
 
     if !input.uniforms.is_empty() {
-        let stages =
-            combined_stages_flags(input.uniforms.iter().flat_map(|u| u.stages.iter().copied()));
+        let stages = combined_stages_flags(
+            input
+                .uniforms
+                .iter()
+                .flat_map(|u| u.stages.flags.iter().copied()),
+        );
 
         let binding = u32::try_from(bindings.len()).expect("Too many descriptors");
         bindings.push(quote::quote!(
@@ -108,48 +113,52 @@ fn generate_layout_binding(descriptor: &Descriptor, binding: u32) -> TokenStream
             quote::format_ident!("Sampler")
         }
         DescriptorType::Image(image::Image {
-            kind: image::Kind::Sampled,
+            kind: None | Some(image::Kind::Sampled(_)),
             ..
         }) => {
             quote::format_ident!("SampledImage")
         }
         DescriptorType::Image(image::Image {
-            kind: image::Kind::Storage,
+            kind: Some(image::Kind::Storage(_)),
             ..
         }) => {
             quote::format_ident!("StorageImage")
         }
         DescriptorType::Buffer(buffer::Buffer {
-            kind: buffer::Kind::Uniform,
-            texel: false,
+            kind: None | Some(buffer::Kind::Uniform(_)),
+            texel: None,
+            ..
         }) => {
             quote::format_ident!("UniformBuffer")
         }
         DescriptorType::Buffer(buffer::Buffer {
-            kind: buffer::Kind::Storage,
-            texel: false,
+            kind: Some(buffer::Kind::Storage(_)),
+            texel: None,
+            ..
         }) => {
             quote::format_ident!("StorageTexelBuffer")
         }
         DescriptorType::Buffer(buffer::Buffer {
-            kind: buffer::Kind::Uniform,
-            texel: true,
+            kind: None | Some(buffer::Kind::Uniform(_)),
+            texel: Some(_),
+            ..
         }) => {
             quote::format_ident!("UniformTexelBuffer")
         }
         DescriptorType::Buffer(buffer::Buffer {
-            kind: buffer::Kind::Storage,
-            texel: true,
+            kind: Some(buffer::Kind::Storage(_)),
+            texel: Some(_),
+            ..
         }) => {
-            quote::format_ident!("StorageBuffer")
+            quote::format_ident!("StorageTexelBuffer")
         }
         DescriptorType::AccelerationStructure(_) => {
             quote::format_ident!("AccelerationStructure")
         }
     };
 
-    let stages = combined_stages_flags(descriptor.stages.iter().copied());
-    let flags = combined_binding_flags(descriptor.flags.iter().copied());
+    let stages = descriptor.stages.bits();
+    let flags = descriptor.flags.bits();
 
     let ty = &descriptor.field.ty;
     match &descriptor.desc_ty {
@@ -171,7 +180,7 @@ fn generate_layout_binding(descriptor: &Descriptor, binding: u32) -> TokenStream
                 ::sierra::DescriptorSetLayoutBinding {
                     binding: #binding,
                     ty: ::sierra::DescriptorType::#desc_ty,
-                    count: <#ty as ::sierra::TypedDescriptorBinding>::COUNT,
+                    count: <#ty as ::sierra::DescriptorBinding>::COUNT,
                     stages: ::sierra::ShaderStageFlags::from_bits_truncate(#stages),
                     flags: ::sierra::DescriptorBindingFlags::from_bits_truncate(#flags),
                 }

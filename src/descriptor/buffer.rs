@@ -1,14 +1,14 @@
 use crate::BufferView;
 
 use {
-    super::{DescriptorBindingFlags, TypedDescriptorBinding},
+    super::{DescriptorBinding, DescriptorBindingFlags},
     crate::{
         buffer::{Buffer, BufferRange},
         Device, OutOfMemory,
     },
 };
 
-impl TypedDescriptorBinding for Buffer {
+impl DescriptorBinding for Buffer {
     const COUNT: u32 = 1;
     const FLAGS: DescriptorBindingFlags = DescriptorBindingFlags::empty();
     type Descriptors = [BufferRange; 1];
@@ -24,7 +24,7 @@ impl TypedDescriptorBinding for Buffer {
     }
 }
 
-impl<const N: usize> TypedDescriptorBinding for [Buffer; N] {
+impl<const N: usize> DescriptorBinding for [Buffer; N] {
     const COUNT: u32 = N as u32;
     const FLAGS: DescriptorBindingFlags = DescriptorBindingFlags::empty();
     type Descriptors = [BufferRange; N];
@@ -44,7 +44,7 @@ impl<const N: usize> TypedDescriptorBinding for [Buffer; N] {
     }
 }
 
-impl TypedDescriptorBinding for BufferRange {
+impl DescriptorBinding for BufferRange {
     const COUNT: u32 = 1;
     const FLAGS: DescriptorBindingFlags = DescriptorBindingFlags::empty();
     type Descriptors = [BufferRange; 1];
@@ -60,7 +60,7 @@ impl TypedDescriptorBinding for BufferRange {
     }
 }
 
-impl<const N: usize> TypedDescriptorBinding for [BufferRange; N] {
+impl<const N: usize> DescriptorBinding for [BufferRange; N] {
     const COUNT: u32 = N as u32;
     const FLAGS: DescriptorBindingFlags = DescriptorBindingFlags::empty();
     type Descriptors = [BufferRange; N];
@@ -76,7 +76,7 @@ impl<const N: usize> TypedDescriptorBinding for [BufferRange; N] {
     }
 }
 
-impl<const N: usize> TypedDescriptorBinding for arrayvec::ArrayVec<BufferRange, N> {
+impl<const N: usize> DescriptorBinding for arrayvec::ArrayVec<BufferRange, N> {
     const COUNT: u32 = N as u32;
     const FLAGS: DescriptorBindingFlags = DescriptorBindingFlags::PARTIALLY_BOUND;
     type Descriptors = arrayvec::ArrayVec<BufferRange, N>;
@@ -95,7 +95,7 @@ impl<const N: usize> TypedDescriptorBinding for arrayvec::ArrayVec<BufferRange, 
     }
 }
 
-impl TypedDescriptorBinding for BufferView {
+impl DescriptorBinding for BufferView {
     const COUNT: u32 = 1;
     const FLAGS: DescriptorBindingFlags = DescriptorBindingFlags::empty();
     type Descriptors = [BufferView; 1];
@@ -111,7 +111,7 @@ impl TypedDescriptorBinding for BufferView {
     }
 }
 
-impl<const N: usize> TypedDescriptorBinding for [BufferView; N] {
+impl<const N: usize> DescriptorBinding for [BufferView; N] {
     const COUNT: u32 = N as u32;
     const FLAGS: DescriptorBindingFlags = DescriptorBindingFlags::empty();
     type Descriptors = [BufferView; N];
@@ -127,7 +127,7 @@ impl<const N: usize> TypedDescriptorBinding for [BufferView; N] {
     }
 }
 
-impl<const N: usize> TypedDescriptorBinding for arrayvec::ArrayVec<BufferView, N> {
+impl<const N: usize> DescriptorBinding for arrayvec::ArrayVec<BufferView, N> {
     const COUNT: u32 = N as u32;
     const FLAGS: DescriptorBindingFlags = DescriptorBindingFlags::PARTIALLY_BOUND;
     type Descriptors = arrayvec::ArrayVec<BufferView, N>;

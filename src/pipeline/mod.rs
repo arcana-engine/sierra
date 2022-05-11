@@ -55,7 +55,7 @@ pub trait TypedPipelineLayout {
         P: PipelinePushConstants<Self>;
 }
 
-pub trait PipelineInput {
+pub trait TypedPipeline {
     type Layout: TypedPipelineLayout;
 
     fn layout(device: &Device) -> Result<Self::Layout, OutOfMemory>;

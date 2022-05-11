@@ -2397,6 +2397,10 @@ impl Device {
             }
         }
 
+        if writes_count == 0 {
+            return;
+        }
+
         let mut ranges = SmallVec::<[_; 64]>::new();
 
         let mut images = SmallVec::<[_; 16]>::new();

@@ -1,8 +1,9 @@
-use {
-    super::parse::{ClearValue, Input, Layout, LoadOp, StoreOp},
-    proc_macro2::TokenStream,
-    std::convert::TryFrom,
-};
+use std::convert::TryFrom;
+
+use proc_easy::ReferenceExpr;
+use proc_macro2::TokenStream;
+
+use super::parse::{Clear, Input, Load, LoadOp, Store, StoreOp};
 
 pub(super) fn generate(input: &Input) -> TokenStream {
     let vis = &input.item_struct.vis;
@@ -17,7 +18,8 @@ pub(super) fn generate(input: &Input) -> TokenStream {
             let member = &a.member;
 
             let initial_layout = initial_layout(&a.load_op);
-            let check_final_layout = final_layout(&a.store_op).map(|final_layout| {
+            let check_final_layout = a.store_op.as_ref().map(|store_op| {
+                let final_layout = final_layout(store_op);
                 quote::quote!(else if a.final_layout != ::sierra::Layout::from(#final_layout) {
                     ::sierra::tracing::debug!("Final layout is incompatible. Old {:?}, new {:?}", a.final_layout, #final_layout);
                     render_pass_compatible = false;
@@ -55,13 +57,13 @@ pub(super) fn generate(input: &Input) -> TokenStream {
 
             let member = &a.member;
             let load_op = match a.load_op {
-                LoadOp::Clear(_) => quote::format_ident!("Clear"),
-                LoadOp::Load(_) => quote::format_ident!("Load"),
-                LoadOp::DontCare => quote::format_ident!("DontCare"),
+                Some(LoadOp::Clear(_)) => quote::format_ident!("Clear"),
+                Some(LoadOp::Load(_)) => quote::format_ident!("Load"),
+                None => quote::format_ident!("DontCare"),
             };
 
             let initial_layout = initial_layout(&a.load_op);
-            let final_layout = match final_layout(&a.store_op) {
+            let final_layout = match a.store_op.as_ref().map(final_layout) {
                 None => {
                     // find last use. General if unused.
                     input
@@ -86,8 +88,8 @@ pub(super) fn generate(input: &Input) -> TokenStream {
             };
 
             let store_op = match a.store_op {
-                StoreOp::Store(_) => quote::format_ident!("Store"),
-                StoreOp::DontCare => quote::format_ident!("DontCare"),
+                Some(StoreOp::Store(_)) => quote::format_ident!("Store"),
+                None => quote::format_ident!("DontCare"),
             };
 
             quote::quote!(
@@ -204,10 +206,10 @@ pub(super) fn generate(input: &Input) -> TokenStream {
         .attachments
         .iter()
         .filter_map(|a| match &a.load_op {
-            LoadOp::Clear(ClearValue::Member(member)) => {
+            Some(LoadOp::Clear(Clear(_, ReferenceExpr::Member { member }))) => {
                 Some(quote::quote!(::sierra::ClearValue::from(input.#member),))
             }
-            LoadOp::Clear(ClearValue::Expr(expr)) => {
+            Some(LoadOp::Clear(Clear(_, ReferenceExpr::Expr { expr, .. }))) => {
                 Some(quote::quote!(::sierra::ClearValue::from(#expr),))
             }
             _ => None,
@@ -356,23 +358,22 @@ pub(super) fn generate(input: &Input) -> TokenStream {
     )
 }
 
-fn initial_layout(load_op: &LoadOp) -> TokenStream {
+fn initial_layout(load_op: &Option<LoadOp>) -> TokenStream {
     match load_op {
-        LoadOp::Clear(_) => quote::quote!(::std::option::Option::None),
-        LoadOp::DontCare => quote::quote!(::std::option::Option::None),
-        LoadOp::Load(Layout::Expr(expr)) => {
+        Some(LoadOp::Clear(_)) => quote::quote!(::std::option::Option::None),
+        None => quote::quote!(::std::option::Option::None),
+        Some(LoadOp::Load(Load(_, ReferenceExpr::Expr { expr, .. }))) => {
             quote::quote!(::std::option::Option::Some(#expr))
         }
-        LoadOp::Load(Layout::Member(layout)) => {
-            quote::quote!(::std::option::Option::Some(self.#layout))
+        Some(LoadOp::Load(Load(_, ReferenceExpr::Member { member }))) => {
+            quote::quote!(::std::option::Option::Some(self.#member))
         }
     }
 }
 
-fn final_layout(store_op: &StoreOp) -> Option<TokenStream> {
+fn final_layout(store_op: &StoreOp) -> TokenStream {
     match store_op {
-        StoreOp::DontCare => None,
-        StoreOp::Store(Layout::Expr(expr)) => Some(quote::quote!(#expr)),
-        StoreOp::Store(Layout::Member(layout)) => Some(quote::quote!(self.#layout)),
+        StoreOp::Store(Store(_, ReferenceExpr::Expr { expr, .. })) => quote::quote!(#expr),
+        StoreOp::Store(Store(_, ReferenceExpr::Member { member })) => quote::quote!(self.#member),
     }
 }

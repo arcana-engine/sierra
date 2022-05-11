@@ -1,41 +1,38 @@
-#[sierra::descriptors]
-struct Descriptors {
-    #[buffer(uniform, texel)]
+#[derive(sierra::TypedDescriptors)]
+struct DescriptorSet {
+    #[sierra(buffer(uniform, texel), vertex)]
     views: sierra::BufferView,
 
-    #[sampler]
-    #[stages(Fragment)]
+    #[sierra(sampler, fragment)]
     sampler: sierra::Sampler,
 
-    #[image(sampled)]
-    #[stages(Fragment)]
+    #[sierra(image(sampled), fragment)]
     albedo: sierra::ImageView,
 
-    #[uniform]
-    #[stages(Vertex, Fragment)]
+    #[sierra(uniform, stages(vertex, fragment))]
     foo: Foo,
 }
 
-#[sierra::shader_repr(std140)]
+#[derive(sierra::ShaderRepr)]
+#[sierra(std140)]
 struct Foo {
     foo: u32,
     bar: f32,
 }
 
-#[sierra::pipeline]
+#[derive(sierra::TypedPipeline)]
 struct Pipeline {
-    #[set]
-    descriptors: Descriptors,
+    #[sierra(set)]
+    descriptors: DescriptorSet,
 
-    #[push(std140)]
-    #[stages(Compute)]
+    #[sierra(push(std140), compute)]
     foo: Foo,
 }
 
-#[sierra::pass]
-#[subpass(color = target)]
+#[derive(sierra::TypedRenderPass)]
+#[sierra(subpass(color = target))]
 pub struct Main {
-    #[attachment(clear(const sierra::ClearColor(0.3, 0.1, 0.8, 1.0)), store(const sierra::Layout::Present))]
+    #[sierra(attachment(clear = const sierra::ClearColor(0.3, 0.1, 0.8, 1.0), store = const sierra::Layout::Present))]
     target: sierra::Image,
 }
 

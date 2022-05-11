@@ -1,21 +1,13 @@
-use std::convert::TryFrom as _;
+use std::convert::TryFrom;
 
-use proc_macro2::TokenStream;
-use syn::spanned::Spanned as _;
+use proc_easy::EasyAttributes;
+use syn::spanned::Spanned;
 
-use crate::{
-    find_unique, find_unique_attribute, kw,
-    stage::{take_stages, Stage},
-    take_attributes,
-};
+use crate::{flags::BindingFlags, kw, stage::Stages};
 
 use super::{
-    acceleration_structure::{parse_acceleration_structure_attr, AccelerationStructure},
-    buffer::{parse_buffer_attr, Buffer},
-    image::{parse_image_attr, Image},
-    sampler::{parse_sampler_attr, Sampler},
-    uniform::{parse_uniform_attr, Uniform},
-    BindingFlag,
+    acceleration_structure::AccelerationStructure, buffer::Buffer, image::Image, sampler::Sampler,
+    uniform::Uniform,
 };
 
 pub(super) struct Input {
@@ -26,8 +18,8 @@ pub(super) struct Input {
 }
 
 pub struct Descriptor {
-    pub stages: Vec<Stage>,
-    pub flags: Vec<BindingFlag>,
+    pub stages: Stages,
+    pub flags: BindingFlags,
     pub desc_ty: DescriptorType,
     pub member: syn::Member,
     pub field: syn::Field,
@@ -46,7 +38,7 @@ impl Descriptor {
 }
 
 pub(super) struct UniformField {
-    pub stages: Vec<Stage>,
+    pub stages: Stages,
     pub field: syn::Field,
     pub member: syn::Member,
     pub uniform: Uniform,
@@ -66,47 +58,48 @@ pub enum DescriptorType {
     AccelerationStructure(AccelerationStructure),
 }
 
-enum DescriptorsArgument {
-    Capacity(usize),
+proc_easy::easy_argument_value! {
+    struct Capacity {
+        kw: kw::capacity,
+        lit: syn::LitInt,
+    }
 }
 
-pub(super) fn parse(
-    attr: proc_macro::TokenStream,
-    item: proc_macro::TokenStream,
-) -> syn::Result<Input> {
-    let mut cycle_capacity = 5;
-
-    if !attr.is_empty() {
-        let attr = TokenStream::from(attr);
-
-        let args = syn::parse::Parser::parse2(
-            |stream: syn::parse::ParseStream| {
-                stream.parse_terminated::<_, syn::Token![,]>(|stream: syn::parse::ParseStream| {
-                    let lookahead1 = stream.lookahead1();
-                    if lookahead1.peek(kw::capacity) {
-                        stream.parse::<kw::capacity>()?;
-                        stream.parse::<syn::Token![=]>()?;
-                        let value = stream.parse::<syn::LitInt>()?;
-                        Ok(DescriptorsArgument::Capacity(value.base10_parse()?))
-                    } else {
-                        Err(lookahead1.error())
-                    }
-                })
-            },
-            attr.clone(),
-        )?;
-
-        cycle_capacity = find_unique(
-            args.iter().map(|arg| match arg {
-                DescriptorsArgument::Capacity(value) => *value,
-            }),
-            &attr,
-            "Up to one `capacity` argument expected",
-        )?
-        .unwrap_or(5);
+proc_easy::easy_attributes! {
+    @(sierra)
+    struct DescriptorsAttributes {
+        capacity: Option<Capacity>,
     }
+}
 
+proc_easy::easy_argument_group! {
+    #[derive(Clone)]
+    enum Kind {
+        AccelerationStructure(AccelerationStructure),
+        Buffer(Buffer),
+        Image(Image),
+        Sampler(Sampler),
+        Uniform(Uniform),
+    }
+}
+
+proc_easy::easy_attributes! {
+    @(sierra)
+    struct FieldAttributes {
+        kind: Kind,
+        stages: Stages,
+        flags: Option<BindingFlags>,
+    }
+}
+
+pub(super) fn parse(item: proc_macro::TokenStream) -> syn::Result<Input> {
     let mut item_struct = syn::parse::<syn::ItemStruct>(item)?;
+
+    let attrs = DescriptorsAttributes::parse(&item_struct.attrs, item_struct.ident.span())?;
+    let cycle_capacity = match &attrs.capacity {
+        None => 5,
+        Some(capacity) => capacity.lit.base10_parse()?,
+    };
 
     let mut uniforms = Vec::new();
     let mut descriptors = Vec::new();
@@ -119,12 +112,60 @@ pub(super) fn parse(
             }
         };
 
-        match parse_input_field(field, index)? {
-            None => {}
-            Some(Field::Descriptor(descriptor)) => {
-                descriptors.push(descriptor);
+        let attrs = FieldAttributes::parse(&field.attrs, field.span())?;
+
+        let member = match &field.ident {
+            None => syn::Member::Unnamed(syn::Index {
+                span: field.span(),
+                index,
+            }),
+            Some(ident) => syn::Member::Named(ident.clone()),
+        };
+
+        match attrs.kind {
+            Kind::Sampler(value) => descriptors.push(Descriptor {
+                desc_ty: DescriptorType::Sampler(value),
+                flags: attrs.flags.unwrap_or_default(),
+                stages: attrs.stages,
+                member,
+                field: field.clone(),
+            }),
+            Kind::Image(value) => descriptors.push(Descriptor {
+                desc_ty: DescriptorType::Image(value),
+                flags: attrs.flags.unwrap_or_default(),
+                stages: attrs.stages,
+                member,
+                field: field.clone(),
+            }),
+            Kind::Buffer(value) => descriptors.push(Descriptor {
+                desc_ty: DescriptorType::Buffer(value),
+                flags: attrs.flags.unwrap_or_default(),
+                stages: attrs.stages,
+                member,
+                field: field.clone(),
+            }),
+            Kind::AccelerationStructure(value) => descriptors.push(Descriptor {
+                desc_ty: DescriptorType::AccelerationStructure(value),
+                flags: attrs.flags.unwrap_or_default(),
+                stages: attrs.stages,
+                member,
+                field: field.clone(),
+            }),
+            Kind::Uniform(uniform) => {
+                if let Some(flags) = &attrs.flags {
+                    return Err(syn::Error::new(
+                        flags.span(),
+                        "Unexpected binding flags on uniform field",
+                    ));
+                }
+
+                uniforms.push(UniformField {
+                    field: field.clone(),
+                    stages: attrs.stages,
+                    member,
+                    uniform,
+                })
             }
-            Some(Field::Uniform(uniform)) => uniforms.push(uniform),
         }
     }
 
@@ -142,106 +183,4 @@ pub(super) fn parse(
         descriptors,
         uniforms,
     })
-}
-
-enum FieldAttribute {
-    Sampler(Sampler),
-    Image(Image),
-    Buffer(Buffer),
-    AccelerationStructure(AccelerationStructure),
-    Uniform(Uniform),
-}
-
-enum Field {
-    Uniform(UniformField),
-    Descriptor(Descriptor),
-}
-
-fn parse_input_field(field: &mut syn::Field, field_index: u32) -> syn::Result<Option<Field>> {
-    let ty = find_unique_attribute(
-        &mut field.attrs,
-        parse_input_field_attr,
-        "At most one shader input type for field must be specified",
-    )?;
-
-    match ty {
-        Some(ty) => {
-            let stages = take_stages(&mut field.attrs)?;
-
-            let flags: Vec<_> = if matches!(ty, FieldAttribute::Uniform(_)) {
-                Vec::new()
-            } else {
-                take_attributes(&mut field.attrs, |attr| match attr.path.get_ident() {
-                    Some(ident) if ident == "flags" => attr
-                        .parse_args_with(|stream: syn::parse::ParseStream<'_>| {
-                            let stages =
-                                stream.parse_terminated::<_, syn::Token![,]>(BindingFlag::parse)?;
-                            Ok(stages)
-                        })
-                        .map(Some),
-                    _ => Ok(None),
-                })?
-                .into_iter()
-                .flatten()
-                .collect()
-            };
-
-            let member = match field.ident.as_ref() {
-                None => syn::Member::Unnamed(syn::Index {
-                    index: field_index,
-                    span: field.span(),
-                }),
-                Some(field_ident) => syn::Member::Named(field_ident.clone()),
-            };
-
-            Ok(Some(match ty {
-                FieldAttribute::Sampler(value) => Field::Descriptor(Descriptor {
-                    desc_ty: DescriptorType::Sampler(value),
-                    flags,
-                    stages,
-                    member,
-                    field: field.clone(),
-                }),
-                FieldAttribute::Image(value) => Field::Descriptor(Descriptor {
-                    desc_ty: DescriptorType::Image(value),
-                    flags,
-                    stages,
-                    member,
-                    field: field.clone(),
-                }),
-                FieldAttribute::Buffer(value) => Field::Descriptor(Descriptor {
-                    desc_ty: DescriptorType::Buffer(value),
-                    flags,
-                    stages,
-                    member,
-                    field: field.clone(),
-                }),
-                FieldAttribute::AccelerationStructure(value) => Field::Descriptor(Descriptor {
-                    desc_ty: DescriptorType::AccelerationStructure(value),
-                    flags,
-                    stages,
-                    member,
-                    field: field.clone(),
-                }),
-                FieldAttribute::Uniform(uniform) => Field::Uniform(UniformField {
-                    field: field.clone(),
-                    stages,
-                    member,
-                    uniform,
-                }),
-            }))
-        }
-        None => Ok(None),
-    }
-}
-
-fn parse_input_field_attr(attr: &syn::Attribute) -> syn::Result<Option<FieldAttribute>> {
-    on_first_ok!(parse_sampler_attr(attr)?.map(FieldAttribute::Sampler));
-    on_first_ok!(parse_image_attr(attr)?.map(FieldAttribute::Image));
-    on_first_ok!(parse_buffer_attr(attr)?.map(FieldAttribute::Buffer));
-    on_first_ok!(
-        parse_acceleration_structure_attr(attr)?.map(FieldAttribute::AccelerationStructure)
-    );
-    on_first_ok!(parse_uniform_attr(attr)?.map(FieldAttribute::Uniform));
-    Ok(None)
 }

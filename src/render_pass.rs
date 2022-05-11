@@ -256,3 +256,9 @@ pub trait RenderPassInstance {
         encoder: &'b mut Encoder<'a>,
     ) -> Result<RenderPassEncoder<'b, 'a>, FramebufferError>;
 }
+
+pub trait TypedRenderPass {
+    type Instance: RenderPassInstance;
+
+    fn instance() -> Self::Instance;
+}

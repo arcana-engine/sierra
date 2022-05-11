@@ -1,7 +1,8 @@
-use {
-    super::{instance::instance_type_name, layout::layout_type_name, parse::Input},
-    proc_macro2::TokenStream,
-};
+use proc_macro2::TokenStream;
+
+use super::{instance::instance_type_name, layout::layout_type_name, parse::Input};
+
+use crate::layout::StructLayout;
 
 pub(super) fn generate(input: &Input) -> TokenStream {
     std::iter::once(generate_input_impl(input))
@@ -17,7 +18,10 @@ fn generate_uniform_struct(input: &Input) -> TokenStream {
         .map(|u| {
             let vis = &u.field.vis;
             let field_type = &u.field.ty;
-            let sierra_layout = u.uniform.layout.sierra_type();
+            let sierra_layout = match u.uniform.layout {
+                Some(layout) => layout.sierra_type(),
+                None => StructLayout::default_sierra_type(),
+            };
 
             let val_ident = quote::format_ident!("val_{}", u.member);
             let pad_ident = quote::format_ident!("pad_{}", u.member);
@@ -42,7 +46,10 @@ fn generate_uniform_struct(input: &Input) -> TokenStream {
         .map(|u| {
             let member = &u.member;
             let val_ident = quote::format_ident!("val_{}", u.member);
-            let sierra_layout = u.uniform.layout.sierra_type();
+            let sierra_layout = match u.uniform.layout {
+                Some(layout) => layout.sierra_type(),
+                None => StructLayout::default_sierra_type(),
+            };
 
             quote::quote! {
                 ::sierra::ShaderRepr::<#sierra_layout>::copy_to_repr(&input.#member, &mut self.#val_ident);
@@ -104,7 +111,7 @@ fn generate_input_impl(input: &Input) -> TokenStream {
     let instance_ident = instance_type_name(input);
 
     quote::quote! {
-        impl ::sierra::DescriptorsInput for #ident {
+        impl ::sierra::TypedDescriptors for #ident {
             type Layout = #layout_ident;
             type Instance = #instance_ident;
 

@@ -4,9 +4,9 @@ use crate::{
     Device, OutOfMemory,
 };
 
-use super::{DescriptorBindingFlags, ImageDescriptor, TypedDescriptorBinding};
+use super::{DescriptorBinding, DescriptorBindingFlags, ImageDescriptor};
 
-impl TypedDescriptorBinding for Image {
+impl DescriptorBinding for Image {
     const COUNT: u32 = 1;
     const FLAGS: DescriptorBindingFlags = DescriptorBindingFlags::empty();
     type Descriptors = [ImageDescriptor<ImageView>; 1];
@@ -29,7 +29,7 @@ impl TypedDescriptorBinding for Image {
     }
 }
 
-impl TypedDescriptorBinding for ImageView {
+impl DescriptorBinding for ImageView {
     const COUNT: u32 = 1;
     const FLAGS: DescriptorBindingFlags = DescriptorBindingFlags::empty();
     type Descriptors = [ImageDescriptor<ImageView>; 1];
@@ -51,7 +51,7 @@ impl TypedDescriptorBinding for ImageView {
     }
 }
 
-impl TypedDescriptorBinding for ImageDescriptor<Image> {
+impl DescriptorBinding for ImageDescriptor<Image> {
     const COUNT: u32 = 1;
     const FLAGS: DescriptorBindingFlags = DescriptorBindingFlags::empty();
     type Descriptors = [ImageDescriptor<ImageView>; 1];
@@ -74,7 +74,7 @@ impl TypedDescriptorBinding for ImageDescriptor<Image> {
     }
 }
 
-impl TypedDescriptorBinding for ImageDescriptor<ImageView> {
+impl DescriptorBinding for ImageDescriptor<ImageView> {
     const COUNT: u32 = 1;
     const FLAGS: DescriptorBindingFlags = DescriptorBindingFlags::empty();
     type Descriptors = [ImageDescriptor<ImageView>; 1];
@@ -93,7 +93,7 @@ impl TypedDescriptorBinding for ImageDescriptor<ImageView> {
     }
 }
 
-impl<const N: usize> TypedDescriptorBinding for [Image; N] {
+impl<const N: usize> DescriptorBinding for [Image; N] {
     const COUNT: u32 = N as u32;
     const FLAGS: DescriptorBindingFlags = DescriptorBindingFlags::empty();
     type Descriptors = [ImageDescriptor<ImageView>; N];
@@ -126,7 +126,7 @@ impl<const N: usize> TypedDescriptorBinding for [Image; N] {
     }
 }
 
-impl<const N: usize> TypedDescriptorBinding for [ImageView; N] {
+impl<const N: usize> DescriptorBinding for [ImageView; N] {
     const COUNT: u32 = N as u32;
     const FLAGS: DescriptorBindingFlags = DescriptorBindingFlags::empty();
     type Descriptors = [ImageDescriptor<ImageView>; N];
@@ -158,7 +158,7 @@ impl<const N: usize> TypedDescriptorBinding for [ImageView; N] {
     }
 }
 
-impl<const N: usize> TypedDescriptorBinding for [ImageDescriptor<Image>; N] {
+impl<const N: usize> DescriptorBinding for [ImageDescriptor<Image>; N] {
     const COUNT: u32 = N as u32;
     const FLAGS: DescriptorBindingFlags = DescriptorBindingFlags::empty();
     type Descriptors = [ImageDescriptor<ImageView>; N];
@@ -191,7 +191,7 @@ impl<const N: usize> TypedDescriptorBinding for [ImageDescriptor<Image>; N] {
     }
 }
 
-impl<const N: usize> TypedDescriptorBinding for [ImageDescriptor<ImageView>; N] {
+impl<const N: usize> DescriptorBinding for [ImageDescriptor<ImageView>; N] {
     const COUNT: u32 = N as u32;
     const FLAGS: DescriptorBindingFlags = DescriptorBindingFlags::empty();
     type Descriptors = [ImageDescriptor<ImageView>; N];
@@ -210,7 +210,7 @@ impl<const N: usize> TypedDescriptorBinding for [ImageDescriptor<ImageView>; N] 
     }
 }
 
-impl<const N: usize> TypedDescriptorBinding for arrayvec::ArrayVec<Image, N> {
+impl<const N: usize> DescriptorBinding for arrayvec::ArrayVec<Image, N> {
     const COUNT: u32 = N as u32;
     const FLAGS: DescriptorBindingFlags = DescriptorBindingFlags::PARTIALLY_BOUND;
     type Descriptors = arrayvec::ArrayVec<ImageDescriptor<ImageView>, N>;
@@ -244,7 +244,7 @@ impl<const N: usize> TypedDescriptorBinding for arrayvec::ArrayVec<Image, N> {
         Ok(result)
     }
 }
-impl<const N: usize> TypedDescriptorBinding for arrayvec::ArrayVec<ImageView, N> {
+impl<const N: usize> DescriptorBinding for arrayvec::ArrayVec<ImageView, N> {
     const COUNT: u32 = N as u32;
     const FLAGS: DescriptorBindingFlags = DescriptorBindingFlags::PARTIALLY_BOUND;
     type Descriptors = arrayvec::ArrayVec<ImageDescriptor<ImageView>, N>;
@@ -278,7 +278,7 @@ impl<const N: usize> TypedDescriptorBinding for arrayvec::ArrayVec<ImageView, N>
     }
 }
 
-impl<const N: usize> TypedDescriptorBinding for arrayvec::ArrayVec<ImageDescriptor<Image>, N> {
+impl<const N: usize> DescriptorBinding for arrayvec::ArrayVec<ImageDescriptor<Image>, N> {
     const COUNT: u32 = N as u32;
     const FLAGS: DescriptorBindingFlags = DescriptorBindingFlags::PARTIALLY_BOUND;
     type Descriptors = arrayvec::ArrayVec<ImageDescriptor<ImageView>, N>;
@@ -311,7 +311,7 @@ impl<const N: usize> TypedDescriptorBinding for arrayvec::ArrayVec<ImageDescript
     }
 }
 
-impl<const N: usize> TypedDescriptorBinding for arrayvec::ArrayVec<ImageDescriptor<ImageView>, N> {
+impl<const N: usize> DescriptorBinding for arrayvec::ArrayVec<ImageDescriptor<ImageView>, N> {
     const COUNT: u32 = N as u32;
     const FLAGS: DescriptorBindingFlags = DescriptorBindingFlags::PARTIALLY_BOUND;
     type Descriptors = arrayvec::ArrayVec<ImageDescriptor<ImageView>, N>;
