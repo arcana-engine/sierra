@@ -1,6 +1,6 @@
 use proc_macro2::TokenStream;
 
-use crate::StructLayout;
+use crate::layout::StructLayout;
 
 use super::parse::Input;
 
@@ -105,11 +105,17 @@ fn generate_layout(item_struct: &syn::ItemStruct, layout: StructLayout) -> Token
 pub(super) fn generate_repr(input: &Input) -> TokenStream {
     let mut output = TokenStream::new();
 
-    if input.layouts.is_empty() {
-        output.extend(generate_layout(&input.item_struct, StructLayout::Std140));
-        output.extend(generate_layout(&input.item_struct, StructLayout::Std430));
+    if input.layouts.flags.is_empty() {
+        output.extend(generate_layout(
+            &input.item_struct,
+            StructLayout::Std140(Default::default()),
+        ));
+        output.extend(generate_layout(
+            &input.item_struct,
+            StructLayout::Std430(Default::default()),
+        ));
     } else {
-        for layout in &input.layouts {
+        for layout in &input.layouts.flags {
             output.extend(generate_layout(&input.item_struct, *layout));
         }
     }

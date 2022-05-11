@@ -2,74 +2,34 @@ use std::convert::TryFrom as _;
 
 extern crate proc_macro;
 
-macro_rules! on_first_ok {
-    ($e:expr) => {
-        if let Some(r) = $e {
-            return Ok(Some(r));
-        }
-    };
-}
-
 mod descriptors;
+mod flags;
 mod graphics_pipeline;
+mod layout;
 mod pass;
 mod pipeline;
 mod repr;
 mod stage;
 mod swizzle;
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum StructLayout {
-    Std140,
-    Std430,
+#[proc_macro_derive(TypedDescriptors, attributes(sierra))]
+pub fn typed_descriptors(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    descriptors::descriptors(item).into()
 }
 
-impl StructLayout {
-    pub fn name(&self) -> &'static str {
-        match self {
-            StructLayout::Std140 => "Std140",
-            StructLayout::Std430 => "Std430",
-        }
-    }
-
-    pub fn sierra_type(&self) -> proc_macro2::TokenStream {
-        match self {
-            StructLayout::Std140 => quote::quote!(::sierra::Std140),
-            StructLayout::Std430 => quote::quote!(::sierra::Std430),
-        }
-    }
+#[proc_macro_derive(ShaderRepr, attributes(sierra))]
+pub fn shader_repr(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    repr::shader_repr(item).into()
 }
 
-#[proc_macro_attribute]
-pub fn descriptors(
-    attr: proc_macro::TokenStream,
-    item: proc_macro::TokenStream,
-) -> proc_macro::TokenStream {
-    descriptors::descriptors(attr, item).into()
+#[proc_macro_derive(TypedPipeline, attributes(sierra))]
+pub fn typed_pipeline(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    pipeline::pipeline(item).into()
 }
 
-#[proc_macro_attribute]
-pub fn shader_repr(
-    attr: proc_macro::TokenStream,
-    item: proc_macro::TokenStream,
-) -> proc_macro::TokenStream {
-    repr::shader_repr(attr, item).into()
-}
-
-#[proc_macro_attribute]
-pub fn pipeline(
-    attr: proc_macro::TokenStream,
-    item: proc_macro::TokenStream,
-) -> proc_macro::TokenStream {
-    pipeline::pipeline(attr, item).into()
-}
-
-#[proc_macro_attribute]
-pub fn pass(
-    attr: proc_macro::TokenStream,
-    item: proc_macro::TokenStream,
-) -> proc_macro::TokenStream {
-    pass::pass(attr, item).into()
+#[proc_macro_derive(TypedRenderPass, attributes(sierra))]
+pub fn typed_render_pass(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    pass::pass(item).into()
 }
 
 #[proc_macro]
@@ -84,115 +44,13 @@ pub fn shader_stages(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream
 
 #[proc_macro]
 pub fn binding_flags(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    descriptors::binding_flags(tokens).into()
+    flags::binding_flags(tokens).into()
 }
 
 #[proc_macro]
 pub fn swizzle(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     swizzle::swizzle(item).into()
 }
-
-fn take_attributes<T>(
-    attrs: &mut Vec<syn::Attribute>,
-    mut f: impl FnMut(&syn::Attribute) -> syn::Result<Option<T>>,
-) -> syn::Result<Vec<T>> {
-    let len = attrs.len();
-    let mut del = 0;
-    let mut result = Vec::with_capacity(len);
-    {
-        let v = &mut **attrs;
-
-        for i in 0..len {
-            if let Some(value) = f(&v[i])? {
-                result.push(value);
-                del += 1;
-            } else if del > 0 {
-                v.swap(i - del, i);
-            }
-        }
-    }
-    if del > 0 {
-        attrs.truncate(len - del);
-    }
-
-    Ok(result)
-}
-
-fn find_unique_attribute<T>(
-    attrs: &mut Vec<syn::Attribute>,
-    mut f: impl FnMut(&syn::Attribute) -> syn::Result<Option<T>>,
-    msg: impl std::fmt::Display,
-) -> syn::Result<Option<T>> {
-    let mut found = None;
-
-    for (index, attr) in attrs.iter().enumerate() {
-        if let Some(v) = f(attr)? {
-            if found.is_none() {
-                found = Some((index, v));
-            } else {
-                return Err(syn::Error::new_spanned(attr, msg));
-            }
-        }
-    }
-
-    match found {
-        Some((i, v)) => {
-            attrs.remove(i);
-            Ok(Some(v))
-        }
-        None => Ok(None),
-    }
-}
-
-fn get_unique_attribute<T>(
-    attrs: &mut Vec<syn::Attribute>,
-    f: impl FnMut(&syn::Attribute) -> syn::Result<Option<T>>,
-    spanned: &impl quote::ToTokens,
-    msg: impl std::fmt::Display,
-) -> syn::Result<T> {
-    match find_unique_attribute(attrs, f, &msg)? {
-        Some(v) => Ok(v),
-        None => Err(syn::Error::new_spanned(spanned, msg)),
-    }
-}
-
-fn find_unique<I>(
-    iter: I,
-    spanned: &impl quote::ToTokens,
-    msg: impl std::fmt::Display,
-) -> syn::Result<Option<I::Item>>
-where
-    I: IntoIterator,
-{
-    let mut iter = iter.into_iter();
-    match iter.next() {
-        None => Ok(None),
-        Some(item) => {
-            if iter.next().is_none() {
-                Ok(Some(item))
-            } else {
-                Err(syn::Error::new_spanned(spanned, msg))
-            }
-        }
-    }
-}
-
-// fn get_unique<I>(
-//     iter: I,
-//     spanned: &impl quote::ToTokens,
-//     msg: impl std::fmt::Display,
-// ) -> syn::Result<I::Item>
-// where
-//     I: IntoIterator,
-// {
-//     let mut iter = iter.into_iter();
-//     if let Some(item) = iter.next() {
-//         if iter.next().is_none() {
-//             return Ok(item);
-//         }
-//     }
-//     Err(syn::Error::new_spanned(spanned, msg))
-// }
 
 fn validate_member(member: &syn::Member, item_struct: &syn::ItemStruct) -> syn::Result<u32> {
     match (member, &item_struct.fields) {
@@ -223,11 +81,11 @@ fn validate_member(member: &syn::Member, item_struct: &syn::ItemStruct) -> syn::
         }
         (syn::Member::Named(named), syn::Fields::Unnamed(_)) => Err(syn::Error::new_spanned(
             named,
-            "Expected unnamed member for tuple-struct",
+            "Unexpected unnamed member for tuple-struct",
         )),
         (syn::Member::Unnamed(unnamed), syn::Fields::Named(_)) => Err(syn::Error::new_spanned(
             unnamed,
-            "Expected named member for struct",
+            "Unexpected named member for struct",
         )),
         (member, syn::Fields::Unit) => Err(syn::Error::new_spanned(
             member,
@@ -236,33 +94,42 @@ fn validate_member(member: &syn::Member, item_struct: &syn::ItemStruct) -> syn::
     }
 }
 
+// fn parse_attrs_with<T>(
+//     attrs: &[syn::Attribute],
+//     mut f: fn(syn::parse::ParseStream) -> syn::Result<T>,
+// ) -> syn::Result<Punctuated<T, syn::Token![,]>> {
+//     let mut result = Punctuated::new();
+
+//     for attr in attrs {
+//         if attr.path.is_ident("sierra") {
+//             let array = attr.parse_args_with(|stream: syn::parse::ParseStream| {
+//                 stream.parse_terminated::<_, syn::Token![,]>(f)
+//             })?;
+//             result.extend(array.into_pairs());
+//         }
+//     }
+
+//     Ok(result)
+// }
+
 mod kw {
-    syn::custom_keyword!(sampled);
-    syn::custom_keyword!(uniform);
-    syn::custom_keyword!(storage);
-    syn::custom_keyword!(texel);
-    syn::custom_keyword!(subpass);
-    syn::custom_keyword!(color);
-    syn::custom_keyword!(depth);
-    syn::custom_keyword!(clear);
-    syn::custom_keyword!(load);
-    syn::custom_keyword!(store);
-    syn::custom_keyword!(std140);
-    syn::custom_keyword!(std430);
-    syn::custom_keyword!(Vertex);
-    syn::custom_keyword!(TessellationControl);
-    syn::custom_keyword!(TessellationEvaluation);
-    syn::custom_keyword!(Geometry);
-    syn::custom_keyword!(Fragment);
-    syn::custom_keyword!(Compute);
-    syn::custom_keyword!(Raygen);
-    syn::custom_keyword!(AnyHit);
-    syn::custom_keyword!(ClosestHit);
-    syn::custom_keyword!(Miss);
-    syn::custom_keyword!(Intersection);
-    syn::custom_keyword!(UpdateAfterBind);
-    syn::custom_keyword!(PartiallyBound);
-    syn::custom_keyword!(UpdateUnused);
-    syn::custom_keyword!(capacity);
-    // syn::custom_keyword!(layout);
+    proc_easy::easy_token!(acceleration_structure);
+    proc_easy::easy_token!(buffer);
+    proc_easy::easy_token!(image);
+    proc_easy::easy_token!(sampled);
+    proc_easy::easy_token!(sampler);
+    proc_easy::easy_token!(uniform);
+    proc_easy::easy_token!(storage);
+    proc_easy::easy_token!(texel);
+    proc_easy::easy_token!(subpass);
+    proc_easy::easy_token!(color);
+    proc_easy::easy_token!(depth);
+    proc_easy::easy_token!(clear);
+    proc_easy::easy_token!(load);
+    proc_easy::easy_token!(store);
+    proc_easy::easy_token!(capacity);
+    proc_easy::easy_token!(set);
+    proc_easy::easy_token!(push);
+    proc_easy::easy_token!(layout);
+    proc_easy::easy_token!(attachment);
 }

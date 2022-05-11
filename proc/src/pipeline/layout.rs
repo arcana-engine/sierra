@@ -1,5 +1,5 @@
 use {
-    super::parse::Input, crate::stage::combined_stages_flags, proc_macro2::TokenStream,
+    super::parse::Input, proc_macro2::TokenStream,
     std::convert::TryFrom,
 };
 
@@ -18,7 +18,7 @@ pub(super) fn generate(input: &Input) -> TokenStream {
             let ident = &set.field.ident;
             let ty = &set.field.ty;
             quote::quote!(
-                #vis #ident: <#ty as ::sierra::DescriptorsInput>::Layout,
+                #vis #ident: <#ty as ::sierra::TypedDescriptors>::Layout,
             )
         })
         .collect::<TokenStream>();
@@ -30,7 +30,7 @@ pub(super) fn generate(input: &Input) -> TokenStream {
             let ident = &set.field.ident;
             let ty = &set.field.ty;
             quote::quote!(
-                let #ident = <#ty as ::sierra::DescriptorsInput>::layout(device)?;
+                let #ident = <#ty as ::sierra::TypedDescriptors>::layout(device)?;
             )
         })
         .collect::<TokenStream>();
@@ -65,7 +65,7 @@ pub(super) fn generate(input: &Input) -> TokenStream {
             let ty = &set.field.ty;
             let index = u32::try_from(index).expect("Too many sets");
             quote::quote!(
-                impl ::sierra::UpdatedPipelineDescriptors<#layout_ident> for <<#ty as ::sierra::DescriptorsInput>::Instance as ::sierra::DescriptorsInstance<#ty>>::Updated {
+                impl ::sierra::UpdatedPipelineDescriptors<#layout_ident> for <<#ty as ::sierra::TypedDescriptors>::Instance as ::sierra::DescriptorsInstance<#ty>>::Updated {
                     const N: u32 = #index;
                 }
             )
@@ -78,13 +78,13 @@ pub(super) fn generate(input: &Input) -> TokenStream {
         .fold((quote::quote!(0), quote::quote!{}, quote::quote!{}), |(mut offset, mut desc, mut impls), push_constants| {
             let field_type = &push_constants.field.ty;
             let sierra_layout = push_constants.layout.sierra_type();
-            let stages = combined_stages_flags(push_constants.stages.iter().copied());
+            let stages = push_constants.stages.bits();
 
             let field_align_mask = quote::quote!(<#field_type as ::sierra::ShaderRepr<#sierra_layout>>::ALIGN_MASK);
             let this_offset = quote::quote!(::sierra::align_offset(#field_align_mask, #offset));
             let field_repr = quote::quote!(<#field_type as ::sierra::ShaderRepr<#sierra_layout>>::Type);
 
-            offset = quote::quote!(::sierra::next_offset(#field_align_mask, #offset, ::sierra::size_of::<#field_repr>()));
+            offset = quote::quote!(::sierra::next_offset(#field_align_mask, #offset, ::std::mem::size_of::<#field_repr>()));
 
             desc.extend(quote::quote!(
                 ::sierra::PushConstant {

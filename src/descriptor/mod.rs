@@ -362,7 +362,7 @@ pub trait DescriptorsInstance<I: ?Sized> {
 /// Input structures for descriptors implement this trait.
 ///
 /// This trait is intended to be implemented by proc macro `#[descriptors]`.
-pub trait DescriptorsInput {
+pub trait TypedDescriptors {
     /// Layout type for the input.
     ///
     /// Proc macro `#[descriptors]` generates this type and all necessary code.
@@ -386,7 +386,7 @@ pub trait UpdatedPipelineDescriptors<P: ?Sized>: UpdatedDescriptors {
 }
 
 /// Trait for all types that can be used as descriptor.
-pub trait TypedDescriptorBinding {
+pub trait DescriptorBinding {
     /// Number of descriptors in the binding.
     const COUNT: u32;
 
@@ -429,7 +429,7 @@ pub trait TypedDescriptorBinding {
 //     ) -> Result<Self::Descriptors, OutOfMemory>;
 // }
 
-// impl<T> TypedDescriptorBinding for T
+// impl<T> DescriptorBinding for T
 // where
 //     T: TypedImageDescriptorBinding,
 // {
@@ -457,9 +457,9 @@ macro_rules! impl_for_refs {
         impl_for_refs!(Arc<T>);
     };
     ($ref_ty:ty) => {
-        impl<T> TypedDescriptorBinding for $ref_ty
+        impl<T> DescriptorBinding for $ref_ty
         where
-            T: TypedDescriptorBinding,
+            T: DescriptorBinding,
         {
             const COUNT: u32 = T::COUNT;
             const FLAGS: DescriptorBindingFlags = T::FLAGS;

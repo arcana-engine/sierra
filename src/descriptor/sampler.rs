@@ -1,9 +1,9 @@
 use {
-    super::{DescriptorBindingFlags, TypedDescriptorBinding},
+    super::{DescriptorBinding, DescriptorBindingFlags},
     crate::{sampler::Sampler, Device, OutOfMemory},
 };
 
-impl TypedDescriptorBinding for Sampler {
+impl DescriptorBinding for Sampler {
     const COUNT: u32 = 1;
     const FLAGS: DescriptorBindingFlags = DescriptorBindingFlags::empty();
     type Descriptors = [Sampler; 1];
@@ -19,7 +19,7 @@ impl TypedDescriptorBinding for Sampler {
     }
 }
 
-impl<const N: usize> TypedDescriptorBinding for [Sampler; N] {
+impl<const N: usize> DescriptorBinding for [Sampler; N] {
     const COUNT: u32 = N as u32;
     const FLAGS: DescriptorBindingFlags = DescriptorBindingFlags::empty();
     type Descriptors = [Sampler; N];
@@ -35,7 +35,7 @@ impl<const N: usize> TypedDescriptorBinding for [Sampler; N] {
     }
 }
 
-impl<const N: usize> TypedDescriptorBinding for arrayvec::ArrayVec<Sampler, N> {
+impl<const N: usize> DescriptorBinding for arrayvec::ArrayVec<Sampler, N> {
     const COUNT: u32 = N as u32;
     const FLAGS: DescriptorBindingFlags = DescriptorBindingFlags::PARTIALLY_BOUND;
     type Descriptors = arrayvec::ArrayVec<Sampler, N>;

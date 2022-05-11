@@ -3,9 +3,9 @@ use crate::{DescriptorSetWrite, UpdateDescriptorSet};
 use {
     super::{
         DescriptorBindingFlags, DescriptorSet, DescriptorSetInfo, DescriptorSetLayout,
-        DescriptorSetLayoutBinding, DescriptorSetLayoutFlags, DescriptorSetLayoutInfo,
-        DescriptorsAllocationError, DescriptorsInput, DescriptorsInstance, DescriptorsLayout,
-        TypedDescriptor, UpdatedDescriptors,
+        DescriptorSetLayoutBinding, DescriptorSetLayoutFlags, DescriptorSetLayoutInfo, Descriptors,
+        DescriptorsAllocationError, DescriptorsInstance, DescriptorsLayout, TypedDescriptor,
+        UpdatedDescriptors,
     },
     crate::{encode::Encoder, shader::ShaderStageFlags, Device, OutOfMemory},
     bitsetium::{BitEmpty, BitSearch, BitSet, BitSetLimit, BitTest, Bits4096},
@@ -45,7 +45,7 @@ pub struct SparseDescriptors<T, const CAP: u32, const STAGES: u32> {
     marker: PhantomData<fn() -> T>,
 }
 
-impl<T, const CAP: u32, const STAGES: u32> DescriptorsInput for SparseDescriptors<T, CAP, STAGES>
+impl<T, const CAP: u32, const STAGES: u32> Descriptors for SparseDescriptors<T, CAP, STAGES>
 where
     T: TypedDescriptor,
 {
@@ -141,7 +141,7 @@ where
                 // # Safety
                 //
                 // None
-                set.raw.as_writtable()
+                set.raw.as_writable()
             },
             writes: &writes,
             copies: &[],

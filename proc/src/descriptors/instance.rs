@@ -1,12 +1,10 @@
-use {
-    super::{
-        buffer, image,
-        image::{Image, Layout},
-        layout::layout_type_name,
-        parse::{DescriptorType, Input},
-    },
-    proc_macro2::TokenStream,
-    syn::spanned::Spanned,
+use proc_macro2::TokenStream;
+use syn::spanned::Spanned;
+
+use super::{
+    buffer, image,
+    layout::layout_type_name,
+    parse::{DescriptorType, Input},
 };
 
 pub(super) fn instance_type_name(input: &Input) -> syn::Ident {
@@ -33,7 +31,7 @@ pub(super) fn generate(input: &Input) -> TokenStream {
                 // }
                 _ => {
                     quote::quote_spanned!(
-                        input.field.ty.span() => pub #descriptor_field: ::std::option::Option<<#ty as ::sierra::TypedDescriptorBinding>::Descriptors>,
+                        input.field.ty.span() => pub #descriptor_field: ::std::option::Option<<#ty as ::sierra::DescriptorBinding>::Descriptors>,
                     )
                 }
             }
@@ -76,11 +74,12 @@ pub(super) fn generate(input: &Input) -> TokenStream {
                 _ => quote::quote!(
                     let #write_descriptor;
                     match &elem.#descriptor_field {
-                        Some(descriptors) if sierra::TypedDescriptorBinding::eq(&input.#field, descriptors) => {
+                        Some(descriptors) if sierra::DescriptorBinding::eq(&input.#field, descriptors) => {
                             #write_descriptor = false;
                         }
                         _ => {
-                            elem.#descriptor_field = Some(::sierra::TypedDescriptorBinding::get_descriptors(&input.#field, device)?);
+                            elem.#descriptor_field = Some(::sierra::DescriptorBinding::get_descriptors(&input.#field, device)?);
+                            write_descriptor_any = true;
                             #write_descriptor = true;
                         }
                     }
@@ -100,36 +99,40 @@ pub(super) fn generate(input: &Input) -> TokenStream {
                 DescriptorType::Sampler(_) => Some(quote::quote_spanned! {
                     span => <::sierra::SamplerDescriptor as ::sierra::TypedDescriptor>::descriptors(descriptors)
                 }),
-                DescriptorType::Image(image::Image { kind: image::Kind::Sampled,..}) => Some(quote::quote_spanned! {
+                DescriptorType::Image(image::Image { kind: None | Some(image::Kind::Sampled(_)),..}) => Some(quote::quote_spanned! {
                     span => <::sierra::SampledImageDescriptor as ::sierra::TypedDescriptor>::descriptors(descriptors)
                 }),
-                DescriptorType::Image(image::Image { kind: image::Kind::Storage,.. }) => Some(quote::quote_spanned! {
+                DescriptorType::Image(image::Image { kind: Some(image::Kind::Storage(_)), .. }) => Some(quote::quote_spanned! {
                     span => <::sierra::StorageImageDescriptor as ::sierra::TypedDescriptor>::descriptors(descriptors)
                 }),
                 DescriptorType::AccelerationStructure(_) => Some(quote::quote_spanned! {
                     span => <::sierra::AccelerationStructureDescriptor as ::sierra::TypedDescriptor>::descriptors(descriptors)
                 }),
                 DescriptorType::Buffer(buffer::Buffer {
-                    kind: buffer::Kind::Uniform,
-                    texel: false,
+                    kind: None | Some(buffer::Kind::Uniform(_)),
+                    texel: None,
+                    ..
                 }) => Some(quote::quote_spanned! {
-                    span=> <::sierra::UniformBufferDescriptor as ::sierra::TypedDescriptor>::descriptors(descriptors)
+                    span => <::sierra::UniformBufferDescriptor as ::sierra::TypedDescriptor>::descriptors(descriptors)
                 }),
                 DescriptorType::Buffer(buffer::Buffer {
-                    kind: buffer::Kind::Storage,
-                    texel: false,
+                    kind: Some(buffer::Kind::Storage(_)),
+                    texel: None,
+                    ..
                 }) => Some(quote::quote_spanned! {
                     span=> <::sierra::StorageBufferDescriptor as ::sierra::TypedDescriptor>::descriptors(descriptors)
                 }),
                 DescriptorType::Buffer(buffer::Buffer {
-                    kind: buffer::Kind::Uniform,
-                    texel: true,
+                    kind: None | Some(buffer::Kind::Uniform(_)),
+                    texel: Some(_),
+                    ..
                 }) => Some(quote::quote_spanned! {
                     span=> <::sierra::UniformTexelBufferDescriptor as ::sierra::TypedDescriptor>::descriptors(descriptors)
                 }),
                 DescriptorType::Buffer(buffer::Buffer {
-                    kind: buffer::Kind::Storage,
-                    texel: true,
+                    kind: Some(buffer::Kind::Storage(_)),
+                    texel: Some(_),
+                    ..
                 }) => Some(quote::quote_spanned! {
                     span=> <::sierra::StorageTexelBufferDescriptor as ::sierra::TypedDescriptor>::descriptors(descriptors)
                 }),
@@ -195,7 +198,6 @@ pub(super) fn generate(input: &Input) -> TokenStream {
         TokenStream::new()
     } else {
         quote::quote!(
-            let write_uniforms;
             if elem.uniforms_buffer.is_none() {
                 let mut uniforms: #uniforms_ident = ::sierra::bytemuck::Zeroable::zeroed();
                 uniforms.copy_from_input(input);
@@ -225,7 +227,13 @@ pub(super) fn generate(input: &Input) -> TokenStream {
                     descriptors: ::sierra::Descriptors::UniformBuffer(::std::slice::from_ref(&elem.uniforms_buffer.as_ref().unwrap().1)),
                 });
             }
+        )
+    };
 
+    let update_uniforms_buffer_statement = if input.uniforms.is_empty() {
+        TokenStream::new()
+    } else {
+        quote::quote!(
             let (uniforms, buffer) = elem.uniforms_buffer.as_ref().unwrap();
             encoder.update_buffer(scope.to_scope(buffer.buffer.clone()), 0, scope.to_scope([*uniforms]));
         )
@@ -303,7 +311,7 @@ pub(super) fn generate(input: &Input) -> TokenStream {
                 let start = self.cycle_next;
 
                 loop {
-                    match self.cycle[self.cycle_next].set.is_writtable() {
+                    match self.cycle[self.cycle_next].set.is_writable() {
                         false => {
                             let next = (self.cycle_next + 1) % self.cycle.len();
                             if next == start {
@@ -335,14 +343,20 @@ pub(super) fn generate(input: &Input) -> TokenStream {
                 let scope = encoder.scope();
 
                 let elem = &mut self.cycle[self.cycle_next];
+
+                #[allow(unused)]
+                let mut write_uniforms = false;
+                #[allow(unused)]
+                let mut write_descriptor_any = false;
+
                 #update_uniforms_statement
                 #update_descriptor_statements
 
-                {
+                if write_descriptor_any || write_uniforms {
                     let writable_set: &mut ::sierra::WritableDescriptorSet = unsafe {
                         // # Safety
-                        // Loop above guaratees uniqueness.
-                        elem.set.as_writtable()
+                        // Loop above guarantees uniqueness.
+                        elem.set.as_writable()
                     };
 
                     let mut writes = ::sierra::arrayvec::ArrayVec::<_, #max_writes>::new();
@@ -356,6 +370,7 @@ pub(super) fn generate(input: &Input) -> TokenStream {
                     }]);
                 }
 
+                #update_uniforms_buffer_statement
                 #updated_descriptor_assertions
 
                 self.cycle_next += 1;
