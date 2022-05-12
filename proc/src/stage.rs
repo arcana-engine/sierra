@@ -36,7 +36,7 @@ impl Stage {
     }
 }
 
-pub fn combined_stages_flags<'a>(stages: impl Iterator<Item = Stage>) -> u32 {
+pub fn combined_stages_flags(stages: impl Iterator<Item = Stage>) -> u32 {
     stages.fold(0, |flags, stage| flags | stage.bit())
 }
 

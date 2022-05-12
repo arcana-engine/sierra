@@ -1,7 +1,8 @@
-use {
-    super::parse::Input, proc_macro2::TokenStream,
-    std::convert::TryFrom,
-};
+use std::convert::TryFrom;
+
+use proc_macro2::TokenStream;
+
+use super::parse::Input;
 
 pub(super) fn layout_type_name(input: &Input) -> syn::Ident {
     quote::format_ident!("{}Layout", input.item_struct.ident)
@@ -93,7 +94,7 @@ pub(super) fn generate(input: &Input) -> TokenStream {
                     size: ::std::mem::size_of::<#field_repr>() as u32,
                 },
             ));
-            
+
             impls.extend(quote::quote!(
                 impl ::sierra::PipelinePushConstants<#layout_ident> for #field_type {
                     const STAGES: ::sierra::ShaderStageFlags = ::sierra::ShaderStageFlags::from_bits_truncate(#stages);

@@ -161,30 +161,13 @@ fn generate_layout_binding(descriptor: &Descriptor, binding: u32) -> TokenStream
     let flags = descriptor.flags.bits();
 
     let ty = &descriptor.field.ty;
-    match &descriptor.desc_ty {
-        // DescriptorType::Image(image::Image {
-        //     layout: Some(_), ..
-        // }) => {
-        //     quote::quote!(
-        //         ::sierra::DescriptorSetLayoutBinding {
-        //             binding: #binding,
-        //             ty: ::sierra::DescriptorType::#desc_ty,
-        //             count: <#ty as ::sierra::TypedImageDescriptorBinding>::COUNT,
-        //             stages: ::sierra::ShaderStageFlags::from_bits_truncate(#stages),
-        //             flags: ::sierra::DescriptorBindingFlags::from_bits_truncate(#flags),
-        //         }
-        //     )
-        // }
-        _ => {
-            quote::quote!(
-                ::sierra::DescriptorSetLayoutBinding {
-                    binding: #binding,
-                    ty: ::sierra::DescriptorType::#desc_ty,
-                    count: <#ty as ::sierra::DescriptorBinding>::COUNT,
-                    stages: ::sierra::ShaderStageFlags::from_bits_truncate(#stages),
-                    flags: ::sierra::DescriptorBindingFlags::from_bits_truncate(#flags),
-                }
-            )
+    quote::quote!(
+        ::sierra::DescriptorSetLayoutBinding {
+            binding: #binding,
+            ty: ::sierra::DescriptorType::#desc_ty,
+            count: <#ty as ::sierra::DescriptorBinding>::COUNT,
+            stages: ::sierra::ShaderStageFlags::from_bits_truncate(#stages),
+            flags: ::sierra::DescriptorBindingFlags::from_bits_truncate(#flags),
         }
-    }
+    )
 }
