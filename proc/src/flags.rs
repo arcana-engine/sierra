@@ -26,7 +26,7 @@ impl BindingFlags {
     }
 }
 
-pub fn combined_binding_flags<'a>(flags: impl Iterator<Item = BindingFlag>) -> u32 {
+pub fn combined_binding_flags(flags: impl Iterator<Item = BindingFlag>) -> u32 {
     flags.fold(0, |flags, binding| flags | binding.bit())
 }
 

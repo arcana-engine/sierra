@@ -1069,7 +1069,7 @@ impl Device {
                         .dealloc(EruptMemoryDevice::wrap(&self.inner.logical), block);
                 }
 
-                Err(oom_error_from_erupt(err).into())
+                Err(oom_error_from_erupt(err))
             }
         }
     }
