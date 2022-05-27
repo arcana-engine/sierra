@@ -74,7 +74,7 @@ pub use self::{
 };
 
 pub use sierra_proc::{
-    graphics_pipeline_desc, swizzle, ShaderRepr, TypedDescriptors, TypedPipeline, TypedRenderPass,
+    graphics_pipeline_desc, swizzle, Descriptors, Pass, PipelineInput, ShaderRepr,
 };
 
 /// Re-exporting for code-gen.

@@ -45,7 +45,7 @@ use crate::{
     },
     descriptor::{
         DescriptorBindingFlags, DescriptorSetInfo, DescriptorSetLayout, DescriptorSetLayoutBinding,
-        DescriptorSetLayoutFlags, DescriptorSetLayoutInfo, DescriptorType, Descriptors,
+        DescriptorSetLayoutFlags, DescriptorSetLayoutInfo, DescriptorSlice, DescriptorType,
         DescriptorsAllocationError, UpdateDescriptorSet, WritableDescriptorSet,
     },
     fence::Fence,
@@ -2328,28 +2328,28 @@ impl Device {
 
             for write in update.writes.iter() {
                 match write.descriptors {
-                    Descriptors::Sampler(samplers) => {
+                    DescriptorSlice::Sampler(samplers) => {
                         for sampler in samplers {
                             assert_owner!(sampler, self);
                         }
                     }
-                    Descriptors::CombinedImageSampler(combos) => {
+                    DescriptorSlice::CombinedImageSampler(combos) => {
                         for combo in combos {
                             assert_owner!(combo.view, self);
                             assert_owner!(combo.sampler, self);
                         }
                     }
-                    Descriptors::SampledImage(slice)
-                    | Descriptors::StorageImage(slice)
-                    | Descriptors::InputAttachment(slice) => {
+                    DescriptorSlice::SampledImage(slice)
+                    | DescriptorSlice::StorageImage(slice)
+                    | DescriptorSlice::InputAttachment(slice) => {
                         for image in slice {
                             assert_owner!(image.image, self);
                         }
                     }
-                    Descriptors::UniformBuffer(regions)
-                    | Descriptors::StorageBuffer(regions)
-                    | Descriptors::UniformBufferDynamic(regions)
-                    | Descriptors::StorageBufferDynamic(regions) => {
+                    DescriptorSlice::UniformBuffer(regions)
+                    | DescriptorSlice::StorageBuffer(regions)
+                    | DescriptorSlice::UniformBufferDynamic(regions)
+                    | DescriptorSlice::StorageBufferDynamic(regions) => {
                         for region in regions {
                             assert_owner!(region.buffer, self);
                             debug_assert_ne!(
@@ -2370,7 +2370,7 @@ impl Device {
                             );
                         }
                     }
-                    Descriptors::AccelerationStructure(acceleration_structures) => {
+                    DescriptorSlice::AccelerationStructure(acceleration_structures) => {
                         for acceleration_structure in acceleration_structures {
                             assert_owner!(acceleration_structure, self);
                             assert_eq!(
@@ -2379,12 +2379,12 @@ impl Device {
                             );
                         }
                     }
-                    Descriptors::UniformTexelBuffer(views) => {
+                    DescriptorSlice::UniformTexelBuffer(views) => {
                         for view in views {
                             assert_owner!(view, self);
                         }
                     }
-                    Descriptors::StorageTexelBuffer(views) => {
+                    DescriptorSlice::StorageTexelBuffer(views) => {
                         for view in views {
                             assert_owner!(view, self);
                         }
@@ -2417,7 +2417,7 @@ impl Device {
         for update in updates.iter() {
             for write in update.writes.iter() {
                 match write.descriptors {
-                    Descriptors::Sampler(slice) => {
+                    DescriptorSlice::Sampler(slice) => {
                         let start = images.len();
 
                         images.extend(slice.iter().map(|sampler| {
@@ -2426,7 +2426,7 @@ impl Device {
 
                         ranges.push(start..images.len());
                     }
-                    Descriptors::CombinedImageSampler(slice) => {
+                    DescriptorSlice::CombinedImageSampler(slice) => {
                         let start = images.len();
 
                         images.extend(slice.iter().map(|combo| {
@@ -2438,7 +2438,7 @@ impl Device {
 
                         ranges.push(start..images.len());
                     }
-                    Descriptors::SampledImage(slice) => {
+                    DescriptorSlice::SampledImage(slice) => {
                         let start = images.len();
 
                         images.extend(slice.iter().map(|image| {
@@ -2449,7 +2449,7 @@ impl Device {
 
                         ranges.push(start..images.len());
                     }
-                    Descriptors::StorageImage(slice) => {
+                    DescriptorSlice::StorageImage(slice) => {
                         let start = images.len();
 
                         images.extend(slice.iter().map(|image| {
@@ -2460,7 +2460,7 @@ impl Device {
 
                         ranges.push(start..images.len());
                     }
-                    Descriptors::UniformBuffer(slice) => {
+                    DescriptorSlice::UniformBuffer(slice) => {
                         let start = buffers.len();
 
                         buffers.extend(slice.iter().map(|region| {
@@ -2472,7 +2472,7 @@ impl Device {
 
                         ranges.push(start..buffers.len());
                     }
-                    Descriptors::StorageBuffer(slice) => {
+                    DescriptorSlice::StorageBuffer(slice) => {
                         let start = buffers.len();
 
                         buffers.extend(slice.iter().map(|region| {
@@ -2484,7 +2484,7 @@ impl Device {
 
                         ranges.push(start..buffers.len());
                     }
-                    Descriptors::UniformBufferDynamic(slice) => {
+                    DescriptorSlice::UniformBufferDynamic(slice) => {
                         let start = buffers.len();
 
                         buffers.extend(slice.iter().map(|region| {
@@ -2496,7 +2496,7 @@ impl Device {
 
                         ranges.push(start..buffers.len());
                     }
-                    Descriptors::StorageBufferDynamic(slice) => {
+                    DescriptorSlice::StorageBufferDynamic(slice) => {
                         let start = buffers.len();
 
                         buffers.extend(slice.iter().map(|region| {
@@ -2508,7 +2508,7 @@ impl Device {
 
                         ranges.push(start..buffers.len());
                     }
-                    Descriptors::UniformTexelBuffer(slice) => {
+                    DescriptorSlice::UniformTexelBuffer(slice) => {
                         let start = buffer_views.len();
 
                         buffer_views.extend(slice.iter().map(|view| view.handle()));
@@ -2516,14 +2516,14 @@ impl Device {
                         ranges.push(start..buffer_views.len());
                     }
 
-                    Descriptors::StorageTexelBuffer(slice) => {
+                    DescriptorSlice::StorageTexelBuffer(slice) => {
                         let start = buffer_views.len();
 
                         buffer_views.extend(slice.iter().map(|view| view.handle()));
 
                         ranges.push(start..buffer_views.len());
                     }
-                    Descriptors::InputAttachment(slice) => {
+                    DescriptorSlice::InputAttachment(slice) => {
                         let start = images.len();
 
                         images.extend(slice.iter().map(|image| {
@@ -2534,7 +2534,7 @@ impl Device {
 
                         ranges.push(start..images.len());
                     }
-                    Descriptors::AccelerationStructure(slice) => {
+                    DescriptorSlice::AccelerationStructure(slice) => {
                         let start = acceleration_structures.len();
 
                         acceleration_structures.extend(slice.iter().map(|accs| accs.handle()));
@@ -2563,40 +2563,40 @@ impl Device {
                     .dst_array_element(write.element);
 
                 let write = match write.descriptors {
-                    Descriptors::Sampler(_) => builder
+                    DescriptorSlice::Sampler(_) => builder
                         .descriptor_type(vk1_0::DescriptorType::SAMPLER)
                         .image_info(&images[ranges.next().unwrap()]),
-                    Descriptors::CombinedImageSampler(_) => builder
+                    DescriptorSlice::CombinedImageSampler(_) => builder
                         .descriptor_type(vk1_0::DescriptorType::COMBINED_IMAGE_SAMPLER)
                         .image_info(&images[ranges.next().unwrap()]),
-                    Descriptors::SampledImage(_) => builder
+                    DescriptorSlice::SampledImage(_) => builder
                         .descriptor_type(vk1_0::DescriptorType::SAMPLED_IMAGE)
                         .image_info(&images[ranges.next().unwrap()]),
-                    Descriptors::StorageImage(_) => builder
+                    DescriptorSlice::StorageImage(_) => builder
                         .descriptor_type(vk1_0::DescriptorType::STORAGE_IMAGE)
                         .image_info(&images[ranges.next().unwrap()]),
-                    Descriptors::UniformTexelBuffer(_) => builder
+                    DescriptorSlice::UniformTexelBuffer(_) => builder
                         .descriptor_type(vk1_0::DescriptorType::UNIFORM_TEXEL_BUFFER)
                         .texel_buffer_view(&buffer_views[ranges.next().unwrap()]),
-                    Descriptors::StorageTexelBuffer(_) => builder
+                    DescriptorSlice::StorageTexelBuffer(_) => builder
                         .descriptor_type(vk1_0::DescriptorType::STORAGE_TEXEL_BUFFER)
                         .texel_buffer_view(&buffer_views[ranges.next().unwrap()]),
-                    Descriptors::UniformBuffer(_) => builder
+                    DescriptorSlice::UniformBuffer(_) => builder
                         .descriptor_type(vk1_0::DescriptorType::UNIFORM_BUFFER)
                         .buffer_info(&buffers[ranges.next().unwrap()]),
-                    Descriptors::StorageBuffer(_) => builder
+                    DescriptorSlice::StorageBuffer(_) => builder
                         .descriptor_type(vk1_0::DescriptorType::STORAGE_BUFFER)
                         .buffer_info(&buffers[ranges.next().unwrap()]),
-                    Descriptors::UniformBufferDynamic(_) => builder
+                    DescriptorSlice::UniformBufferDynamic(_) => builder
                         .descriptor_type(vk1_0::DescriptorType::UNIFORM_BUFFER_DYNAMIC)
                         .buffer_info(&buffers[ranges.next().unwrap()]),
-                    Descriptors::StorageBufferDynamic(_) => builder
+                    DescriptorSlice::StorageBufferDynamic(_) => builder
                         .descriptor_type(vk1_0::DescriptorType::STORAGE_BUFFER_DYNAMIC)
                         .buffer_info(&buffers[ranges.next().unwrap()]),
-                    Descriptors::InputAttachment(_) => builder
+                    DescriptorSlice::InputAttachment(_) => builder
                         .descriptor_type(vk1_0::DescriptorType::INPUT_ATTACHMENT)
                         .image_info(&images[ranges.next().unwrap()]),
-                    Descriptors::AccelerationStructure(_) => {
+                    DescriptorSlice::AccelerationStructure(_) => {
                         let range = ranges.next().unwrap();
                         let mut write = builder
                             .descriptor_type(vk1_0::DescriptorType::ACCELERATION_STRUCTURE_KHR);

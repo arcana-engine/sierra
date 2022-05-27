@@ -29,8 +29,8 @@ use crate::{
     sampler::SamplerInfo,
     shader::ShaderModuleInfo,
     view::ImageViewInfo,
-    BufferRange, BufferViewInfo, CombinedImageSampler, DescriptorType, Descriptors, DeviceAddress,
-    ImageDescriptor,
+    BufferRange, BufferViewInfo, CombinedImageSampler, DescriptorSlice, DescriptorType,
+    DeviceAddress, ImageDescriptor,
 };
 
 use self::resource_counting::{resource_allocated, resource_freed};
@@ -1578,12 +1578,12 @@ impl WritableDescriptorSet {
         &mut self,
         binding: u32,
         element: u32,
-        descriptors: Descriptors<'_>,
+        descriptors: DescriptorSlice<'_>,
     ) {
         let inner = self.inner_mut();
 
         match descriptors {
-            Descriptors::Sampler(slice) => match &mut inner.bindings[binding as usize] {
+            DescriptorSlice::Sampler(slice) => match &mut inner.bindings[binding as usize] {
                 ReferencedDescriptors::Sampler(array) => {
                     for (r, d) in array[element as usize..].iter_mut().zip(slice) {
                         *r = Some(d.clone());
@@ -1591,7 +1591,7 @@ impl WritableDescriptorSet {
                 }
                 _ => unreachable!(),
             },
-            Descriptors::CombinedImageSampler(slice) => {
+            DescriptorSlice::CombinedImageSampler(slice) => {
                 match &mut inner.bindings[binding as usize] {
                     ReferencedDescriptors::CombinedImageSampler(array) => {
                         for (r, d) in array[element as usize..].iter_mut().zip(slice) {
@@ -1601,7 +1601,7 @@ impl WritableDescriptorSet {
                     _ => unreachable!(),
                 }
             }
-            Descriptors::SampledImage(slice) => match &mut inner.bindings[binding as usize] {
+            DescriptorSlice::SampledImage(slice) => match &mut inner.bindings[binding as usize] {
                 ReferencedDescriptors::SampledImage(array) => {
                     for (r, d) in array[element as usize..].iter_mut().zip(slice) {
                         *r = Some(d.clone());
@@ -1609,7 +1609,7 @@ impl WritableDescriptorSet {
                 }
                 _ => unreachable!(),
             },
-            Descriptors::StorageImage(slice) => match &mut inner.bindings[binding as usize] {
+            DescriptorSlice::StorageImage(slice) => match &mut inner.bindings[binding as usize] {
                 ReferencedDescriptors::StorageImage(array) => {
                     for (r, d) in array[element as usize..].iter_mut().zip(slice) {
                         *r = Some(d.clone());
@@ -1617,7 +1617,7 @@ impl WritableDescriptorSet {
                 }
                 _ => unreachable!(),
             },
-            Descriptors::UniformBuffer(slice) => match &mut inner.bindings[binding as usize] {
+            DescriptorSlice::UniformBuffer(slice) => match &mut inner.bindings[binding as usize] {
                 ReferencedDescriptors::UniformBuffer(array) => {
                     for (r, d) in array[element as usize..].iter_mut().zip(slice) {
                         *r = Some(d.clone());
@@ -1625,7 +1625,7 @@ impl WritableDescriptorSet {
                 }
                 _ => unreachable!(),
             },
-            Descriptors::StorageBuffer(slice) => match &mut inner.bindings[binding as usize] {
+            DescriptorSlice::StorageBuffer(slice) => match &mut inner.bindings[binding as usize] {
                 ReferencedDescriptors::StorageBuffer(array) => {
                     for (r, d) in array[element as usize..].iter_mut().zip(slice) {
                         *r = Some(d.clone());
@@ -1633,7 +1633,7 @@ impl WritableDescriptorSet {
                 }
                 _ => unreachable!(),
             },
-            Descriptors::UniformBufferDynamic(slice) => {
+            DescriptorSlice::UniformBufferDynamic(slice) => {
                 match &mut inner.bindings[binding as usize] {
                     ReferencedDescriptors::UniformBufferDynamic(array) => {
                         for (r, d) in array[element as usize..].iter_mut().zip(slice) {
@@ -1643,7 +1643,7 @@ impl WritableDescriptorSet {
                     _ => unreachable!(),
                 }
             }
-            Descriptors::StorageBufferDynamic(slice) => {
+            DescriptorSlice::StorageBufferDynamic(slice) => {
                 match &mut inner.bindings[binding as usize] {
                     ReferencedDescriptors::StorageBufferDynamic(array) => {
                         for (r, d) in array[element as usize..].iter_mut().zip(slice) {
@@ -1653,31 +1653,37 @@ impl WritableDescriptorSet {
                     _ => unreachable!(),
                 }
             }
-            Descriptors::UniformTexelBuffer(slice) => match &mut inner.bindings[binding as usize] {
-                ReferencedDescriptors::UniformTexelBuffer(array) => {
-                    for (r, d) in array[element as usize..].iter_mut().zip(slice) {
-                        *r = Some(d.clone());
+            DescriptorSlice::UniformTexelBuffer(slice) => {
+                match &mut inner.bindings[binding as usize] {
+                    ReferencedDescriptors::UniformTexelBuffer(array) => {
+                        for (r, d) in array[element as usize..].iter_mut().zip(slice) {
+                            *r = Some(d.clone());
+                        }
                     }
+                    _ => unreachable!(),
                 }
-                _ => unreachable!(),
-            },
-            Descriptors::StorageTexelBuffer(slice) => match &mut inner.bindings[binding as usize] {
-                ReferencedDescriptors::StorageTexelBuffer(array) => {
-                    for (r, d) in array[element as usize..].iter_mut().zip(slice) {
-                        *r = Some(d.clone());
+            }
+            DescriptorSlice::StorageTexelBuffer(slice) => {
+                match &mut inner.bindings[binding as usize] {
+                    ReferencedDescriptors::StorageTexelBuffer(array) => {
+                        for (r, d) in array[element as usize..].iter_mut().zip(slice) {
+                            *r = Some(d.clone());
+                        }
                     }
+                    _ => unreachable!(),
                 }
-                _ => unreachable!(),
-            },
-            Descriptors::InputAttachment(slice) => match &mut inner.bindings[binding as usize] {
-                ReferencedDescriptors::InputAttachment(array) => {
-                    for (r, d) in array[element as usize..].iter_mut().zip(slice) {
-                        *r = Some(d.clone());
+            }
+            DescriptorSlice::InputAttachment(slice) => {
+                match &mut inner.bindings[binding as usize] {
+                    ReferencedDescriptors::InputAttachment(array) => {
+                        for (r, d) in array[element as usize..].iter_mut().zip(slice) {
+                            *r = Some(d.clone());
+                        }
                     }
+                    _ => unreachable!(),
                 }
-                _ => unreachable!(),
-            },
-            Descriptors::AccelerationStructure(slice) => {
+            }
+            DescriptorSlice::AccelerationStructure(slice) => {
                 match &mut inner.bindings[binding as usize] {
                     ReferencedDescriptors::AccelerationStructure(array) => {
                         for (r, d) in array[element as usize..].iter_mut().zip(slice) {

@@ -11,7 +11,7 @@ pub(super) fn generate(input: &Input) -> TokenStream {
             }
         }
 
-        impl ::sierra::TypedRenderPass for #ident {
+        impl ::sierra::Pass for #ident {
             type Instance = #instance;
 
             fn instance() -> #instance {

@@ -41,8 +41,8 @@ pub(super) struct Set {
 }
 
 pub(super) fn parse(item: proc_macro::TokenStream) -> syn::Result<Input> {
-    let item_struct = syn::parse::<syn::ItemStruct>(item)
-        .expect("`#[TypedPipeline]` can be derived only for structs");
+    let item_struct =
+        syn::parse::<syn::ItemStruct>(item).expect("`#[Pipeline]` can be derived only for structs");
 
     let mut sets = Vec::new();
     let mut push_constants = Vec::new();

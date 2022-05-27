@@ -1,5 +1,5 @@
-#[derive(sierra::TypedDescriptors)]
-struct DescriptorSet {
+#[derive(sierra::Descriptors)]
+struct Descriptors {
     #[sierra(buffer(uniform, texel), vertex)]
     views: sierra::BufferView,
 
@@ -21,16 +21,16 @@ struct Foo {
 }
 
 #[allow(dead_code)]
-#[derive(sierra::TypedPipeline)]
-struct Pipeline {
+#[derive(sierra::PipelineInput)]
+struct PipelineInput {
     #[sierra(set)]
-    descriptors: DescriptorSet,
+    descriptors: Descriptors,
 
     #[sierra(push(std140), compute)]
     foo: Foo,
 }
 
-#[derive(sierra::TypedRenderPass)]
+#[derive(sierra::Pass)]
 #[sierra(subpass(color = target))]
 pub struct Main {
     #[sierra(attachment(clear = const sierra::ClearColor(0.3, 0.1, 0.8, 1.0), store = const sierra::Layout::Present))]
@@ -83,7 +83,7 @@ fn fs_main() -> [[location(0)]] vec4<f32> {
     )?;
 
     let mut main = Main::instance();
-    let pipeline_layout = Pipeline::layout(&device)?;
+    let pipeline_layout = PipelineInput::layout(&device)?;
 
     let mut graphics_pipeline =
         sierra::DynamicGraphicsPipeline::new(sierra::graphics_pipeline_desc!(

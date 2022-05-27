@@ -19,7 +19,7 @@ pub(super) fn generate(input: &Input) -> TokenStream {
             let ident = &set.field.ident;
             let ty = &set.field.ty;
             quote::quote!(
-                #vis #ident: <#ty as ::sierra::TypedDescriptors>::Layout,
+                #vis #ident: <#ty as ::sierra::Descriptors>::Layout,
             )
         })
         .collect::<TokenStream>();
@@ -31,7 +31,7 @@ pub(super) fn generate(input: &Input) -> TokenStream {
             let ident = &set.field.ident;
             let ty = &set.field.ty;
             quote::quote!(
-                let #ident = <#ty as ::sierra::TypedDescriptors>::layout(device)?;
+                let #ident = <#ty as ::sierra::Descriptors>::layout(device)?;
             )
         })
         .collect::<TokenStream>();
@@ -66,7 +66,7 @@ pub(super) fn generate(input: &Input) -> TokenStream {
             let ty = &set.field.ty;
             let index = u32::try_from(index).expect("Too many sets");
             quote::quote!(
-                impl ::sierra::UpdatedPipelineDescriptors<#layout_ident> for <<#ty as ::sierra::TypedDescriptors>::Instance as ::sierra::DescriptorsInstance<#ty>>::Updated {
+                impl ::sierra::UpdatedPipelineDescriptors<#layout_ident> for <<#ty as ::sierra::Descriptors>::Instance as ::sierra::DescriptorsInstance<#ty>>::Updated {
                     const N: u32 = #index;
                 }
             )
@@ -115,7 +115,7 @@ pub(super) fn generate(input: &Input) -> TokenStream {
 
     let doc_attr = if cfg!(feature = "verbose-docs") {
         format!(
-            "#[doc = \"[`sierra::TypedPipelineLayout`] implementation for [`{}`]\"]",
+            "#[doc = \"[`sierra::PipelineInputLayout`] implementation for [`{}`]\"]",
             ident
         )
         .parse()
@@ -200,7 +200,7 @@ pub(super) fn generate(input: &Input) -> TokenStream {
             }
         }
 
-        impl ::sierra::TypedPipelineLayout for #layout_ident {
+        impl ::sierra::PipelineInputLayout for #layout_ident {
             fn new(device: &::sierra::Device) -> ::std::result::Result<Self, ::sierra::OutOfMemory> {
                 Self::new(device)
             }

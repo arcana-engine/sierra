@@ -2,10 +2,9 @@ use crate::{DescriptorSetWrite, UpdateDescriptorSet};
 
 use {
     super::{
-        DescriptorBindingFlags, DescriptorSet, DescriptorSetInfo, DescriptorSetLayout,
+        Descriptor, DescriptorBindingFlags, DescriptorSet, DescriptorSetInfo, DescriptorSetLayout,
         DescriptorSetLayoutBinding, DescriptorSetLayoutFlags, DescriptorSetLayoutInfo, Descriptors,
-        DescriptorsAllocationError, DescriptorsInstance, DescriptorsLayout, TypedDescriptor,
-        UpdatedDescriptors,
+        DescriptorsAllocationError, DescriptorsInstance, DescriptorsLayout, UpdatedDescriptors,
     },
     crate::{encode::Encoder, shader::ShaderStageFlags, Device, OutOfMemory},
     bitsetium::{BitEmpty, BitSearch, BitSet, BitSetLimit, BitTest, Bits4096},
@@ -26,7 +25,7 @@ pub struct SparseDescriptorsLayout<T> {
 
 impl<T> DescriptorsLayout for SparseDescriptorsLayout<T>
 where
-    T: TypedDescriptor,
+    T: Descriptor,
 {
     type Instance = SparseDescriptorsInstance<T>;
 
@@ -47,7 +46,7 @@ pub struct SparseDescriptors<T, const CAP: u32, const STAGES: u32> {
 
 impl<T, const CAP: u32, const STAGES: u32> Descriptors for SparseDescriptors<T, CAP, STAGES>
 where
-    T: TypedDescriptor,
+    T: Descriptor,
 {
     type Layout = SparseDescriptorsLayout<T>;
     type Instance = SparseDescriptorsInstance<T>;
@@ -75,15 +74,15 @@ where
 
 /// Descriptor instance with sparsely located resources.
 #[derive(Debug)]
-pub struct SparseDescriptorsInstance<T: TypedDescriptor> {
+pub struct SparseDescriptorsInstance<T: Descriptor> {
     layout: DescriptorSetLayout,
     set: Option<SparseDescriptorSet>,
-    indices: HashMap<T::Descriptor, u32>,
+    indices: HashMap<T::RawDescriptor, u32>,
 
     upper_bounds: u32,
     unused: Bits4096,
 
-    updates: Vec<T::Descriptor>,
+    updates: Vec<T::RawDescriptor>,
 }
 
 #[derive(Debug)]
@@ -100,8 +99,8 @@ impl UpdatedDescriptors for SparseDescriptorSet {
 impl<T, const CAP: u32, const STAGES: u32> DescriptorsInstance<SparseDescriptors<T, CAP, STAGES>>
     for SparseDescriptorsInstance<T>
 where
-    T: TypedDescriptor,
-    T::Descriptor: Hash + Eq,
+    T: Descriptor,
+    T::RawDescriptor: Hash + Eq,
 {
     type Updated = SparseDescriptorSet;
 
@@ -157,7 +156,7 @@ where
 
 impl<T> SparseDescriptorsInstance<T>
 where
-    T: TypedDescriptor,
+    T: Descriptor,
 {
     /// Returns new empty instance of `SparseDescriptorsInstance`.
     pub fn new(cap: u32, layout: DescriptorSetLayout) -> Self {
@@ -177,9 +176,9 @@ where
     /// # Panics
     ///
     ///
-    pub fn get_or_insert(&mut self, descriptor: T::Descriptor) -> u32
+    pub fn get_or_insert(&mut self, descriptor: T::RawDescriptor) -> u32
     where
-        T::Descriptor: Hash + Clone + Eq,
+        T::RawDescriptor: Hash + Clone + Eq,
     {
         match self.indices.entry(descriptor.clone()) {
             Entry::Occupied(entry) => *entry.get(),
@@ -198,9 +197,9 @@ where
         }
     }
 
-    pub fn remove(&mut self, descriptor: T::Descriptor) -> bool
+    pub fn remove(&mut self, descriptor: T::RawDescriptor) -> bool
     where
-        T::Descriptor: Hash + Eq,
+        T::RawDescriptor: Hash + Eq,
     {
         match self.indices.get(&descriptor) {
             None => false,

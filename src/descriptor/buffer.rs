@@ -11,7 +11,7 @@ use {
 impl DescriptorBinding for Buffer {
     const COUNT: u32 = 1;
     const FLAGS: DescriptorBindingFlags = DescriptorBindingFlags::empty();
-    type Descriptors = [BufferRange; 1];
+    type DescriptorArray = [BufferRange; 1];
 
     #[inline]
     fn eq(&self, range: &[BufferRange; 1]) -> bool {
@@ -27,7 +27,7 @@ impl DescriptorBinding for Buffer {
 impl<const N: usize> DescriptorBinding for [Buffer; N] {
     const COUNT: u32 = N as u32;
     const FLAGS: DescriptorBindingFlags = DescriptorBindingFlags::empty();
-    type Descriptors = [BufferRange; N];
+    type DescriptorArray = [BufferRange; N];
 
     #[inline]
     fn eq(&self, range: &[BufferRange; N]) -> bool {
@@ -47,7 +47,7 @@ impl<const N: usize> DescriptorBinding for [Buffer; N] {
 impl DescriptorBinding for BufferRange {
     const COUNT: u32 = 1;
     const FLAGS: DescriptorBindingFlags = DescriptorBindingFlags::empty();
-    type Descriptors = [BufferRange; 1];
+    type DescriptorArray = [BufferRange; 1];
 
     #[inline]
     fn eq(&self, range: &[BufferRange; 1]) -> bool {
@@ -63,7 +63,7 @@ impl DescriptorBinding for BufferRange {
 impl<const N: usize> DescriptorBinding for [BufferRange; N] {
     const COUNT: u32 = N as u32;
     const FLAGS: DescriptorBindingFlags = DescriptorBindingFlags::empty();
-    type Descriptors = [BufferRange; N];
+    type DescriptorArray = [BufferRange; N];
 
     #[inline]
     fn eq(&self, range: &[BufferRange; N]) -> bool {
@@ -79,7 +79,7 @@ impl<const N: usize> DescriptorBinding for [BufferRange; N] {
 impl<const N: usize> DescriptorBinding for arrayvec::ArrayVec<BufferRange, N> {
     const COUNT: u32 = N as u32;
     const FLAGS: DescriptorBindingFlags = DescriptorBindingFlags::PARTIALLY_BOUND;
-    type Descriptors = arrayvec::ArrayVec<BufferRange, N>;
+    type DescriptorArray = arrayvec::ArrayVec<BufferRange, N>;
 
     #[inline]
     fn eq(&self, range: &arrayvec::ArrayVec<BufferRange, N>) -> bool {
@@ -98,7 +98,7 @@ impl<const N: usize> DescriptorBinding for arrayvec::ArrayVec<BufferRange, N> {
 impl DescriptorBinding for BufferView {
     const COUNT: u32 = 1;
     const FLAGS: DescriptorBindingFlags = DescriptorBindingFlags::empty();
-    type Descriptors = [BufferView; 1];
+    type DescriptorArray = [BufferView; 1];
 
     #[inline]
     fn eq(&self, range: &[BufferView; 1]) -> bool {
@@ -114,7 +114,7 @@ impl DescriptorBinding for BufferView {
 impl<const N: usize> DescriptorBinding for [BufferView; N] {
     const COUNT: u32 = N as u32;
     const FLAGS: DescriptorBindingFlags = DescriptorBindingFlags::empty();
-    type Descriptors = [BufferView; N];
+    type DescriptorArray = [BufferView; N];
 
     #[inline]
     fn eq(&self, range: &[BufferView; N]) -> bool {
@@ -130,7 +130,7 @@ impl<const N: usize> DescriptorBinding for [BufferView; N] {
 impl<const N: usize> DescriptorBinding for arrayvec::ArrayVec<BufferView, N> {
     const COUNT: u32 = N as u32;
     const FLAGS: DescriptorBindingFlags = DescriptorBindingFlags::PARTIALLY_BOUND;
-    type Descriptors = arrayvec::ArrayVec<BufferView, N>;
+    type DescriptorArray = arrayvec::ArrayVec<BufferView, N>;
 
     #[inline]
     fn eq(&self, range: &arrayvec::ArrayVec<BufferView, N>) -> bool {

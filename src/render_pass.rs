@@ -257,8 +257,8 @@ pub trait RenderPassInstance {
     ) -> Result<RenderPassEncoder<'b, 'a>, FramebufferError>;
 }
 
-pub trait TypedRenderPass {
-    type Instance: RenderPassInstance;
+pub trait Pass {
+    type Instance: RenderPassInstance<Input = Self>;
 
     fn instance() -> Self::Instance;
 }

@@ -1,8 +1,8 @@
 [package]
 name = "sierra-proc"
-version = "0.4.0"
+version = "0.5.0"
 authors = ["Zakarum <zakarumych@ya.ru>"]
-edition = "2018"
+edition = "2021"
 license = "MIT OR Apache-2.0"
 documentation = "https://docs.rs/sierra-proc/0.1.0"
 homepage = "https://github.com/zakarumych/sierra"

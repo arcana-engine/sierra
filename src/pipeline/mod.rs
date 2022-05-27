@@ -30,8 +30,8 @@ pub struct PipelineLayoutInfo {
     pub push_constants: Vec<PushConstant>,
 }
 
-/// Typed version of [`PipelineLayout`].
-pub trait TypedPipelineLayout {
+/// [`PipelineLayout`] for specific [`PipelineInput`].
+pub trait PipelineInputLayout {
     fn new(device: &Device) -> Result<Self, OutOfMemory>
     where
         Self: Sized;
@@ -55,15 +55,15 @@ pub trait TypedPipelineLayout {
         P: PipelinePushConstants<Self>;
 }
 
-pub trait TypedPipeline {
-    type Layout: TypedPipelineLayout;
+pub trait PipelineInput {
+    type Layout: PipelineInputLayout;
 
     fn layout(device: &Device) -> Result<Self::Layout, OutOfMemory>;
 }
 
 /// Extension trait for push constants, specifying stages, offset and size in the typed pipeline.
 ///
-/// This trait is intended to be implemented by proc macro `#[derive(TypedPipeline)]`
+/// This trait is intended to be implemented by proc macro `#[derive(Pipeline)]`
 /// for types marked as `#[push]`.
 pub trait PipelinePushConstants<P: ?Sized> {
     /// Stage flags for which push constants are enabled.

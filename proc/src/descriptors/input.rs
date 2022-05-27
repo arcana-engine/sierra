@@ -111,7 +111,7 @@ fn generate_input_impl(input: &Input) -> TokenStream {
     let instance_ident = instance_type_name(input);
 
     quote::quote! {
-        impl ::sierra::TypedDescriptors for #ident {
+        impl ::sierra::Descriptors for #ident {
             type Layout = #layout_ident;
             type Instance = #instance_ident;
 

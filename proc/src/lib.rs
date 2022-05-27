@@ -12,8 +12,8 @@ mod repr;
 mod stage;
 mod swizzle;
 
-#[proc_macro_derive(TypedDescriptors, attributes(sierra))]
-pub fn typed_descriptors(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+#[proc_macro_derive(Descriptors, attributes(sierra))]
+pub fn descriptors(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     descriptors::descriptors(item).into()
 }
 
@@ -22,13 +22,13 @@ pub fn shader_repr(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     repr::shader_repr(item).into()
 }
 
-#[proc_macro_derive(TypedPipeline, attributes(sierra))]
-pub fn typed_pipeline(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    pipeline::pipeline(item).into()
+#[proc_macro_derive(PipelineInput, attributes(sierra))]
+pub fn pipeline_input(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    pipeline::pipeline_input(item).into()
 }
 
-#[proc_macro_derive(TypedRenderPass, attributes(sierra))]
-pub fn typed_render_pass(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+#[proc_macro_derive(Pass, attributes(sierra))]
+pub fn render_pass(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     pass::pass(item).into()
 }
 

@@ -25,7 +25,7 @@ pub(super) fn generate(input: &Input) -> TokenStream {
             let ty = &input.field.ty;
 
             quote::quote_spanned!(
-                input.field.ty.span() => pub #descriptor_field: ::std::option::Option<<#ty as ::sierra::DescriptorBinding>::Descriptors>,
+                input.field.ty.span() => pub #descriptor_field: ::std::option::Option<<#ty as ::sierra::DescriptorBinding>::DescriptorArray>,
             )
         })
         .collect();
@@ -62,44 +62,44 @@ pub(super) fn generate(input: &Input) -> TokenStream {
             let span = input.field.ty.span();
             let descriptors = match input.desc_ty {
                 DescriptorType::Sampler(_) => Some(quote::quote_spanned! {
-                    span => <::sierra::SamplerDescriptor as ::sierra::TypedDescriptor>::descriptors(descriptors)
+                    span => <::sierra::SamplerDescriptor as ::sierra::Descriptor>::descriptors(descriptors)
                 }),
                 DescriptorType::Image(image::Image { kind: None | Some(image::Kind::Sampled(_)),..}) => Some(quote::quote_spanned! {
-                    span => <::sierra::SampledImageDescriptor as ::sierra::TypedDescriptor>::descriptors(descriptors)
+                    span => <::sierra::SampledImageDescriptor as ::sierra::Descriptor>::descriptors(descriptors)
                 }),
                 DescriptorType::Image(image::Image { kind: Some(image::Kind::Storage(_)), .. }) => Some(quote::quote_spanned! {
-                    span => <::sierra::StorageImageDescriptor as ::sierra::TypedDescriptor>::descriptors(descriptors)
+                    span => <::sierra::StorageImageDescriptor as ::sierra::Descriptor>::descriptors(descriptors)
                 }),
                 DescriptorType::AccelerationStructure(_) => Some(quote::quote_spanned! {
-                    span => <::sierra::AccelerationStructureDescriptor as ::sierra::TypedDescriptor>::descriptors(descriptors)
+                    span => <::sierra::AccelerationStructureDescriptor as ::sierra::Descriptor>::descriptors(descriptors)
                 }),
                 DescriptorType::Buffer(buffer::Buffer {
                     kind: None | Some(buffer::Kind::Uniform(_)),
                     texel: None,
                     ..
                 }) => Some(quote::quote_spanned! {
-                    span => <::sierra::UniformBufferDescriptor as ::sierra::TypedDescriptor>::descriptors(descriptors)
+                    span => <::sierra::UniformBufferDescriptor as ::sierra::Descriptor>::descriptors(descriptors)
                 }),
                 DescriptorType::Buffer(buffer::Buffer {
                     kind: Some(buffer::Kind::Storage(_)),
                     texel: None,
                     ..
                 }) => Some(quote::quote_spanned! {
-                    span=> <::sierra::StorageBufferDescriptor as ::sierra::TypedDescriptor>::descriptors(descriptors)
+                    span=> <::sierra::StorageBufferDescriptor as ::sierra::Descriptor>::descriptors(descriptors)
                 }),
                 DescriptorType::Buffer(buffer::Buffer {
                     kind: None | Some(buffer::Kind::Uniform(_)),
                     texel: Some(_),
                     ..
                 }) => Some(quote::quote_spanned! {
-                    span=> <::sierra::UniformTexelBufferDescriptor as ::sierra::TypedDescriptor>::descriptors(descriptors)
+                    span=> <::sierra::UniformTexelBufferDescriptor as ::sierra::Descriptor>::descriptors(descriptors)
                 }),
                 DescriptorType::Buffer(buffer::Buffer {
                     kind: Some(buffer::Kind::Storage(_)),
                     texel: Some(_),
                     ..
                 }) => Some(quote::quote_spanned! {
-                    span=> <::sierra::StorageTexelBufferDescriptor as ::sierra::TypedDescriptor>::descriptors(descriptors)
+                    span=> <::sierra::StorageTexelBufferDescriptor as ::sierra::Descriptor>::descriptors(descriptors)
                 }),
             }?;
 
@@ -189,7 +189,7 @@ pub(super) fn generate(input: &Input) -> TokenStream {
                 writes.push(::sierra::DescriptorSetWrite {
                     binding: #binding,
                     element: 0,
-                    descriptors: ::sierra::Descriptors::UniformBuffer(::std::slice::from_ref(&elem.uniforms_buffer.as_ref().unwrap().1)),
+                    descriptors: ::sierra::DescriptorSlice::UniformBuffer(::std::slice::from_ref(&elem.uniforms_buffer.as_ref().unwrap().1)),
                 });
             }
         )

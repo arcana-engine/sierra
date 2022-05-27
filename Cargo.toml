@@ -1,7 +1,7 @@
 [package]
 name = "sierra"
-version = "0.4.1"
-edition = "2018"
+version = "0.5.0"
+edition = "2021"
 authors = ["Zakarum <zakarumych@ya.ru>"]
 license = "MIT OR Apache-2.0"
 documentation = "https://docs.rs/sierra"
@@ -21,7 +21,7 @@ default = ["vulkan"]
 proc-verbose-docs = ["sierra-proc/verbose-docs"]
 
 [dependencies]
-sierra-proc = { version = "=0.4.0", path = "proc" }
+sierra-proc = { version = "=0.5.0", path = "proc" }
 bitsetium = { version = "0.0.2" }
 bitflags = "1.2"
 raw-window-handle = "0.4"

@@ -6,7 +6,7 @@ use {
 impl DescriptorBinding for Sampler {
     const COUNT: u32 = 1;
     const FLAGS: DescriptorBindingFlags = DescriptorBindingFlags::empty();
-    type Descriptors = [Sampler; 1];
+    type DescriptorArray = [Sampler; 1];
 
     #[inline]
     fn eq(&self, range: &[Sampler; 1]) -> bool {
@@ -22,7 +22,7 @@ impl DescriptorBinding for Sampler {
 impl<const N: usize> DescriptorBinding for [Sampler; N] {
     const COUNT: u32 = N as u32;
     const FLAGS: DescriptorBindingFlags = DescriptorBindingFlags::empty();
-    type Descriptors = [Sampler; N];
+    type DescriptorArray = [Sampler; N];
 
     #[inline]
     fn eq(&self, range: &[Sampler; N]) -> bool {
@@ -38,7 +38,7 @@ impl<const N: usize> DescriptorBinding for [Sampler; N] {
 impl<const N: usize> DescriptorBinding for arrayvec::ArrayVec<Sampler, N> {
     const COUNT: u32 = N as u32;
     const FLAGS: DescriptorBindingFlags = DescriptorBindingFlags::PARTIALLY_BOUND;
-    type Descriptors = arrayvec::ArrayVec<Sampler, N>;
+    type DescriptorArray = arrayvec::ArrayVec<Sampler, N>;
 
     #[inline]
     fn eq(&self, range: &arrayvec::ArrayVec<Sampler, N>) -> bool {

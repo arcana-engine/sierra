@@ -66,7 +66,7 @@ pub struct DescriptorSetWrite<'a> {
     pub element: u32,
 
     /// Descriptors to write.
-    pub descriptors: Descriptors<'a>,
+    pub descriptors: DescriptorSlice<'a>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -121,7 +121,7 @@ pub struct CombinedImageSampler {
 /// This type is used in [`WriteDescriptorSet`] to specify descriptors
 /// to write.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum Descriptors<'a> {
+pub enum DescriptorSlice<'a> {
     /// Samplers.
     Sampler(&'a [Sampler]),
 
@@ -208,124 +208,124 @@ pub enum InputAttachmentDescriptor {}
 pub enum AccelerationStructureDescriptor {}
 
 #[doc(hidden)]
-pub trait TypedDescriptor {
+pub trait Descriptor {
     const TYPE: DescriptorType;
-    type Descriptor: std::hash::Hash + Eq;
+    type RawDescriptor: std::hash::Hash + Eq;
 
-    fn descriptors(slice: &[Self::Descriptor]) -> Descriptors<'_>;
+    fn descriptors(slice: &[Self::RawDescriptor]) -> DescriptorSlice<'_>;
 }
 
-impl TypedDescriptor for SamplerDescriptor {
+impl Descriptor for SamplerDescriptor {
     const TYPE: DescriptorType = DescriptorType::Sampler;
-    type Descriptor = Sampler;
+    type RawDescriptor = Sampler;
 
-    fn descriptors(slice: &[Sampler]) -> Descriptors<'_> {
-        Descriptors::Sampler(slice)
+    fn descriptors(slice: &[Sampler]) -> DescriptorSlice<'_> {
+        DescriptorSlice::Sampler(slice)
     }
 }
 
-impl TypedDescriptor for CombinedImageSamplerDescriptor {
+impl Descriptor for CombinedImageSamplerDescriptor {
     const TYPE: DescriptorType = DescriptorType::CombinedImageSampler;
-    type Descriptor = CombinedImageSampler;
+    type RawDescriptor = CombinedImageSampler;
 
-    fn descriptors(slice: &[CombinedImageSampler]) -> Descriptors<'_> {
-        Descriptors::CombinedImageSampler(slice)
+    fn descriptors(slice: &[CombinedImageSampler]) -> DescriptorSlice<'_> {
+        DescriptorSlice::CombinedImageSampler(slice)
     }
 }
 
-impl TypedDescriptor for SampledImageDescriptor {
+impl Descriptor for SampledImageDescriptor {
     const TYPE: DescriptorType = DescriptorType::SampledImage;
-    type Descriptor = ImageDescriptor<ImageView>;
+    type RawDescriptor = ImageDescriptor<ImageView>;
 
-    fn descriptors(slice: &[ImageDescriptor<ImageView>]) -> Descriptors<'_> {
-        Descriptors::SampledImage(slice)
+    fn descriptors(slice: &[ImageDescriptor<ImageView>]) -> DescriptorSlice<'_> {
+        DescriptorSlice::SampledImage(slice)
     }
 }
 
-impl TypedDescriptor for StorageImageDescriptor {
+impl Descriptor for StorageImageDescriptor {
     const TYPE: DescriptorType = DescriptorType::StorageImage;
-    type Descriptor = ImageDescriptor<ImageView>;
+    type RawDescriptor = ImageDescriptor<ImageView>;
 
-    fn descriptors(slice: &[ImageDescriptor<ImageView>]) -> Descriptors<'_> {
-        Descriptors::StorageImage(slice)
+    fn descriptors(slice: &[ImageDescriptor<ImageView>]) -> DescriptorSlice<'_> {
+        DescriptorSlice::StorageImage(slice)
     }
 }
 
-impl TypedDescriptor for UniformBufferDescriptor {
+impl Descriptor for UniformBufferDescriptor {
     const TYPE: DescriptorType = DescriptorType::UniformBuffer;
-    type Descriptor = BufferRange;
+    type RawDescriptor = BufferRange;
 
-    fn descriptors(slice: &[BufferRange]) -> Descriptors<'_> {
-        Descriptors::UniformBuffer(slice)
+    fn descriptors(slice: &[BufferRange]) -> DescriptorSlice<'_> {
+        DescriptorSlice::UniformBuffer(slice)
     }
 }
 
-impl TypedDescriptor for StorageBufferDescriptor {
+impl Descriptor for StorageBufferDescriptor {
     const TYPE: DescriptorType = DescriptorType::StorageBuffer;
-    type Descriptor = BufferRange;
+    type RawDescriptor = BufferRange;
 
-    fn descriptors(slice: &[BufferRange]) -> Descriptors<'_> {
-        Descriptors::StorageBuffer(slice)
+    fn descriptors(slice: &[BufferRange]) -> DescriptorSlice<'_> {
+        DescriptorSlice::StorageBuffer(slice)
     }
 }
 
-impl TypedDescriptor for UniformBufferDynamicDescriptor {
+impl Descriptor for UniformBufferDynamicDescriptor {
     const TYPE: DescriptorType = DescriptorType::UniformBufferDynamic;
-    type Descriptor = BufferRange;
+    type RawDescriptor = BufferRange;
 
-    fn descriptors(slice: &[BufferRange]) -> Descriptors<'_> {
-        Descriptors::UniformBufferDynamic(slice)
+    fn descriptors(slice: &[BufferRange]) -> DescriptorSlice<'_> {
+        DescriptorSlice::UniformBufferDynamic(slice)
     }
 }
 
-impl TypedDescriptor for StorageBufferDynamicDescriptor {
+impl Descriptor for StorageBufferDynamicDescriptor {
     const TYPE: DescriptorType = DescriptorType::StorageBufferDynamic;
-    type Descriptor = BufferRange;
+    type RawDescriptor = BufferRange;
 
-    fn descriptors(slice: &[BufferRange]) -> Descriptors<'_> {
-        Descriptors::StorageBufferDynamic(slice)
+    fn descriptors(slice: &[BufferRange]) -> DescriptorSlice<'_> {
+        DescriptorSlice::StorageBufferDynamic(slice)
     }
 }
 
-impl TypedDescriptor for UniformTexelBufferDescriptor {
+impl Descriptor for UniformTexelBufferDescriptor {
     const TYPE: DescriptorType = DescriptorType::UniformTexelBuffer;
-    type Descriptor = BufferView;
+    type RawDescriptor = BufferView;
 
-    fn descriptors(slice: &[BufferView]) -> Descriptors<'_> {
-        Descriptors::UniformTexelBuffer(slice)
+    fn descriptors(slice: &[BufferView]) -> DescriptorSlice<'_> {
+        DescriptorSlice::UniformTexelBuffer(slice)
     }
 }
 
-impl TypedDescriptor for StorageTexelBufferDescriptor {
+impl Descriptor for StorageTexelBufferDescriptor {
     const TYPE: DescriptorType = DescriptorType::StorageTexelBuffer;
-    type Descriptor = BufferView;
+    type RawDescriptor = BufferView;
 
-    fn descriptors(slice: &[BufferView]) -> Descriptors<'_> {
-        Descriptors::StorageTexelBuffer(slice)
+    fn descriptors(slice: &[BufferView]) -> DescriptorSlice<'_> {
+        DescriptorSlice::StorageTexelBuffer(slice)
     }
 }
 
-impl TypedDescriptor for InputAttachmentDescriptor {
+impl Descriptor for InputAttachmentDescriptor {
     const TYPE: DescriptorType = DescriptorType::InputAttachment;
-    type Descriptor = ImageDescriptor<ImageView>;
+    type RawDescriptor = ImageDescriptor<ImageView>;
 
-    fn descriptors(slice: &[ImageDescriptor<ImageView>]) -> Descriptors<'_> {
-        Descriptors::InputAttachment(slice)
+    fn descriptors(slice: &[ImageDescriptor<ImageView>]) -> DescriptorSlice<'_> {
+        DescriptorSlice::InputAttachment(slice)
     }
 }
 
-impl TypedDescriptor for AccelerationStructureDescriptor {
+impl Descriptor for AccelerationStructureDescriptor {
     const TYPE: DescriptorType = DescriptorType::AccelerationStructure;
-    type Descriptor = AccelerationStructure;
+    type RawDescriptor = AccelerationStructure;
 
-    fn descriptors(slice: &[AccelerationStructure]) -> Descriptors<'_> {
-        Descriptors::AccelerationStructure(slice)
+    fn descriptors(slice: &[AccelerationStructure]) -> DescriptorSlice<'_> {
+        DescriptorSlice::AccelerationStructure(slice)
     }
 }
 
 /// Trait for descriptor layouts.
 ///
-/// This trait is intended to be implemented by proc macro `#[derive(TypedDescriptors)]` for generated types.
+/// This trait is intended to be implemented by proc macro `#[derive(Descriptors)]` for generated types.
 pub trait DescriptorsLayout {
     type Instance;
 
@@ -336,14 +336,14 @@ pub trait DescriptorsLayout {
 
 /// Trait for descriptors updated and ready to be bound to pipeline.
 ///
-/// This trait is intended to be implemented by proc macro `#[derive(TypedDescriptors)]` for generated types.
+/// This trait is intended to be implemented by proc macro `#[derive(Descriptors)]` for generated types.
 pub trait UpdatedDescriptors {
     fn raw(&self) -> &DescriptorSet;
 }
 
 /// Trait for descriptors instance.
 ///
-/// This trait is intended to be implemented by proc macro `#[derive(TypedDescriptors)]` for generated types.
+/// This trait is intended to be implemented by proc macro `#[derive(Descriptors)]` for generated types.
 pub trait DescriptorsInstance<I: ?Sized> {
     type Updated: UpdatedDescriptors;
 
@@ -361,16 +361,16 @@ pub trait DescriptorsInstance<I: ?Sized> {
 
 /// Input structures for descriptors implement this trait.
 ///
-/// This trait is intended to be implemented by proc macro `#[derive(TypedDescriptors)]`.
-pub trait TypedDescriptors {
+/// This trait is intended to be implemented by proc macro `#[derive(Descriptors)]`.
+pub trait Descriptors {
     /// Layout type for the input.
     ///
-    /// Proc macro `#[derive(TypedDescriptors)]` generates this type and all necessary code.
+    /// Proc macro `#[derive(Descriptors)]` generates this type and all necessary code.
     type Layout;
 
     /// Instance type for the input.
     ///
-    /// Proc macro `#[derive(TypedDescriptors)]` generates this type and all necessary code.
+    /// Proc macro `#[derive(Descriptors)]` generates this type and all necessary code.
     type Instance: DescriptorsInstance<Self>;
 
     /// Shortcut for instantiating layout for the input type.
@@ -379,8 +379,8 @@ pub trait TypedDescriptors {
 
 /// Extension trait for updated descriptors, specifying offset in typed pipeline.
 ///
-/// This trait is intended to be implemented by proc macro `#[derive(TypedPipeline)]`
-/// for types generated by proc macro `#[derive(TypedDescriptors)]`.
+/// This trait is intended to be implemented by proc macro `#[derive(Pipeline)]`
+/// for types generated by proc macro `#[derive(Descriptors)]`.
 pub trait UpdatedPipelineDescriptors<P: ?Sized>: UpdatedDescriptors {
     const N: u32;
 }
@@ -394,15 +394,15 @@ pub trait DescriptorBinding {
     const FLAGS: DescriptorBindingFlags;
 
     /// Descriptors value.
-    type Descriptors;
+    type DescriptorArray;
 
     /// Compare with image view currently bound to descriptor set.
     /// Returns `true` if self is equivalent specified image view,
     /// and no update is required.
-    fn eq(&self, descriptors: &Self::Descriptors) -> bool;
+    fn eq(&self, descriptors: &Self::DescriptorArray) -> bool;
 
     /// Returns `Descriptors` equivalent to self.
-    fn get_descriptors(&self, device: &Device) -> Result<Self::Descriptors, OutOfMemory>;
+    fn get_descriptors(&self, device: &Device) -> Result<Self::DescriptorArray, OutOfMemory>;
 }
 
 // /// Trait for all types that can be used as descriptor.
@@ -419,14 +419,14 @@ pub trait DescriptorBinding {
 //     /// Compare with image view currently bound to descriptor set.
 //     /// Returns `true` if self is equivalent specified image view,
 //     /// and no update is required.
-//     fn eq(&self, descriptors: &Self::Descriptors, layout: Layout) -> bool;
+//     fn eq(&self, descriptors: &Self::DescriptorArray, layout: Layout) -> bool;
 
 //     /// Returns `Descriptors` equivalent to self.
 //     fn get_descriptors(
 //         &self,
 //         device: &Device,
 //         layout: Layout,
-//     ) -> Result<Self::Descriptors, OutOfMemory>;
+//     ) -> Result<Self::DescriptorArray, OutOfMemory>;
 // }
 
 // impl<T> DescriptorBinding for T
@@ -435,15 +435,15 @@ pub trait DescriptorBinding {
 // {
 //     const COUNT: u32 = T::COUNT;
 //     const FLAGS: DescriptorBindingFlags = T::FLAGS;
-//     type Descriptors = T::Descriptors;
+//     type Descriptors = T::DescriptorArray;
 
 //     #[inline]
-//     fn eq(&self, descriptors: &Self::Descriptors) -> bool {
+//     fn eq(&self, descriptors: &Self::DescriptorArray) -> bool {
 //         self.eq(descriptors, Layout::ShaderReadOnlyOptimal)
 //     }
 
 //     #[inline]
-//     fn get_descriptors(&self, device: &Device) -> Result<Self::Descriptors, OutOfMemory> {
+//     fn get_descriptors(&self, device: &Device) -> Result<Self::DescriptorArray, OutOfMemory> {
 //         self.get_descriptors(device, Layout::ShaderReadOnlyOptimal)
 //     }
 // }
@@ -463,15 +463,18 @@ macro_rules! impl_for_refs {
         {
             const COUNT: u32 = T::COUNT;
             const FLAGS: DescriptorBindingFlags = T::FLAGS;
-            type Descriptors = T::Descriptors;
+            type DescriptorArray = T::DescriptorArray;
 
             #[inline]
-            fn eq(&self, descriptors: &Self::Descriptors) -> bool {
+            fn eq(&self, descriptors: &Self::DescriptorArray) -> bool {
                 T::eq(self, descriptors)
             }
 
             #[inline]
-            fn get_descriptors(&self, device: &Device) -> Result<Self::Descriptors, OutOfMemory> {
+            fn get_descriptors(
+                &self,
+                device: &Device,
+            ) -> Result<Self::DescriptorArray, OutOfMemory> {
                 T::get_descriptors(&self, device)
             }
         }

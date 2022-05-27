@@ -11,8 +11,8 @@ use {
         image::{Image, ImageBlit, ImageMemoryBarrier, Layout, SubresourceLayers},
         memory::MemoryBarrier,
         pipeline::{
-            ComputePipeline, DynamicGraphicsPipeline, GraphicsPipeline, PipelineLayout,
-            RayTracingPipeline, ShaderBindingTable, TypedPipelineLayout, Viewport,
+            ComputePipeline, DynamicGraphicsPipeline, GraphicsPipeline, PipelineInputLayout,
+            PipelineLayout, RayTracingPipeline, ShaderBindingTable, Viewport,
         },
         queue::QueueCapabilityFlags,
         render_pass::{ClearValue, RenderPass, RenderPassInstance},
@@ -287,7 +287,7 @@ impl<'a> EncoderCommon<'a> {
         layout: &P,
         descriptors: &impl UpdatedPipelineDescriptors<P>,
     ) where
-        P: TypedPipelineLayout,
+        P: PipelineInputLayout,
     {
         layout.bind_graphics(descriptors, self);
     }
@@ -317,7 +317,7 @@ impl<'a> EncoderCommon<'a> {
         layout: &P,
         descriptors: &impl UpdatedPipelineDescriptors<P>,
     ) where
-        P: TypedPipelineLayout,
+        P: PipelineInputLayout,
     {
         layout.bind_compute(descriptors, self);
     }
@@ -347,7 +347,7 @@ impl<'a> EncoderCommon<'a> {
         layout: &P,
         descriptors: &impl UpdatedPipelineDescriptors<P>,
     ) where
-        P: TypedPipelineLayout,
+        P: PipelineInputLayout,
     {
         layout.bind_ray_tracing(descriptors, self);
     }
@@ -376,7 +376,7 @@ impl<'a> EncoderCommon<'a> {
 
     pub fn push_constants<P>(&mut self, layout: &P, constants: &impl PipelinePushConstants<P>)
     where
-        P: TypedPipelineLayout,
+        P: PipelineInputLayout,
     {
         layout.push_constants(constants, self);
     }

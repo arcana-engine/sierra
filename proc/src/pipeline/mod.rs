@@ -3,7 +3,7 @@ mod input;
 mod layout;
 mod parse;
 
-pub fn pipeline(item: proc_macro::TokenStream) -> proc_macro2::TokenStream {
+pub fn pipeline_input(item: proc_macro::TokenStream) -> proc_macro2::TokenStream {
     match parse::parse(item) {
         Ok(input) => {
             std::iter::once(input::generate(&input))

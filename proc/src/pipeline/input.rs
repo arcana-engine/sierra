@@ -15,7 +15,7 @@ pub(super) fn generate(input: &Input) -> TokenStream {
             }
         }
 
-        impl ::sierra::TypedPipeline for #ident {
+        impl ::sierra::PipelineInput for #ident {
             type Layout = #layout_ident;
             fn layout(device: &::sierra::Device) -> Result<#layout_ident, ::sierra::OutOfMemory> {
 
