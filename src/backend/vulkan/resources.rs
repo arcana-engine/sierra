@@ -27,10 +27,11 @@ use crate::{
     queue::QueueId,
     render_pass::RenderPassInfo,
     sampler::SamplerInfo,
+    sealed::Sealed,
     shader::ShaderModuleInfo,
     view::ImageViewInfo,
     BufferRange, BufferViewInfo, CombinedImageSampler, DescriptorSlice, DescriptorType,
-    DeviceAddress, ImageDescriptor,
+    DeviceAddress, ImageLayout,
 };
 
 use self::resource_counting::{resource_allocated, resource_freed};
@@ -65,9 +66,12 @@ impl Drop for BufferInner {
 pub struct Buffer {
     handle: vk1_0::Buffer,
     info: BufferInfo,
+    memory_usage: MemoryUsage,
     address: Option<DeviceAddress>,
     inner: Arc<BufferInner>,
 }
+
+impl Sealed for Buffer {}
 
 unsafe impl Send for Buffer {}
 unsafe impl Sync for Buffer {}
@@ -144,6 +148,64 @@ impl Buffer {
         debug_assert!(!self.handle.is_null());
         self.handle
     }
+
+    #[inline]
+    pub fn try_into_mappable(self) -> Result<MappableBuffer, Self> {
+        if self.is_mappable() {
+            Ok(unsafe { self.into_mappable() })
+        } else {
+            Err(self)
+        }
+    }
+
+    /// # Safety
+    ///
+    /// Caller must ensure that writes would not create races.
+    #[inline]
+    pub unsafe fn into_mappable(self) -> MappableBuffer {
+        debug_assert!(self.is_mappable());
+        MappableBuffer { buffer: self }
+    }
+
+    #[inline]
+    pub fn try_as_mappable(&mut self) -> Option<&mut MappableBuffer> {
+        if self.is_mappable() {
+            Some(unsafe { self.as_mappable() })
+        } else {
+            None
+        }
+    }
+
+    /// # Safety
+    ///
+    /// Caller must ensure that writes would not create races.
+    #[inline]
+    pub unsafe fn as_mappable(&mut self) -> &mut MappableBuffer {
+        debug_assert!(self.is_mappable());
+        // `[repr(transparent)]` allows this cast.
+        &mut *(self as *mut Self as *mut MappableBuffer)
+    }
+
+    /// Check if buffer is unused.
+    /// Caller should have exclusive access to the reference,
+    /// otherwise buffer can be used at any moment.
+    #[inline]
+    pub fn is_unused(&self) -> bool {
+        debug_assert_eq!(
+            Arc::weak_count(&self.inner),
+            0,
+            "Weak pointers must not be created"
+        );
+        Arc::strong_count(&self.inner) == 1
+    }
+
+    #[inline]
+    pub fn is_mappable(&self) -> bool {
+        self.is_unused()
+            && self
+                .memory_usage
+                .intersects(MemoryUsage::DOWNLOAD | MemoryUsage::UPLOAD)
+    }
 }
 
 /// Handle to GPU buffer object.
@@ -157,9 +219,9 @@ impl Buffer {
 ///
 /// If buffer sharing is required and mapping is not,
 /// [`MappedBuffer`] can be converted into [`Buffer`] with no cost.
+#[repr(transparent)]
 pub struct MappableBuffer {
     buffer: Buffer,
-    memory_usage: MemoryUsage,
 }
 
 impl From<MappableBuffer> for Buffer {
@@ -252,6 +314,7 @@ impl MappableBuffer {
             buffer: Buffer {
                 handle,
                 info,
+                memory_usage,
                 address,
                 inner: Arc::new(BufferInner {
                     owner,
@@ -262,7 +325,6 @@ impl MappableBuffer {
                     index,
                 }),
             },
-            memory_usage,
         }
     }
 
@@ -286,6 +348,8 @@ pub struct BufferView {
     handle: vk1_0::BufferView,
     inner: Arc<BufferViewInner>,
 }
+
+impl Sealed for BufferView {}
 
 struct BufferViewInner {
     info: BufferViewInfo,
@@ -398,6 +462,8 @@ pub struct Image {
     info: ImageInfo,
     inner: Arc<ImageInner>,
 }
+
+impl Sealed for Image {}
 
 struct ImageInner {
     owner: WeakDevice,
@@ -550,6 +616,8 @@ pub struct ImageView {
     handle: vk1_0::ImageView,
     inner: Arc<ImageViewInner>,
 }
+
+impl Sealed for ImageView {}
 
 struct ImageViewInner {
     info: ImageViewInfo,
@@ -984,6 +1052,8 @@ pub struct Sampler {
     inner: Arc<SamplerInner>,
 }
 
+impl Sealed for Sampler {}
+
 struct SamplerInner {
     owner: WeakDevice,
     index: usize,
@@ -1378,10 +1448,10 @@ pub(super) enum ReferencedDescriptors {
     CombinedImageSampler(Box<[Option<CombinedImageSampler>]>),
 
     /// Sampled image descriptors.
-    SampledImage(Box<[Option<ImageDescriptor<ImageView>>]>),
+    SampledImage(Box<[Option<ImageLayout<ImageView>>]>),
 
     /// Storage image descriptors.
-    StorageImage(Box<[Option<ImageDescriptor<ImageView>>]>),
+    StorageImage(Box<[Option<ImageLayout<ImageView>>]>),
 
     /// Uniform texel buffer descriptors.
     UniformTexelBuffer(Box<[Option<BufferView>]>),
@@ -1402,7 +1472,7 @@ pub(super) enum ReferencedDescriptors {
     StorageBufferDynamic(Box<[Option<BufferRange>]>),
 
     /// Input attachments.
-    InputAttachment(Box<[Option<ImageDescriptor<ImageView>>]>),
+    InputAttachment(Box<[Option<ImageLayout<ImageView>>]>),
 
     /// Acceleration structures.
     AccelerationStructure(Box<[Option<AccelerationStructure>]>),
@@ -1753,7 +1823,7 @@ impl DescriptorSet {
 
     #[inline]
     pub fn try_into_writable(self) -> Result<WritableDescriptorSet, Self> {
-        if self.is_writable() {
+        if self.is_unused() {
             Ok(unsafe { self.into_writable() })
         } else {
             Err(self)
@@ -1772,7 +1842,7 @@ impl DescriptorSet {
 
     #[inline]
     pub fn try_as_writtable(&mut self) -> Option<&mut WritableDescriptorSet> {
-        if self.is_writable() {
+        if self.is_unused() {
             Some(unsafe { self.as_writable() })
         } else {
             None
@@ -1784,16 +1854,15 @@ impl DescriptorSet {
     /// Caller must ensure that writes would not create races.
     #[inline]
     pub unsafe fn as_writable(&mut self) -> &mut WritableDescriptorSet {
-        // Single strong reference guarantees uniqueness.
         // `[repr(transparent)]` allows this cast.
         &mut *(self as *mut Self as *mut WritableDescriptorSet)
     }
 
-    /// Check if descriptor set is writtable.
+    /// Check if descriptor set is unused.
     /// Caller should have exclusive access to the reference,
-    /// otherwise descriptor set can become unwrittable at any moment.
+    /// otherwise descriptor set can be used at any moment.
     #[inline]
-    pub fn is_writable(&self) -> bool {
+    pub fn is_unused(&self) -> bool {
         debug_assert_eq!(
             Arc::weak_count(&self.inner),
             0,
@@ -2096,6 +2165,8 @@ pub struct AccelerationStructure {
     handle: vkacc::AccelerationStructureKHR,
     inner: Arc<AccelerationStructureInner>,
 }
+
+impl Sealed for AccelerationStructure {}
 
 struct AccelerationStructureInner {
     info: AccelerationStructureInfo,

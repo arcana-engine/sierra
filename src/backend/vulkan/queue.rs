@@ -69,7 +69,7 @@ impl Queue {
         self.id
     }
 
-    #[tracing::instrument]
+    #[cfg_attr(feature = "tracing", tracing::instrument)]
     pub fn create_encoder<'a>(&mut self, scope: &'a Scope<'a>) -> Result<Encoder<'a>, OutOfMemory> {
         let mut cbuf = match self.cbufs.pop() {
             Some(cbuf) => cbuf,
@@ -112,7 +112,7 @@ impl Queue {
         }
     }
 
-    #[tracing::instrument(skip(cbufs))]
+    #[cfg_attr(feature = "tracing", tracing::instrument(skip(cbufs)))]
     pub fn submit(
         &mut self,
         wait: &mut [(PipelineStageFlags, &mut Semaphore)],
@@ -168,7 +168,7 @@ impl Queue {
         self.device.epochs().submit(self.id, array.drain(..));
     }
 
-    #[tracing::instrument]
+    #[cfg_attr(feature = "tracing", tracing::instrument)]
     pub fn submit_one(&mut self, cbuf: CommandBuffer, fence: Option<&Fence>) {
         assert_owner!(cbuf, self.device);
         assert_eq!(self.id, cbuf.queue());
@@ -192,7 +192,7 @@ impl Queue {
         self.device.epochs().submit(self.id, std::iter::once(cbuf));
     }
 
-    #[tracing::instrument]
+    #[cfg_attr(feature = "tracing", tracing::instrument)]
     pub fn present(&mut self, mut image: SwapchainImage<'_>) -> Result<PresentOk, OutOfMemory> {
         assert_owner!(image, self.device);
 
@@ -235,7 +235,7 @@ impl Queue {
         }
     }
 
-    #[tracing::instrument]
+    #[cfg_attr(feature = "tracing", tracing::instrument)]
     pub fn wait_for_idle(&self) -> Result<(), OutOfMemory> {
         unsafe { self.device.logical().queue_wait_idle(self.handle) }
             .result()
@@ -258,7 +258,7 @@ impl Queue {
 
         #[cfg(feature = "leak-detection")]
         if self.cbufs.len() > 4096 {
-            tracing::warn!("Too many cbufs accumulated");
+            warn!("Too many cbufs accumulated");
         }
 
         Ok(())

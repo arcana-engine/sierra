@@ -1,12 +1,16 @@
 use std::convert::TryFrom;
 
 use proc_easy::EasyAttributes;
+use proc_macro2::TokenStream;
 use syn::spanned::Spanned;
 
 use crate::{flags::BindingFlags, kw, stage::Stages};
 
 use super::{
-    acceleration_structure::AccelerationStructure, buffer::Buffer, image::Image, sampler::Sampler,
+    acceleration_structure::AccelerationStructure,
+    buffer::{self, Buffer},
+    image::{self, Image},
+    sampler::Sampler,
     uniform::Uniform,
 };
 
@@ -56,6 +60,79 @@ pub enum DescriptorType {
     Image(Image),
     Buffer(Buffer),
     AccelerationStructure(AccelerationStructure),
+}
+
+impl DescriptorType {
+    pub fn descriptor_kind(&self) -> TokenStream {
+        match self {
+            DescriptorType::Sampler(Sampler { kw }) => quote::quote_spanned! {
+                kw.span() => ::sierra::SamplerDescriptor
+            },
+            DescriptorType::Image(image::Image {
+                kw,
+                kind: None | Some(image::Kind::Sampled(_)),
+                layout,
+            }) => {
+                let layout = image::Layout::to_tokens_opt(layout.as_ref(), || {
+                    quote::quote!(::sierra::ShaderReadOnlyOptimal)
+                });
+                quote::quote_spanned! {
+                    kw.span() => ::sierra::ImageDescriptor<::sierra::Sampled, #layout>
+                }
+            }
+            DescriptorType::Image(image::Image {
+                kw,
+                kind: Some(image::Kind::Storage(_)),
+                layout,
+            }) => {
+                let layout = image::Layout::to_tokens_opt(layout.as_ref(), || {
+                    quote::quote!(::sierra::General)
+                });
+                quote::quote_spanned! {
+                    kw.span() => ::sierra::ImageDescriptor<::sierra::Storage, #layout>
+                }
+            }
+            DescriptorType::AccelerationStructure(AccelerationStructure { kw }) => {
+                quote::quote_spanned! {
+                    kw.span() => ::sierra::AccelerationStructureDescriptor
+                }
+            }
+            DescriptorType::Buffer(buffer::Buffer {
+                kw,
+                kind: None | Some(buffer::Kind::Uniform(_)),
+                texel: None,
+            }) => quote::quote_spanned! {
+                kw.span() => ::sierra::BufferDescriptor<::sierra::Uniform>
+            },
+            DescriptorType::Buffer(buffer::Buffer {
+                kw,
+                kind: Some(buffer::Kind::Storage(_)),
+                texel: None,
+            }) => quote::quote_spanned! {
+                kw.span()=> ::sierra::BufferDescriptor<::sierra::Storage>
+            },
+            DescriptorType::Buffer(buffer::Buffer {
+                kw,
+                kind: None | Some(buffer::Kind::Uniform(_)),
+                texel: Some(buffer::Texel { format, .. }),
+            }) => {
+                let format = format.to_tokens();
+                quote::quote_spanned! {
+                    kw.span()=> ::sierra::TexelBufferDescriptor<::sierra::Uniform, #format>
+                }
+            }
+            DescriptorType::Buffer(buffer::Buffer {
+                kw,
+                kind: Some(buffer::Kind::Storage(_)),
+                texel: Some(buffer::Texel { format, .. }),
+            }) => {
+                let format = format.to_tokens();
+                quote::quote_spanned! {
+                    kw.span()=> ::sierra::TexelBufferDescriptor<::sierra::Storage, #format>
+                }
+            }
+        }
+    }
 }
 
 proc_easy::easy_argument_value! {

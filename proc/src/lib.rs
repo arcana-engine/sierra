@@ -4,6 +4,7 @@ extern crate proc_macro;
 
 mod descriptors;
 mod flags;
+mod format;
 mod graphics_pipeline;
 mod layout;
 mod pass;
@@ -50,6 +51,11 @@ pub fn binding_flags(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream
 #[proc_macro]
 pub fn swizzle(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     swizzle::swizzle(item).into()
+}
+
+#[proc_macro]
+pub fn format(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    format::format(item).into()
 }
 
 fn validate_member(member: &syn::Member, item_struct: &syn::ItemStruct) -> syn::Result<u32> {

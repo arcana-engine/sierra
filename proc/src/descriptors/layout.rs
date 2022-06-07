@@ -1,11 +1,14 @@
 use std::convert::TryFrom;
 
 use proc_macro2::TokenStream;
+use syn::spanned::Spanned;
 
 use super::{
+    acceleration_structure::AccelerationStructure,
     buffer, image,
     instance::instance_type_name,
     parse::{Descriptor, DescriptorType, Input},
+    sampler::Sampler,
 };
 
 use crate::stage::combined_stages_flags;
@@ -109,65 +112,70 @@ pub(super) fn generate(input: &Input) -> TokenStream {
 
 fn generate_layout_binding(descriptor: &Descriptor, binding: u32) -> TokenStream {
     let desc_ty = match descriptor.desc_ty {
-        DescriptorType::Sampler(_) => {
-            quote::format_ident!("Sampler")
+        DescriptorType::Sampler(Sampler { kw }) => {
+            quote::quote_spanned!(kw.span() => ::sierra::DescriptorType::Sampler)
         }
         DescriptorType::Image(image::Image {
+            kw,
             kind: None | Some(image::Kind::Sampled(_)),
             ..
         }) => {
-            quote::format_ident!("SampledImage")
+            quote::quote_spanned!(kw.span() => ::sierra::DescriptorType::SampledImage)
         }
         DescriptorType::Image(image::Image {
+            kw,
             kind: Some(image::Kind::Storage(_)),
             ..
         }) => {
-            quote::format_ident!("StorageImage")
+            quote::quote_spanned!(kw.span() => ::sierra::DescriptorType::StorageImage)
         }
         DescriptorType::Buffer(buffer::Buffer {
+            kw,
             kind: None | Some(buffer::Kind::Uniform(_)),
             texel: None,
-            ..
         }) => {
-            quote::format_ident!("UniformBuffer")
+            quote::quote_spanned!(kw.span() => ::sierra::DescriptorType::UniformBuffer)
         }
         DescriptorType::Buffer(buffer::Buffer {
+            kw,
             kind: Some(buffer::Kind::Storage(_)),
             texel: None,
-            ..
         }) => {
-            quote::format_ident!("StorageTexelBuffer")
+            quote::quote_spanned!(kw.span() => ::sierra::DescriptorType::StorageTexelBuffer)
         }
         DescriptorType::Buffer(buffer::Buffer {
+            kw,
             kind: None | Some(buffer::Kind::Uniform(_)),
             texel: Some(_),
-            ..
         }) => {
-            quote::format_ident!("UniformTexelBuffer")
+            quote::quote_spanned!(kw.span() => ::sierra::DescriptorType::UniformTexelBuffer)
         }
         DescriptorType::Buffer(buffer::Buffer {
+            kw,
             kind: Some(buffer::Kind::Storage(_)),
             texel: Some(_),
-            ..
         }) => {
-            quote::format_ident!("StorageTexelBuffer")
+            quote::quote_spanned!(kw.span() => ::sierra::DescriptorType::StorageTexelBuffer)
         }
-        DescriptorType::AccelerationStructure(_) => {
-            quote::format_ident!("AccelerationStructure")
+        DescriptorType::AccelerationStructure(AccelerationStructure { kw }) => {
+            quote::quote_spanned!(kw.span() => ::sierra::DescriptorType::AccelerationStructure)
         }
     };
 
     let stages = descriptor.stages.bits();
     let flags = descriptor.flags.bits();
 
+    let descriptor_kind = descriptor.desc_ty.descriptor_kind();
+
     let ty = &descriptor.field.ty;
-    quote::quote!(
+    quote::quote_spanned!(
+        descriptor.field.span() =>
         ::sierra::DescriptorSetLayoutBinding {
             binding: #binding,
-            ty: ::sierra::DescriptorType::#desc_ty,
-            count: <#ty as ::sierra::DescriptorBinding>::COUNT,
+            ty: #desc_ty,
+            count: <#ty as ::sierra::DescriptorBindingArray<#descriptor_kind>>::COUNT,
             stages: ::sierra::ShaderStageFlags::from_bits_truncate(#stages),
-            flags: ::sierra::DescriptorBindingFlags::from_bits_truncate(#flags),
+            flags: ::sierra::DescriptorBindingFlags::from_bits_truncate(#flags | <#ty as ::sierra::DescriptorBindingArray<#descriptor_kind>>::FLAGS.bits()),
         }
     )
 }

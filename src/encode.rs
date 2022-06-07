@@ -1,5 +1,5 @@
 pub use crate::backend::CommandBuffer;
-use crate::PipelinePushConstants;
+use crate::{arith_ge, BufferInfo, BufferUsage, PipelinePushConstants};
 use {
     crate::{
         accel::AccelerationStructureBuildGeometryInfo,
@@ -495,6 +495,128 @@ impl<'a> Encoder<'a> {
                 data,
             },
         )
+    }
+
+    /// Uploads data to the buffer.
+    /// May create intermediate staging buffer if necessary.
+    pub fn upload_buffer<T>(
+        &mut self,
+        buffer: &'a Buffer,
+        offset: u64,
+        data: &'a [T],
+        device: &Device,
+    ) -> Result<(), OutOfMemory>
+    where
+        T: Pod,
+    {
+        const UPDATE_LIMIT: usize = 16384;
+
+        assert_eq!(
+            size_of_val(data) & 3,
+            0,
+            "Buffer uploading data size must be a multiple of 4"
+        );
+
+        if data.is_empty() {
+            return Ok(());
+        }
+
+        if size_of_val(data) <= UPDATE_LIMIT {
+            self.update_buffer(buffer, offset, data);
+        } else {
+            let staging = device.create_buffer_static(
+                BufferInfo {
+                    align: 15,
+                    size: size_of_val(data) as u64,
+                    usage: BufferUsage::TRANSFER_SRC,
+                },
+                data,
+            )?;
+
+            self.copy_buffer(
+                &staging,
+                buffer,
+                &[BufferCopy {
+                    src_offset: 0,
+                    dst_offset: offset,
+                    size: size_of_val(data) as u64,
+                }],
+            );
+        }
+
+        Ok(())
+    }
+
+    /// Uploads data to the buffer.
+    /// Uses cached staging buffers and may create new if necessary.
+    pub fn upload_buffer_cached<T, S>(
+        &mut self,
+        buffer: &'a Buffer,
+        offset: u64,
+        data: &'a [T],
+        device: &Device,
+        staging: &mut S,
+    ) -> Result<(), OutOfMemory>
+    where
+        T: Pod,
+        S: AsMut<[Buffer]> + Extend<Buffer>,
+    {
+        const UPDATE_LIMIT: usize = 16384;
+
+        assert_eq!(
+            size_of_val(data) & 3,
+            0,
+            "Buffer uploading data size must be a multiple of 4"
+        );
+
+        if data.is_empty() {
+            return Ok(());
+        }
+
+        if size_of_val(data) <= UPDATE_LIMIT {
+            self.update_buffer(buffer, offset, data);
+        } else {
+            let new_staging;
+            let mut iter = staging.as_mut().iter_mut();
+            let staging = loop {
+                match iter.next() {
+                    None => {
+                        new_staging = device.create_buffer_static(
+                            BufferInfo {
+                                align: 15,
+                                size: size_of_val(data) as u64,
+                                usage: BufferUsage::TRANSFER_SRC,
+                            },
+                            data,
+                        )?;
+                        break &new_staging;
+                    }
+                    Some(buffer) => {
+                        if arith_ge(buffer.info().size, size_of_val(data)) {
+                            if let Some(mappable_buffer) = buffer.try_as_mappable() {
+                                device
+                                    .upload_to_memory(mappable_buffer, offset, data)
+                                    .expect("Map failed");
+
+                                break &*buffer;
+                            }
+                        }
+                    }
+                }
+            };
+
+            self.copy_buffer(
+                &staging,
+                buffer,
+                &[BufferCopy {
+                    src_offset: 0,
+                    dst_offset: offset,
+                    size: size_of_val(data) as u64,
+                }],
+            );
+        }
+
+        Ok(())
     }
 
     /// Builds acceleration structures.

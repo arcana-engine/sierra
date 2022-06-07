@@ -696,3 +696,56 @@ impl ImageSubresourceState {
         &self.subresource
     }
 }
+
+#[derive(Copy, Clone, Debug)]
+pub enum ColorAttachmentOptimal {}
+
+#[derive(Copy, Clone, Debug)]
+pub enum DepthStencilAttachmentOptimal {}
+
+#[derive(Copy, Clone, Debug)]
+pub enum DepthStencilReadOnlyOptimal {}
+
+#[derive(Copy, Clone, Debug)]
+pub enum ShaderReadOnlyOptimal {}
+
+#[derive(Copy, Clone, Debug)]
+pub enum TransferSrcOptimal {}
+
+#[derive(Copy, Clone, Debug)]
+pub enum TransferDstOptimal {}
+
+#[derive(Copy, Clone, Debug)]
+pub enum Present {}
+
+#[derive(Copy, Clone, Debug)]
+pub enum General {}
+
+pub trait StaticLayout {
+    const LAYOUT: Layout;
+}
+
+impl StaticLayout for ColorAttachmentOptimal {
+    const LAYOUT: Layout = Layout::ColorAttachmentOptimal;
+}
+impl StaticLayout for DepthStencilAttachmentOptimal {
+    const LAYOUT: Layout = Layout::DepthStencilAttachmentOptimal;
+}
+impl StaticLayout for DepthStencilReadOnlyOptimal {
+    const LAYOUT: Layout = Layout::DepthStencilReadOnlyOptimal;
+}
+impl StaticLayout for ShaderReadOnlyOptimal {
+    const LAYOUT: Layout = Layout::ShaderReadOnlyOptimal;
+}
+impl StaticLayout for TransferSrcOptimal {
+    const LAYOUT: Layout = Layout::TransferSrcOptimal;
+}
+impl StaticLayout for TransferDstOptimal {
+    const LAYOUT: Layout = Layout::TransferDstOptimal;
+}
+impl StaticLayout for Present {
+    const LAYOUT: Layout = Layout::Present;
+}
+impl StaticLayout for General {
+    const LAYOUT: Layout = Layout::General;
+}

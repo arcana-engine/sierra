@@ -9,7 +9,7 @@ use {
         accel::{AccelerationStructureGeometry, AccelerationStructureLevel, IndexData},
         buffer::{BufferRange, BufferUsage, StridedBufferRange},
         encode::*,
-        format::{FormatDescription, FormatRepr, FormatType},
+        format::{Channels, FormatDescription, Type},
         queue::QueueId,
         render_pass::{ClearValue, LoadOp},
         IndexType, OutOfMemory,
@@ -72,7 +72,7 @@ impl CommandBuffer {
 
         #[cfg(feature = "leak-detection")]
         if allocated - COMMAND_BUFFER_FREED.load(Relaxed) > 1024 {
-            tracing::error!("Too many cbufs allocated");
+            error!("Too many cbufs allocated");
         }
 
         CommandBuffer {
@@ -133,14 +133,14 @@ impl CommandBuffer {
                         .attachments
                         .iter()
                         .map(|attachment| {
-                            use FormatDescription::*;
+                            use Channels::*;
 
                             if attachment.load_op == LoadOp::Clear {
                                 let clear = clears.next().expect("Not enough clear values");
                                 match *clear {
                                     ClearValue::Color(r, g, b, a) => vk1_0::ClearValue {
                                         color: match attachment.format.description() {
-                                            R(repr)|RG(repr)|RGB(repr)|RGBA(repr)|BGR(repr)|BGRA(repr) => colors_f32_to_value(r, g, b, a, repr),
+                                            FormatDescription { channels: R|RG|RGB|RGBA|BGR|BGRA, bits, ty } => colors_f32_to_value(r, g, b, a, bits, ty),
                                             _ => panic!("Attempt to clear depth-stencil attachment with color value"),
                                         }
                                     },
@@ -870,12 +870,16 @@ fn color_f32_to_sint8(color: f32) -> i8 {
         .max(i8::max_value() as f32) as i8
 }
 
-fn colors_f32_to_value(r: f32, g: f32, b: f32, a: f32, repr: FormatRepr) -> vk1_0::ClearColorValue {
-    match repr {
-        FormatRepr {
-            bits: 8,
-            ty: FormatType::Uint,
-        } => vk1_0::ClearColorValue {
+fn colors_f32_to_value(
+    r: f32,
+    g: f32,
+    b: f32,
+    a: f32,
+    bits: u32,
+    ty: Type,
+) -> vk1_0::ClearColorValue {
+    match (bits, ty) {
+        (8, Type::Uint) => vk1_0::ClearColorValue {
             uint32: [
                 color_f32_to_uint8(r) as _,
                 color_f32_to_uint8(g) as _,
@@ -883,10 +887,7 @@ fn colors_f32_to_value(r: f32, g: f32, b: f32, a: f32, repr: FormatRepr) -> vk1_
                 color_f32_to_uint8(a) as _,
             ],
         },
-        FormatRepr {
-            bits: 8,
-            ty: FormatType::Sint,
-        } => vk1_0::ClearColorValue {
+        (8, Type::Sint) => vk1_0::ClearColorValue {
             int32: [
                 color_f32_to_sint8(r) as _,
                 color_f32_to_sint8(g) as _,
@@ -894,10 +895,7 @@ fn colors_f32_to_value(r: f32, g: f32, b: f32, a: f32, repr: FormatRepr) -> vk1_
                 color_f32_to_sint8(a) as _,
             ],
         },
-        FormatRepr {
-            bits: 16,
-            ty: FormatType::Uint,
-        } => vk1_0::ClearColorValue {
+        (16, Type::Uint) => vk1_0::ClearColorValue {
             uint32: [
                 color_f32_to_uint16(r) as _,
                 color_f32_to_uint16(g) as _,
@@ -905,10 +903,7 @@ fn colors_f32_to_value(r: f32, g: f32, b: f32, a: f32, repr: FormatRepr) -> vk1_
                 color_f32_to_uint16(a) as _,
             ],
         },
-        FormatRepr {
-            bits: 16,
-            ty: FormatType::Sint,
-        } => vk1_0::ClearColorValue {
+        (16, Type::Sint) => vk1_0::ClearColorValue {
             int32: [
                 color_f32_to_sint16(r) as _,
                 color_f32_to_sint16(g) as _,
@@ -916,10 +911,7 @@ fn colors_f32_to_value(r: f32, g: f32, b: f32, a: f32, repr: FormatRepr) -> vk1_
                 color_f32_to_sint16(a) as _,
             ],
         },
-        FormatRepr {
-            bits: 32,
-            ty: FormatType::Uint,
-        } => vk1_0::ClearColorValue {
+        (32, Type::Uint) => vk1_0::ClearColorValue {
             uint32: [
                 color_f32_to_uint32(r) as _,
                 color_f32_to_uint32(g) as _,
@@ -927,10 +919,7 @@ fn colors_f32_to_value(r: f32, g: f32, b: f32, a: f32, repr: FormatRepr) -> vk1_
                 color_f32_to_uint32(a) as _,
             ],
         },
-        FormatRepr {
-            bits: 32,
-            ty: FormatType::Sint,
-        } => vk1_0::ClearColorValue {
+        (32, Type::Sint) => vk1_0::ClearColorValue {
             int32: [
                 color_f32_to_sint32(r) as _,
                 color_f32_to_sint32(g) as _,
@@ -938,10 +927,7 @@ fn colors_f32_to_value(r: f32, g: f32, b: f32, a: f32, repr: FormatRepr) -> vk1_
                 color_f32_to_sint32(a) as _,
             ],
         },
-        FormatRepr {
-            bits: 64,
-            ty: FormatType::Uint,
-        } => vk1_0::ClearColorValue {
+        (64, Type::Uint) => vk1_0::ClearColorValue {
             uint32: [
                 color_f32_to_uint64(r) as _,
                 color_f32_to_uint64(g) as _,
@@ -949,10 +935,7 @@ fn colors_f32_to_value(r: f32, g: f32, b: f32, a: f32, repr: FormatRepr) -> vk1_
                 color_f32_to_uint64(a) as _,
             ],
         },
-        FormatRepr {
-            bits: 64,
-            ty: FormatType::Sint,
-        } => vk1_0::ClearColorValue {
+        (64, Type::Sint) => vk1_0::ClearColorValue {
             int32: [
                 color_f32_to_sint64(r) as _,
                 color_f32_to_sint64(g) as _,

@@ -77,12 +77,12 @@ where
 pub struct SparseDescriptorsInstance<T: Descriptor> {
     layout: DescriptorSetLayout,
     set: Option<SparseDescriptorSet>,
-    indices: HashMap<T::RawDescriptor, u32>,
+    indices: HashMap<T::Descriptor, u32>,
 
     upper_bounds: u32,
     unused: Bits4096,
 
-    updates: Vec<T::RawDescriptor>,
+    updates: Vec<T::Descriptor>,
 }
 
 #[derive(Debug)]
@@ -100,7 +100,7 @@ impl<T, const CAP: u32, const STAGES: u32> DescriptorsInstance<SparseDescriptors
     for SparseDescriptorsInstance<T>
 where
     T: Descriptor,
-    T::RawDescriptor: Hash + Eq,
+    T::Descriptor: Hash + Eq,
 {
     type Updated = SparseDescriptorSet;
 
@@ -176,9 +176,9 @@ where
     /// # Panics
     ///
     ///
-    pub fn get_or_insert(&mut self, descriptor: T::RawDescriptor) -> u32
+    pub fn get_or_insert(&mut self, descriptor: T::Descriptor) -> u32
     where
-        T::RawDescriptor: Hash + Clone + Eq,
+        T::Descriptor: Hash + Clone + Eq,
     {
         match self.indices.entry(descriptor.clone()) {
             Entry::Occupied(entry) => *entry.get(),
@@ -197,9 +197,9 @@ where
         }
     }
 
-    pub fn remove(&mut self, descriptor: T::RawDescriptor) -> bool
+    pub fn remove(&mut self, descriptor: T::Descriptor) -> bool
     where
-        T::RawDescriptor: Hash + Eq,
+        T::Descriptor: Hash + Eq,
     {
         match self.indices.get(&descriptor) {
             None => false,

@@ -1,11 +1,7 @@
 use proc_macro2::TokenStream;
 use syn::spanned::Spanned;
 
-use super::{
-    buffer, image,
-    layout::layout_type_name,
-    parse::{DescriptorType, Input},
-};
+use super::{layout::layout_type_name, parse::Input};
 
 pub(super) fn instance_type_name(input: &Input) -> syn::Ident {
     quote::format_ident!("{}Instance", input.item_struct.ident)
@@ -24,8 +20,10 @@ pub(super) fn generate(input: &Input) -> TokenStream {
             let descriptor_field = quote::format_ident!("descriptor_{}", input.member);
             let ty = &input.field.ty;
 
+            let descriptor_kind = input.desc_ty.descriptor_kind();
+
             quote::quote_spanned!(
-                input.field.ty.span() => pub #descriptor_field: ::std::option::Option<<#ty as ::sierra::DescriptorBinding>::DescriptorArray>,
+                input.field.ty.span() => pub #descriptor_field: ::std::option::Option<<#ty as ::sierra::DescriptorBindingArray<#descriptor_kind>>::DescriptorArray>,
             )
         })
         .collect();
@@ -36,16 +34,17 @@ pub(super) fn generate(input: &Input) -> TokenStream {
         .map(|input| {
             let field = &input.member;
 
+            let descriptor_kind = input.desc_ty.descriptor_kind();
             let descriptor_field = quote::format_ident!("descriptor_{}", input.member);
             let write_descriptor = quote::format_ident!("write_{}_descriptor", input.member);
             quote::quote!(
                 let #write_descriptor;
                 match &elem.#descriptor_field {
-                    Some(descriptors) if sierra::DescriptorBinding::eq(&input.#field, descriptors) => {
+                    Some(descriptors) if sierra::DescriptorBindingArray::<#descriptor_kind>::is_compatible(&input.#field, descriptors) => {
                         #write_descriptor = false;
                     }
                     _ => {
-                        elem.#descriptor_field = Some(::sierra::DescriptorBinding::get_descriptors(&input.#field, device)?);
+                        elem.#descriptor_field = Some(::sierra::DescriptorBindingArray::<#descriptor_kind>::get_descriptors(&input.#field, device)?);
                         write_descriptor_any = true;
                         #write_descriptor = true;
                     }
@@ -58,51 +57,10 @@ pub(super) fn generate(input: &Input) -> TokenStream {
     let write_updated_descriptor_statements: TokenStream = input
         .descriptors
         .iter()
-        .filter_map(|input| {
+        .map(|input| {
             let span = input.field.ty.span();
-            let descriptors = match input.desc_ty {
-                DescriptorType::Sampler(_) => Some(quote::quote_spanned! {
-                    span => <::sierra::SamplerDescriptor as ::sierra::Descriptor>::descriptors(descriptors)
-                }),
-                DescriptorType::Image(image::Image { kind: None | Some(image::Kind::Sampled(_)),..}) => Some(quote::quote_spanned! {
-                    span => <::sierra::SampledImageDescriptor as ::sierra::Descriptor>::descriptors(descriptors)
-                }),
-                DescriptorType::Image(image::Image { kind: Some(image::Kind::Storage(_)), .. }) => Some(quote::quote_spanned! {
-                    span => <::sierra::StorageImageDescriptor as ::sierra::Descriptor>::descriptors(descriptors)
-                }),
-                DescriptorType::AccelerationStructure(_) => Some(quote::quote_spanned! {
-                    span => <::sierra::AccelerationStructureDescriptor as ::sierra::Descriptor>::descriptors(descriptors)
-                }),
-                DescriptorType::Buffer(buffer::Buffer {
-                    kind: None | Some(buffer::Kind::Uniform(_)),
-                    texel: None,
-                    ..
-                }) => Some(quote::quote_spanned! {
-                    span => <::sierra::UniformBufferDescriptor as ::sierra::Descriptor>::descriptors(descriptors)
-                }),
-                DescriptorType::Buffer(buffer::Buffer {
-                    kind: Some(buffer::Kind::Storage(_)),
-                    texel: None,
-                    ..
-                }) => Some(quote::quote_spanned! {
-                    span=> <::sierra::StorageBufferDescriptor as ::sierra::Descriptor>::descriptors(descriptors)
-                }),
-                DescriptorType::Buffer(buffer::Buffer {
-                    kind: None | Some(buffer::Kind::Uniform(_)),
-                    texel: Some(_),
-                    ..
-                }) => Some(quote::quote_spanned! {
-                    span=> <::sierra::UniformTexelBufferDescriptor as ::sierra::Descriptor>::descriptors(descriptors)
-                }),
-                DescriptorType::Buffer(buffer::Buffer {
-                    kind: Some(buffer::Kind::Storage(_)),
-                    texel: Some(_),
-                    ..
-                }) => Some(quote::quote_spanned! {
-                    span=> <::sierra::StorageTexelBufferDescriptor as ::sierra::Descriptor>::descriptors(descriptors)
-                }),
-            }?;
-
+            let descriptor_kind = input.desc_ty.descriptor_kind();
+            let descriptors = quote::quote_spanned!(span => <#descriptor_kind as ::sierra::DescriptorKind>::descriptors(descriptors));
             let descriptor_field = quote::format_ident!("descriptor_{}", input.member);
             let write_descriptor = quote::format_ident!("write_{}_descriptor", input.member);
 
@@ -118,7 +76,7 @@ pub(super) fn generate(input: &Input) -> TokenStream {
             );
 
             binding += 1;
-            Some(stream)
+            stream
         })
         .collect();
 
@@ -276,7 +234,7 @@ pub(super) fn generate(input: &Input) -> TokenStream {
                 let start = self.cycle_next;
 
                 loop {
-                    match self.cycle[self.cycle_next].set.is_writable() {
+                    match self.cycle[self.cycle_next].set.is_unused() {
                         false => {
                             let next = (self.cycle_next + 1) % self.cycle.len();
                             if next == start {

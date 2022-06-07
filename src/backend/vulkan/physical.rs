@@ -224,7 +224,7 @@ pub struct PhysicalDevice {
 impl PhysicalDevice {
     pub(crate) unsafe fn new(physical: vk1_0::PhysicalDevice) -> Self {
         let (properties, features) = collect_properties_and_features(physical);
-        tracing::info!("{:#?}", properties);
+        info!("{:#?}", properties);
 
         PhysicalDevice {
             properties,
@@ -433,7 +433,7 @@ impl PhysicalDevice {
                 vk1_0::PhysicalDeviceType::CPU => Some(DeviceKind::Software),
                 vk1_0::PhysicalDeviceType::OTHER | vk1_0::PhysicalDeviceType::VIRTUAL_GPU => None,
                 _ => {
-                    tracing::error!(
+                    error!(
                         "Unexpected device type value: {:?}",
                         self.properties.v10.device_type
                     );
@@ -490,7 +490,7 @@ impl PhysicalDevice {
     ///
     /// Note. `QueuesQuery` may be implemented by user, this trait is not
     /// sealed.
-    #[tracing::instrument(skip(self, queues))]
+    #[cfg_attr(feature = "tracing", tracing::instrument(skip(self, queues)))]
     pub fn create_device<Q>(
         self,
         features: &[Feature],
@@ -505,7 +505,7 @@ impl PhysicalDevice {
 
         let families = query.as_ref();
 
-        tracing::trace!("Creating device");
+        trace!("Creating device");
 
         let mut device_create_info = vk1_0::DeviceCreateInfoBuilder::new();
 
@@ -1091,7 +1091,7 @@ impl PhysicalDevice {
             })
             .collect();
 
-        tracing::debug!("Device created");
+        debug!("Device created");
 
         Ok((device, Q::collect(collector, families)))
     }

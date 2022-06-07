@@ -21,6 +21,76 @@ use std::{
     num::TryFromIntError,
 };
 
+#[cfg(feature = "tracing")]
+#[macro_export]
+macro_rules! trace {
+    ($($tokens:tt)*) => {
+        tracing::trace!($($tokens)*)
+    };
+}
+
+#[cfg(feature = "tracing")]
+#[macro_export]
+macro_rules! debug {
+    ($($tokens:tt)*) => {
+        tracing::debug!($($tokens)*)
+    };
+}
+
+#[cfg(feature = "tracing")]
+#[macro_export]
+macro_rules! info {
+    ($($tokens:tt)*) => {
+        tracing::info!($($tokens)*)
+    };
+}
+
+#[cfg(feature = "tracing")]
+#[macro_export]
+macro_rules! warn {
+    ($($tokens:tt)*) => {
+        tracing::warn!($($tokens)*)
+    };
+}
+
+#[cfg(feature = "tracing")]
+#[macro_export]
+macro_rules! error {
+    ($($tokens:tt)*) => {
+        tracing::error!($($tokens)*)
+    };
+}
+
+#[cfg(not(feature = "tracing"))]
+#[macro_export]
+macro_rules! trace {
+    ($($e:expr),*) => {{ $(drop(&$e);)* }};
+}
+
+#[cfg(not(feature = "tracing"))]
+#[macro_export]
+macro_rules! debug {
+    ($($e:expr),*) => {{ $(drop(&$e);)* }};
+}
+
+#[cfg(not(feature = "tracing"))]
+#[macro_export]
+macro_rules! info {
+    ($($e:expr),*) => {{ $(drop(&$e);)* }};
+}
+
+#[cfg(not(feature = "tracing"))]
+#[macro_export]
+macro_rules! warn {
+    ($($e:expr),*) => {{ $(drop(&$e);)* }};
+}
+
+#[cfg(not(feature = "tracing"))]
+#[macro_export]
+macro_rules! error {
+    ($($e:expr),*) => {{ $(drop(&$e);)* }};
+}
+
 pub mod backend;
 
 mod accel;
@@ -74,12 +144,12 @@ pub use self::{
 };
 
 pub use sierra_proc::{
-    graphics_pipeline_desc, swizzle, Descriptors, Pass, PipelineInput, ShaderRepr,
+    format, graphics_pipeline_desc, swizzle, Descriptors, Pass, PipelineInput, ShaderRepr,
 };
 
 /// Re-exporting for code-gen.
 #[doc(hidden)]
-pub use {arrayvec, bytemuck, scoped_arena, smallvec, tracing};
+pub use {arrayvec, bytemuck, scoped_arena, smallvec};
 
 /// Image size is defined to `u32` which is standard for graphics API of today.
 pub type ImageSize = u32;
@@ -500,4 +570,9 @@ macro_rules! descriptor_set_layout {
             bindings: descriptor_set_layout_bindings!($($ty $(@$binding)? $(* $count)? for $($stages)+ $($(| $bflags)+)?)*),
         }
     }
+}
+
+mod sealed {
+    #[doc(hidden)]
+    pub trait Sealed {}
 }

@@ -1,7 +1,10 @@
 #[derive(sierra::Descriptors)]
 struct Descriptors {
-    #[sierra(buffer(uniform, texel), vertex)]
-    views: sierra::BufferView,
+    #[sierra(buffer, vertex)]
+    views: sierra::Buffer,
+
+    #[sierra(image(storage), vertex)]
+    image: sierra::Image,
 
     #[sierra(sampler, fragment)]
     sampler: sierra::Sampler,

@@ -99,7 +99,7 @@ impl Drop for SwapchainImage<'_> {
     fn drop(&mut self) {
         // Report usage error unless this happens due to unwinding.
         if !std::thread::panicking() {
-            tracing::error!("Swapchain image is dropped. Swapchain images MUST be presented")
+            error!("Swapchain image is dropped. Swapchain images MUST be presented")
         }
     }
 }
@@ -149,7 +149,7 @@ impl Swapchain {
         let surface_capabilities =
             surface_capabilities(instance, device.physical(), surface.handle())?;
 
-        tracing::info!("{:#?}", surface_capabilities);
+        info!("{:#?}", surface_capabilities);
 
         if surface_capabilities.supported_families.is_empty() {
             return Err(SurfaceError::NotSupported);
@@ -158,7 +158,7 @@ impl Swapchain {
         let free_semaphore = device.clone().create_semaphore()?;
 
         surface.mark_used()?;
-        tracing::debug!("Swapchain created");
+        debug!("Swapchain created");
         Ok(Swapchain {
             surface: surface.clone(),
             free_semaphore,
@@ -178,7 +178,7 @@ impl Swapchain {
 
     /// Update swapchain images for changed surface.
     /// Does nothing if not configured.
-    #[tracing::instrument]
+    #[cfg_attr(feature = "tracing", tracing::instrument)]
     #[inline]
     pub fn update(&mut self) -> Result<(), SurfaceError> {
         if let Some(inner) = &self.inner {
@@ -192,7 +192,7 @@ impl Swapchain {
         }
     }
 
-    #[tracing::instrument]
+    #[cfg_attr(feature = "tracing", tracing::instrument)]
     pub fn configure(
         &mut self,
         usage: ImageUsage,
@@ -206,7 +206,7 @@ impl Swapchain {
             // Too many swapchains accumulated.
             // Give resources a chance to be freed.
 
-            tracing::warn!("Too many retired swapchains. Wait device idle");
+            warn!("Too many retired swapchains. Wait device idle");
             device.wait_idle();
         }
 
@@ -219,7 +219,7 @@ impl Swapchain {
                 }
             }
 
-            tracing::debug!("Destroying retired swapchain. {} left", self.retired.len());
+            debug!("Destroying retired swapchain. {} left", self.retired.len());
             unsafe {
                 // This swapchain and its images are no longer in use.
                 device.destroy_swapchain(inner.index)
@@ -269,7 +269,7 @@ impl Swapchain {
             let raw = caps.supported_composite_alpha.to_erupt().bits();
 
             if raw == 0 {
-                tracing::warn!("Vulkan implementation must support at least one composite alpha mode, but this one reports none. Picking OPAQUE and hope for the best");
+                warn!("Vulkan implementation must support at least one composite alpha mode, but this one reports none. Picking OPAQUE and hope for the best");
                 vks::CompositeAlphaFlagsKHR::OPAQUE_KHR
             } else {
                 // Use lowest bit flag
@@ -385,7 +385,7 @@ impl Swapchain {
             optimal: true,
         });
 
-        tracing::debug!("Swapchain configured");
+        debug!("Swapchain configured");
         Ok(())
     }
 

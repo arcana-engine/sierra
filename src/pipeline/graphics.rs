@@ -9,7 +9,6 @@ use {
         shader::{FragmentShader, VertexShader},
         Device, Extent2d, Extent3d, Offset2d, OutOfMemory,
     },
-    ordered_float::OrderedFloat,
 };
 
 pub use {
@@ -55,8 +54,8 @@ pub struct Bounds {
 
 impl PartialEq for Bounds {
     fn eq(&self, other: &Self) -> bool {
-        OrderedFloat(self.offset) == OrderedFloat(other.offset)
-            && OrderedFloat(self.size) == OrderedFloat(other.size)
+        f32::to_bits(self.offset) == f32::to_bits(other.offset)
+            && f32::to_bits(self.size) == f32::to_bits(other.size)
     }
 }
 
@@ -67,8 +66,8 @@ impl Hash for Bounds {
     where
         H: Hasher,
     {
-        Hash::hash(&OrderedFloat(self.offset), hasher);
-        Hash::hash(&OrderedFloat(self.size), hasher);
+        Hash::hash(&f32::to_bits(self.offset), hasher);
+        Hash::hash(&f32::to_bits(self.size), hasher);
     }
 }
 
@@ -602,7 +601,7 @@ impl PartialEq for ColorBlend {
                     && match (l_constants, r_constants) {
                         (State::Dynamic, State::Dynamic) => true,
                         (State::Static { value: l_value }, State::Static { value: r_value }) => {
-                            (*l_value).map(OrderedFloat) == (*r_value).map(OrderedFloat)
+                            (*l_value).map(f32::to_bits) == (*r_value).map(f32::to_bits)
                         }
                         _ => false,
                     }
@@ -621,7 +620,7 @@ impl PartialEq for ColorBlend {
                     && match (l_constants, r_constants) {
                         (State::Dynamic, State::Dynamic) => true,
                         (State::Static { value: l_value }, State::Static { value: r_value }) => {
-                            (*l_value).map(OrderedFloat) == (*r_value).map(OrderedFloat)
+                            (*l_value).map(f32::to_bits) == (*r_value).map(f32::to_bits)
                         }
                         _ => false,
                     }
@@ -653,7 +652,7 @@ impl Hash for ColorBlend {
                 }
                 Hash::hash(write_mask, hasher);
                 if let State::Static { value } = constants {
-                    Hash::hash(&(*value).map(OrderedFloat), hasher);
+                    Hash::hash(&(*value).map(f32::to_bits), hasher);
                 }
             }
             ColorBlend::IndependentBlending {
@@ -668,7 +667,7 @@ impl Hash for ColorBlend {
                     Hash::hash(mask, hasher);
                 }
                 if let State::Static { value } = constants {
-                    Hash::hash(&(*value).map(OrderedFloat), hasher);
+                    Hash::hash(&(*value).map(f32::to_bits), hasher);
                 }
             }
         }

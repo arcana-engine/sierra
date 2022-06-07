@@ -38,7 +38,7 @@ impl Epochs {
 
         #[cfg(feature = "leak-detection")]
         if queue.epochs.len() > 32 {
-            tracing::warn!(
+            warn!(
                 "Too many active epochs ({}) accumulated",
                 queue.epochs.len()
             );
@@ -65,11 +65,11 @@ impl Epochs {
         }
 
         if queue.cache.len() > 64 {
-            tracing::warn!("Too large epochs cache accumulated");
+            warn!("Too large epochs cache accumulated");
         }
 
         if queue.cbufs.len() > 1024 {
-            tracing::warn!("Too large cbuf cache accumulated");
+            warn!("Too large cbuf cache accumulated");
         }
     }
 

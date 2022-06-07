@@ -5,16 +5,18 @@ use std::{
     fmt::{self, Debug},
     mem::{size_of_val, MaybeUninit},
     ops::Range,
-    str::from_utf8,
     sync::{Arc, Weak},
 };
 
 use bytemuck::Pod;
+
+#[cfg(any(feature = "glsl", feature = "wgsl"))]
 use codespan_reporting::{
     diagnostic::{Diagnostic, Label},
     files::SimpleFile,
     term::termcolor::{ColorChoice, StandardStream},
 };
+
 use erupt::{
     extensions::{
         khr_acceleration_structure as vkacc, khr_deferred_host_operations as vkdho,
@@ -26,6 +28,8 @@ use gpu_alloc::{GpuAllocator, MemoryBlock};
 use gpu_alloc_erupt::EruptMemoryDevice;
 use gpu_descriptor::{DescriptorAllocator, DescriptorSetLayoutCreateFlags, DescriptorTotalCount};
 use gpu_descriptor_erupt::EruptDescriptorDevice;
+
+#[cfg(any(feature = "glsl", feature = "wgsl"))]
 use naga::WithSpan;
 
 use parking_lot::Mutex;
@@ -322,13 +326,13 @@ impl Device {
     }
 
     /// Creates buffer with uninitialized content.
-    #[tracing::instrument]
+    #[cfg_attr(feature = "tracing", tracing::instrument)]
     pub fn create_buffer(&self, info: BufferInfo) -> Result<Buffer, OutOfMemory> {
         self.create_buffer_impl(info, None).map(Into::into)
     }
 
     /// Creates buffer with uninitialized content.
-    #[tracing::instrument]
+    #[cfg_attr(feature = "tracing", tracing::instrument)]
     pub fn create_mappable_buffer(
         &self,
         info: BufferInfo,
@@ -379,7 +383,7 @@ impl Device {
         .map_err(|err| {
             unsafe { self.inner.logical.destroy_buffer(handle, None) }
 
-            tracing::error!("{:#}", err);
+            error!("{:#}", err);
             OutOfMemory
         })?;
 
@@ -415,7 +419,7 @@ impl Device {
 
         let buffer_index = self.inner.buffers.lock().insert(handle);
 
-        tracing::debug!("Buffer created {:p}", handle);
+        debug!("Buffer created {:p}", handle);
         Ok(MappableBuffer::new(
             info,
             self.downgrade(),
@@ -434,7 +438,7 @@ impl Device {
     ///
     /// Function will panic if specified buffer size does not equal data size.
     /// i.e. if `info.size != std::mem::size_of(data)`.
-    #[tracing::instrument(skip(data))]
+    #[cfg_attr(feature = "tracing", tracing::instrument(skip(data)))]
     pub fn create_buffer_static<T: 'static>(
         &self,
         info: BufferInfo,
@@ -457,31 +461,12 @@ impl Device {
 
         let mut buffer = self.create_mappable_buffer(info, MemoryUsage::UPLOAD)?;
 
-        unsafe {
-            match buffer.memory_block().map(
-                EruptMemoryDevice::wrap(&self.inner.logical),
-                0,
-                size_of_val(data),
-            ) {
-                Ok(ptr) => {
-                    std::ptr::copy_nonoverlapping(
-                        data.as_ptr() as *const u8,
-                        ptr.as_ptr(),
-                        size_of_val(data),
-                    );
-
-                    buffer
-                        .memory_block()
-                        .unmap(EruptMemoryDevice::wrap(&self.inner.logical));
-
-                    Ok(buffer.into())
-                }
-                Err(gpu_alloc::MapError::OutOfDeviceMemory) => Err(OutOfMemory),
-                Err(gpu_alloc::MapError::OutOfHostMemory) => out_of_host_memory(),
-                Err(gpu_alloc::MapError::NonHostVisible)
-                | Err(gpu_alloc::MapError::AlreadyMapped) => unreachable!(),
-                Err(gpu_alloc::MapError::MapFailed) => panic!("Map failed"),
-            }
+        match self.upload_to_memory(&mut buffer, 0, data) {
+            Ok(()) => Ok(buffer.share()),
+            Err(MapError::OutOfMemory { source }) => Err(source),
+            Err(MapError::NonHostVisible) => unreachable!(),
+            Err(MapError::AlreadyMapped) => unreachable!(),
+            Err(MapError::MapFailed) => panic!("Map failed"),
         }
     }
 
@@ -499,7 +484,7 @@ impl Device {
         self.inner.logical.destroy_buffer(handle, None);
     }
 
-    #[tracing::instrument]
+    #[cfg_attr(feature = "tracing", tracing::instrument)]
     pub fn create_buffer_view(&self, info: BufferViewInfo) -> Result<BufferView, OutOfMemory> {
         assert_owner!(info.buffer, self);
         assert!(info
@@ -525,11 +510,11 @@ impl Device {
 
         let index = self.inner.buffer_views.lock().insert(view);
 
-        tracing::debug!("BufferView created {:p}", view);
+        debug!("BufferView created {:p}", view);
         Ok(BufferView::new(info, self.downgrade(), view, index))
     }
 
-    #[tracing::instrument]
+    #[cfg_attr(feature = "tracing", tracing::instrument)]
     pub(super) unsafe fn destroy_buffer_view(&self, index: usize) {
         let handle = self.inner.buffer_views.lock().remove(index);
         self.inner.logical.destroy_buffer_view(handle, None);
@@ -537,7 +522,7 @@ impl Device {
 
     /// Returns handle to newly created [`Fence`].
     /// Fences are create in un-signaled state.
-    #[tracing::instrument]
+    #[cfg_attr(feature = "tracing", tracing::instrument)]
     pub fn create_fence(&self) -> Result<Fence, OutOfMemory> {
         let fence = unsafe {
             self.inner
@@ -549,7 +534,7 @@ impl Device {
 
         let index = self.inner.fences.lock().insert(fence);
 
-        tracing::debug!("Fence created {:p}", fence);
+        debug!("Fence created {:p}", fence);
         Ok(Fence::new(self.downgrade(), fence, index))
     }
 
@@ -559,7 +544,7 @@ impl Device {
     }
 
     /// Returns handle to newly created [`Framebuffer`].
-    #[tracing::instrument]
+    #[cfg_attr(feature = "tracing", tracing::instrument)]
     pub fn create_framebuffer(&self, info: FramebufferInfo) -> Result<Framebuffer, OutOfMemory> {
         for view in &info.attachments {
             assert_owner!(view, self);
@@ -605,7 +590,7 @@ impl Device {
 
         let index = self.inner.framebuffers.lock().insert(framebuffer);
 
-        tracing::debug!("Framebuffer created {:p}", framebuffer);
+        debug!("Framebuffer created {:p}", framebuffer);
         Ok(Framebuffer::new(info, self.downgrade(), framebuffer, index))
     }
 
@@ -615,7 +600,7 @@ impl Device {
     }
 
     /// Creates graphics pipeline.
-    #[tracing::instrument]
+    #[cfg_attr(feature = "tracing", tracing::instrument)]
     pub fn create_graphics_pipeline(
         &self,
         info: GraphicsPipelineInfo,
@@ -942,7 +927,7 @@ impl Device {
 
         drop(shader_stages);
 
-        tracing::debug!("GraphicsPipeline created {:p}", pipeline);
+        debug!("GraphicsPipeline created {:p}", pipeline);
         Ok(GraphicsPipeline::new(
             info,
             self.downgrade(),
@@ -952,7 +937,7 @@ impl Device {
     }
 
     /// Creates compute pipeline.
-    #[tracing::instrument]
+    #[cfg_attr(feature = "tracing", tracing::instrument)]
     pub fn create_compute_pipeline(
         &self,
         info: ComputePipelineInfo,
@@ -985,7 +970,7 @@ impl Device {
         let pipeline = pipelines[0];
         let index = self.inner.pipelines.lock().insert(pipeline);
 
-        tracing::debug!("ComputePipeline created {:p}", pipeline);
+        debug!("ComputePipeline created {:p}", pipeline);
         Ok(ComputePipeline::new(
             info,
             self.downgrade(),
@@ -1000,7 +985,7 @@ impl Device {
     }
 
     /// Creates image with uninitialized content.
-    #[tracing::instrument]
+    #[cfg_attr(feature = "tracing", tracing::instrument)]
     pub fn create_image(&self, info: ImageInfo) -> Result<Image, OutOfMemory> {
         let image = unsafe {
             self.inner.logical.create_image(
@@ -1041,7 +1026,7 @@ impl Device {
                 .map_err(|err| {
                     self.inner.logical.destroy_image(image, None);
 
-                    tracing::error!("{:#}", err);
+                    error!("{:#}", err);
                     OutOfMemory
                 })
         }?;
@@ -1057,7 +1042,7 @@ impl Device {
             Ok(()) => {
                 let index = self.inner.images.lock().insert(image);
 
-                tracing::debug!("Image created {:p}", image);
+                debug!("Image created {:p}", image);
                 Ok(Image::new(info, self.downgrade(), image, block, index))
             }
             Err(err) => {
@@ -1093,7 +1078,7 @@ impl Device {
     // /// # Panics
     // ///
     // /// Function will panic if creating image size does not equal data size.
-    // #[tracing::instrument(skip(data))]
+    // #[cfg_attr(feature = "tracing", tracing::instrument(skip(data)))]
     // pub fn create_image_static<T>(
     //     &self,
     //     info: ImageInfo,
@@ -1152,7 +1137,7 @@ impl Device {
     //             )
     //             .map_err(|err| {
     //                 self.inner.logical.destroy_image(image, None);
-    //                 tracing::error!("{:#}", err);
+    //                 error!("{:#}", err);
     //                 OutOfMemory
     //             })
     //     }?;
@@ -1216,7 +1201,7 @@ impl Device {
     // }
 
     /// Creates view to an image.
-    #[tracing::instrument]
+    #[cfg_attr(feature = "tracing", tracing::instrument)]
     pub fn create_image_view(&self, info: ImageViewInfo) -> Result<ImageView, OutOfMemory> {
         assert_owner!(info.image, self);
 
@@ -1246,7 +1231,7 @@ impl Device {
 
         let index = self.inner.image_views.lock().insert(view);
 
-        tracing::debug!("ImageView created {:p}", view);
+        debug!("ImageView created {:p}", view);
         Ok(ImageView::new(info, self.downgrade(), view, index))
     }
 
@@ -1256,7 +1241,7 @@ impl Device {
     }
 
     /// Creates pipeline layout.
-    #[tracing::instrument]
+    #[cfg_attr(feature = "tracing", tracing::instrument)]
     pub fn create_pipeline_layout(
         &self,
         info: PipelineLayoutInfo,
@@ -1295,7 +1280,7 @@ impl Device {
 
         let index = self.inner.pipeline_layouts.lock().insert(pipeline_layout);
 
-        tracing::debug!("Pipeline layout created: {:p}", pipeline_layout);
+        debug!("Pipeline layout created: {:p}", pipeline_layout);
         Ok(PipelineLayout::new(
             info,
             self.downgrade(),
@@ -1310,7 +1295,7 @@ impl Device {
     }
 
     /// Creates render pass.
-    #[tracing::instrument]
+    #[cfg_attr(feature = "tracing", tracing::instrument)]
     pub fn create_render_pass(
         &self,
         info: RenderPassInfo,
@@ -1430,7 +1415,7 @@ impl Device {
 
         let index = self.inner.render_passes.lock().insert(render_pass);
 
-        tracing::debug!("Render pass created: {:p}", render_pass);
+        debug!("Render pass created: {:p}", render_pass);
         Ok(RenderPass::new(info, self.downgrade(), render_pass, index))
     }
 
@@ -1453,11 +1438,11 @@ impl Device {
     }
 
     /// Creates semaphore. Semaphores are created in unsignaled state.
-    #[tracing::instrument]
+    #[cfg_attr(feature = "tracing", tracing::instrument)]
     pub fn create_semaphore(&self) -> Result<Semaphore, OutOfMemory> {
         let (handle, index) = self.create_semaphore_raw().map_err(oom_error_from_erupt)?;
 
-        tracing::debug!("Semaphore created: {:p}", handle);
+        debug!("Semaphore created: {:p}", handle);
         Ok(Semaphore::new(self.downgrade(), handle, index))
     }
 
@@ -1467,15 +1452,18 @@ impl Device {
     }
 
     /// Creates new shader module from shader's code.
-    #[tracing::instrument]
+    #[cfg_attr(feature = "tracing", tracing::instrument)]
     pub fn create_shader_module(
         &self,
         info: ShaderModuleInfo,
     ) -> Result<ShaderModule, CreateShaderModuleError> {
-        let spv;
+        #[allow(unused)]
+        let spv: Vec<u32>;
 
         let code = match info.language {
             ShaderLanguage::SPIRV => &*info.code,
+
+            #[cfg(feature = "glsl")]
             ShaderLanguage::GLSL { stage } => {
                 let stage = match stage {
                     ShaderStage::Vertex => naga::ShaderStage::Vertex,
@@ -1488,7 +1476,7 @@ impl Device {
                     }
                 };
 
-                let code = from_utf8(&info.code)?;
+                let code = std::str::from_utf8(&info.code)?;
 
                 let module = naga::front::glsl::Parser::default()
                     .parse(
@@ -1522,8 +1510,9 @@ impl Device {
 
                 bytemuck::cast_slice(&spv)
             }
+            #[cfg(feature = "wgsl")]
             ShaderLanguage::WGSL => {
-                let code = from_utf8(&info.code)?;
+                let code = std::str::from_utf8(&info.code)?;
                 let module = naga::front::wgsl::parse_str(code).map_err(|err| {
                     err.emit_to_stderr("source.wgsl");
                     CreateShaderModuleError::NagaWgslParseError {
@@ -1549,6 +1538,7 @@ impl Device {
 
                 bytemuck::cast_slice(&spv)
             }
+            #[allow(unreachable_patterns)]
             _ => {
                 return Err(CreateShaderModuleError::UnsupportedShaderLanguage {
                     language: info.language,
@@ -1626,7 +1616,7 @@ impl Device {
 
         let index = self.inner.shaders.lock().insert(module);
 
-        tracing::debug!("Shader module created: {:p}", module);
+        debug!("Shader module created: {:p}", module);
         Ok(ShaderModule::new(info, self.downgrade(), module, index))
     }
 
@@ -1637,7 +1627,7 @@ impl Device {
 
     /// Creates swapchain for specified surface.
     /// Only one swapchain may be associated with one surface.
-    #[tracing::instrument]
+    #[cfg_attr(feature = "tracing", tracing::instrument)]
     pub fn create_swapchain(&self, surface: &mut Surface) -> Result<Swapchain, SurfaceError> {
         Swapchain::new(surface, self)
     }
@@ -1654,7 +1644,7 @@ impl Device {
     /// Resets fences.
     /// All specified fences must be in signalled state.
     /// Fences are moved into unsignalled state.
-    #[tracing::instrument]
+    #[cfg_attr(feature = "tracing", tracing::instrument)]
     pub fn reset_fences(&self, fences: &mut [&mut Fence]) {
         for fence in fences.iter_mut() {
             assert_owner!(fence, self);
@@ -1677,7 +1667,7 @@ impl Device {
     }
 
     /// Checks if fence is in signalled state.
-    #[tracing::instrument]
+    #[cfg_attr(feature = "tracing", tracing::instrument)]
     pub fn is_fence_signalled(&self, fence: &mut Fence) -> bool {
         assert_owner!(fence, *self);
 
@@ -1700,7 +1690,7 @@ impl Device {
     /// May return immediately if all fences are already signaled (or at least
     /// one is signaled if `all == false`). Fences are signaled by `Queue`s.
     /// See `Queue::submit`.
-    #[tracing::instrument]
+    #[cfg_attr(feature = "tracing", tracing::instrument)]
     pub fn wait_fences(&self, fences: &mut [&mut Fence], all: bool) {
         assert!(!fences.is_empty());
 
@@ -1751,7 +1741,7 @@ impl Device {
     /// operations to complete. This is equivalent to calling
     /// `Queue::wait_idle` for all queues. Typically used only before device
     /// destruction.
-    #[tracing::instrument]
+    #[cfg_attr(feature = "tracing", tracing::instrument)]
     pub fn wait_idle(&self) {
         let epochs = self.inner.epochs.next_epoch_all_queues();
         let result = unsafe { self.inner.logical.device_wait_idle() }.result();
@@ -1768,7 +1758,7 @@ impl Device {
     }
 
     /// Returns memory size requirements for accelelration structure build operations.
-    #[tracing::instrument]
+    #[cfg_attr(feature = "tracing", tracing::instrument)]
     pub fn get_acceleration_structure_build_sizes(
         &self,
         level: AccelerationStructureLevel,
@@ -1890,7 +1880,7 @@ impl Device {
     /// # Panics
     ///
     /// This method may panic if `Feature::RayTracing` wasn't enabled.
-    #[tracing::instrument]
+    #[cfg_attr(feature = "tracing", tracing::instrument)]
     pub fn create_acceleration_structure(
         &self,
         info: AccelerationStructureInfo,
@@ -1933,7 +1923,7 @@ impl Device {
                 )
         }));
 
-        tracing::debug!("AccelerationStructure created {:p}", handle);
+        debug!("AccelerationStructure created {:p}", handle);
         Ok(AccelerationStructure::new(
             info,
             self.downgrade(),
@@ -1951,7 +1941,7 @@ impl Device {
     }
 
     /// Returns buffers device address.
-    #[tracing::instrument]
+    #[cfg_attr(feature = "tracing", tracing::instrument)]
     pub fn get_buffer_device_address(&self, buffer: &Buffer) -> Option<DeviceAddress> {
         assert_owner!(buffer, self);
 
@@ -1967,7 +1957,7 @@ impl Device {
     }
 
     /// Returns device address of acceleration strucutre.
-    #[tracing::instrument]
+    #[cfg_attr(feature = "tracing", tracing::instrument)]
     pub fn get_acceleration_structure_device_address(
         &self,
         acceleration_structure: &AccelerationStructure,
@@ -1977,7 +1967,7 @@ impl Device {
     }
 
     /// Creates ray-tracing pipeline.
-    #[tracing::instrument]
+    #[cfg_attr(feature = "tracing", tracing::instrument)]
     pub fn create_ray_tracing_pipeline(
         &self,
         info: RayTracingPipelineInfo,
@@ -2142,7 +2132,7 @@ impl Device {
 
         let index = self.inner.pipelines.lock().insert(handle);
 
-        tracing::debug!("RayTracingPipeline created {:p}", handle);
+        debug!("RayTracingPipeline created {:p}", handle);
         Ok(RayTracingPipeline::new(
             info,
             self.downgrade(),
@@ -2152,7 +2142,7 @@ impl Device {
         ))
     }
 
-    #[tracing::instrument]
+    #[cfg_attr(feature = "tracing", tracing::instrument)]
     pub fn create_descriptor_set_layout(
         &self,
         info: DescriptorSetLayoutInfo,
@@ -2241,7 +2231,7 @@ impl Device {
 
         let total_count = descriptor_count_from_bindings(&info.bindings);
 
-        tracing::debug!("DescriptorSetLayout created {:p}", handle);
+        debug!("DescriptorSetLayout created {:p}", handle);
         Ok(DescriptorSetLayout::new(
             info,
             self.downgrade(),
@@ -2258,7 +2248,7 @@ impl Device {
             .destroy_descriptor_set_layout(handle, None);
     }
 
-    #[tracing::instrument]
+    #[cfg_attr(feature = "tracing", tracing::instrument)]
     pub fn create_descriptor_set(
         &self,
         info: DescriptorSetInfo,
@@ -2304,7 +2294,7 @@ impl Device {
 
         let set = sets.remove(0);
 
-        tracing::debug!("DescriptorSet created {:?}", set);
+        debug!("DescriptorSet created {:?}", set);
         Ok(WritableDescriptorSet::new(info, self.downgrade(), set))
     }
 
@@ -2318,7 +2308,7 @@ impl Device {
             .free(EruptDescriptorDevice::wrap(&self.inner.logical), Some(set))
     }
 
-    #[tracing::instrument]
+    #[cfg_attr(feature = "tracing", tracing::instrument)]
     pub fn update_descriptor_sets<'a>(&self, updates: &mut [UpdateDescriptorSet<'a>]) {
         let mut writes_count = 0;
 
@@ -2631,7 +2621,7 @@ impl Device {
         }
     }
 
-    #[tracing::instrument]
+    #[cfg_attr(feature = "tracing", tracing::instrument)]
     pub fn create_sampler(&self, info: SamplerInfo) -> Result<Sampler, OutOfMemory> {
         match self.inner.samplers_cache.lock().entry(info) {
             Entry::Occupied(entry) => Ok(entry.get().clone()),
@@ -2665,7 +2655,7 @@ impl Device {
 
                 let index = self.inner.samplers.lock().insert(handle);
 
-                tracing::debug!("Sampler created {:p}", handle);
+                debug!("Sampler created {:p}", handle);
                 let sampler = Sampler::new(info, self.downgrade(), handle, index);
                 Ok(entry.insert(sampler).clone())
             }
@@ -2677,7 +2667,7 @@ impl Device {
         self.inner.logical.destroy_sampler(handle, None);
     }
 
-    #[tracing::instrument]
+    #[cfg_attr(feature = "tracing", tracing::instrument)]
     pub fn create_shader_binding_table(
         &self,
         pipeline: &RayTracingPipeline,
@@ -2752,7 +2742,7 @@ impl Device {
             &bytes,
         )?;
 
-        tracing::debug!("ShaderBindingTable created");
+        debug!("ShaderBindingTable created");
         Ok(ShaderBindingTable {
             raygen: raygen_handlers.map(|range| StridedBufferRange {
                 range: BufferRange {
@@ -2792,7 +2782,7 @@ impl Device {
         })
     }
 
-    #[tracing::instrument]
+    #[cfg_attr(feature = "tracing", tracing::instrument)]
     pub fn map_memory(
         &self,
         buffer: &mut MappableBuffer,
@@ -2820,7 +2810,31 @@ impl Device {
         }
     }
 
-    #[tracing::instrument(skip(data))]
+    pub fn upload_to_memory<T>(
+        &self,
+        buffer: &mut MappableBuffer,
+        offset: u64,
+        data: &[T],
+    ) -> Result<(), MapError>
+    where
+        T: Pod,
+    {
+        let slice = self.map_memory(buffer, offset, size_of_val(data))?;
+
+        unsafe {
+            std::ptr::copy_nonoverlapping(
+                data.as_ptr() as *const u8,
+                slice.as_mut_ptr() as *mut u8,
+                size_of_val(data),
+            );
+        }
+
+        self.unmap_memory(buffer);
+
+        Ok(())
+    }
+
+    #[cfg_attr(feature = "tracing", tracing::instrument(skip(data)))]
     pub fn write_buffer<T>(
         &self,
         buffer: &mut MappableBuffer,
@@ -2956,6 +2970,7 @@ pub(super) fn descriptor_count_from_bindings(
     result
 }
 
+#[cfg(feature = "glsl")]
 fn emit_glsl_parser_error(errors: &[naga::front::glsl::Error], filename: &str, source: &str) {
     let files = SimpleFile::new(filename, source);
     let config = codespan_reporting::term::Config::default();
@@ -2972,11 +2987,12 @@ fn emit_glsl_parser_error(errors: &[naga::front::glsl::Error], filename: &str, s
 
         if let Err(err) = codespan_reporting::term::emit(&mut writer, &config, &files, &diagnostic)
         {
-            tracing::error!("Failed to print annotated error. {:#}", err);
+            error!("Failed to print annotated error. {:#}", err);
         }
     }
 }
 
+#[cfg(any(feature = "glsl", feature = "wgsl"))]
 fn emit_annotated_error<E: std::error::Error>(ann_err: &WithSpan<E>, filename: &str, source: &str) {
     let files = SimpleFile::new(filename, source);
     let config = codespan_reporting::term::Config::default();
@@ -2994,6 +3010,6 @@ fn emit_annotated_error<E: std::error::Error>(ann_err: &WithSpan<E>, filename: &
     let mut writer = writer.lock();
 
     if let Err(err) = codespan_reporting::term::emit(&mut writer, &config, &files, &diagnostic) {
-        tracing::error!("Failed to print annotated error. {:#}", err);
+        error!("Failed to print annotated error. {:#}", err);
     }
 }

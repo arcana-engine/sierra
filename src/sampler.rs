@@ -1,7 +1,6 @@
 use std::hash::{Hash, Hasher};
 
 pub use crate::backend::Sampler;
-use ordered_float::OrderedFloat;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
@@ -130,11 +129,11 @@ impl PartialEq for SamplerInfo {
             && self.address_mode_u == other.address_mode_u
             && self.address_mode_v == other.address_mode_v
             && self.address_mode_w == other.address_mode_w
-            && OrderedFloat(self.mip_lod_bias) == OrderedFloat(other.mip_lod_bias)
-            && self.max_anisotropy.map(OrderedFloat) == other.max_anisotropy.map(OrderedFloat)
+            && f32::to_bits(self.mip_lod_bias) == f32::to_bits(other.mip_lod_bias)
+            && self.max_anisotropy.map(f32::to_bits) == other.max_anisotropy.map(f32::to_bits)
             && self.compare_op == other.compare_op
-            && OrderedFloat(self.min_lod) == OrderedFloat(other.min_lod)
-            && OrderedFloat(self.max_lod) == OrderedFloat(other.max_lod)
+            && f32::to_bits(self.min_lod) == f32::to_bits(other.min_lod)
+            && f32::to_bits(self.max_lod) == f32::to_bits(other.max_lod)
             && self.border_color == other.border_color
             && self.unnormalized_coordinates == other.unnormalized_coordinates
     }
@@ -153,11 +152,11 @@ impl Hash for SamplerInfo {
         Hash::hash(&self.address_mode_u, hasher);
         Hash::hash(&self.address_mode_v, hasher);
         Hash::hash(&self.address_mode_w, hasher);
-        Hash::hash(&OrderedFloat(self.mip_lod_bias), hasher);
-        Hash::hash(&self.max_anisotropy.map(OrderedFloat), hasher);
+        Hash::hash(&f32::to_bits(self.mip_lod_bias), hasher);
+        Hash::hash(&self.max_anisotropy.map(f32::to_bits), hasher);
         Hash::hash(&self.compare_op, hasher);
-        Hash::hash(&OrderedFloat(self.min_lod), hasher);
-        Hash::hash(&OrderedFloat(self.max_lod), hasher);
+        Hash::hash(&f32::to_bits(self.min_lod), hasher);
+        Hash::hash(&f32::to_bits(self.max_lod), hasher);
         Hash::hash(&self.border_color, hasher);
         Hash::hash(&self.unnormalized_coordinates, hasher);
     }

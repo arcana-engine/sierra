@@ -113,9 +113,9 @@ impl Graphics {
         GLOBAL_GRAPHICS.get_unchecked()
     }
 
-    #[tracing::instrument]
+    #[cfg_attr(feature = "tracing", tracing::instrument)]
     fn new() -> Result<Self, InitError> {
-        tracing::trace!("Init erupt graphisc implementation");
+        trace!("Init erupt graphisc implementation");
 
         let entry = EntryLoader::new()?;
 
@@ -193,7 +193,7 @@ impl Graphics {
                 .iter()
                 .any(|p| unsafe { CStr::from_ptr(&p.extension_name[0]) } == name)
             {
-                tracing::trace!("Pick extension {:?}", name);
+                trace!("Pick extension {:?}", name);
                 enable_exts.push(name.as_ptr());
                 true
             } else {
@@ -283,7 +283,7 @@ impl Graphics {
             .result()?;
         }
 
-        tracing::trace!("Instance created");
+        trace!("Instance created");
 
         let graphics = Graphics {
             instance,
@@ -298,9 +298,9 @@ impl Graphics {
         "Vulkan"
     }
 
-    #[tracing::instrument]
+    #[cfg_attr(feature = "tracing", tracing::instrument)]
     pub fn devices(&self) -> Result<Vec<PhysicalDevice>, EnumerateDeviceError> {
-        tracing::trace!("Enumerating physical devices");
+        trace!("Enumerating physical devices");
 
         let devices = unsafe {
             // Using valid instance.
@@ -315,7 +315,7 @@ impl Graphics {
             _ => unexpected_result(err),
         })?;
 
-        tracing::trace!("Physical devices {:?}", devices);
+        trace!("Physical devices {:?}", devices);
 
         Ok(devices
             .into_iter()
@@ -323,7 +323,7 @@ impl Graphics {
             .collect())
     }
 
-    #[tracing::instrument(skip(window), fields(?window = window.raw_window_handle()))]
+    #[cfg_attr(feature = "tracing", tracing::instrument(skip(window), fields(?window = window.raw_window_handle())))]
     pub fn create_surface(
         &self,
         window: &impl HasRawWindowHandle,
@@ -608,6 +608,7 @@ impl fmt::Display for RequiredExtensionIsNotAvailable {
 
 impl std::error::Error for RequiredExtensionIsNotAvailable {}
 
+#[allow(unused)]
 unsafe extern "system" fn debug_report_callback(
     flags: DebugReportFlagsEXT,
     object_type: DebugReportObjectTypeEXT,
@@ -623,18 +624,18 @@ unsafe extern "system" fn debug_report_callback(
     let message = CStr::from_ptr(p_message);
 
     if flags.contains(DebugReportFlagsEXT::ERROR_EXT) {
-        tracing::error!("{:?}: {:?} | {:?}", layer_prefix, object_type, message);
+        error!("{:?}: {:?} | {:?}", layer_prefix, object_type, message);
         // panic!("{:?}: {:?} | {:?}", layer_prefix, object_type, message);
     } else if flags.contains(DebugReportFlagsEXT::PERFORMANCE_WARNING_EXT) {
-        tracing::warn!("{:?}: {:?} | {:?}", layer_prefix, object_type, message);
+        warn!("{:?}: {:?} | {:?}", layer_prefix, object_type, message);
     } else if flags.contains(DebugReportFlagsEXT::WARNING_EXT) {
-        tracing::warn!("{:?}: {:?} | {:?}", layer_prefix, object_type, message);
+        warn!("{:?}: {:?} | {:?}", layer_prefix, object_type, message);
     } else if flags.contains(DebugReportFlagsEXT::INFORMATION_EXT) {
-        tracing::info!("{:?}: {:?} | {:?}", layer_prefix, object_type, message);
+        info!("{:?}: {:?} | {:?}", layer_prefix, object_type, message);
     } else if flags.contains(DebugReportFlagsEXT::DEBUG_EXT) {
-        tracing::debug!("{:?}: {:?} | {:?}", layer_prefix, object_type, message);
+        debug!("{:?}: {:?} | {:?}", layer_prefix, object_type, message);
     } else {
-        tracing::trace!("{:?}: {:?} | {:?}", layer_prefix, object_type, message);
+        trace!("{:?}: {:?} | {:?}", layer_prefix, object_type, message);
     }
 
     0

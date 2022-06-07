@@ -87,12 +87,15 @@ impl From<ShaderStage> for ShaderStageFlags {
 #[non_exhaustive]
 pub enum ShaderLanguage {
     /// OpengGL Shading Language.
+    #[cfg(feature = "glsl")]
     GLSL { stage: ShaderStage },
 
     /// High Level Shading Language.
+    #[cfg(feature = "hlsl")]
     HLSL,
 
     /// WebGPU Shading Language.
+    #[cfg(feature = "wgsl")]
     WGSL,
 
     /// Standard Portable Intermediate Representation - V.
@@ -102,8 +105,11 @@ pub enum ShaderLanguage {
 impl Display for ShaderLanguage {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            #[cfg(feature = "glsl")]
             Self::GLSL { stage } => write!(fmt, "GLSL ({})", stage),
+            #[cfg(feature = "hlsl")]
             Self::HLSL => fmt.write_str("HLSL"),
+            #[cfg(feature = "wgsl")]
             Self::WGSL => fmt.write_str("WGSL"),
             Self::SPIRV => fmt.write_str("SPIRV"),
         }
@@ -141,6 +147,7 @@ impl Debug for ShaderModuleInfo {
 
 impl ShaderModuleInfo {
     /// Creates GLSL shader module info.
+    #[cfg(feature = "glsl")]
     pub fn glsl(bytes: impl Into<Box<[u8]>>, stage: ShaderStage) -> Self {
         ShaderModuleInfo {
             code: bytes.into(),
@@ -149,6 +156,7 @@ impl ShaderModuleInfo {
     }
 
     /// Creates WGSL shader module info.
+    #[cfg(feature = "wgsl")]
     pub fn wgsl(bytes: impl Into<Box<[u8]>>) -> Self {
         ShaderModuleInfo {
             code: bytes.into(),
@@ -157,6 +165,7 @@ impl ShaderModuleInfo {
     }
 
     /// Creates HLSL shader module info.
+    #[cfg(feature = "hlsl")]
     pub fn hlsl(bytes: impl Into<Box<[u8]>>) -> Self {
         ShaderModuleInfo {
             code: bytes.into(),
@@ -203,6 +212,7 @@ impl From<Spirv> for ShaderModuleInfo {
 }
 
 /// Valid GLSL shader code.
+#[cfg(feature = "glsl")]
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 // FIXME: After implementing check
@@ -212,6 +222,7 @@ pub struct Glsl {
     stage: ShaderStage,
 }
 
+#[cfg(feature = "glsl")]
 impl Glsl {
     /// Wraps string that must contain valid GLSL shader code.
     ///
@@ -224,6 +235,7 @@ impl Glsl {
     }
 }
 
+#[cfg(feature = "glsl")]
 impl From<Glsl> for ShaderModuleInfo {
     fn from(shader: Glsl) -> Self {
         ShaderModuleInfo {
@@ -238,12 +250,14 @@ impl From<Glsl> for ShaderModuleInfo {
 /// Valid HLSL shader code.
 // FIXME: After implementing check
 // produce unique key for shaders and use for comparison.
+#[cfg(feature = "hlsl")]
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct Hlsl {
     code: Box<str>,
 }
 
+#[cfg(feature = "hlsl")]
 impl Hlsl {
     /// Wraps string that must contain valid HLSL shader code.
     ///
@@ -255,11 +269,44 @@ impl Hlsl {
     }
 }
 
+#[cfg(feature = "hlsl")]
 impl From<Hlsl> for ShaderModuleInfo {
     fn from(shader: Hlsl) -> Self {
         ShaderModuleInfo {
             code: shader.code.into(),
             language: ShaderLanguage::HLSL,
+        }
+    }
+}
+
+/// Valid WGSL shader code.
+// FIXME: After implementing check
+// produce unique key for shaders and use for comparison.
+#[cfg(feature = "wgsl")]
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
+pub struct Wgsl {
+    code: Box<str>,
+}
+
+#[cfg(feature = "wgsl")]
+impl Wgsl {
+    /// Wraps string that must contain valid HLSL shader code.
+    ///
+    /// FIXME: Actually check validity.
+    pub fn new(string: impl Into<Box<str>>) -> Self {
+        Wgsl {
+            code: string.into(),
+        }
+    }
+}
+
+#[cfg(feature = "wgsl")]
+impl From<Wgsl> for ShaderModuleInfo {
+    fn from(shader: Wgsl) -> Self {
+        ShaderModuleInfo {
+            code: shader.code.into(),
+            language: ShaderLanguage::WGSL,
         }
     }
 }
@@ -315,6 +362,7 @@ pub enum InvalidShader {
 }
 
 #[derive(Debug, thiserror::Error)]
+#[allow(missing_copy_implementations)]
 pub enum CreateShaderModuleError {
     #[error(transparent)]
     OutOfMemoryError {
@@ -337,23 +385,27 @@ pub enum CreateShaderModuleError {
         source: std::str::Utf8Error,
     },
 
+    #[cfg(feature = "glsl")]
     #[error("Failed to parse GLSL shader")]
     NagaGlslParseError {
         errors: Vec<naga::front::glsl::Error>,
     },
 
+    #[cfg(feature = "wgsl")]
     #[error("Failed to parse WGSL shader")]
     NagaWgslParseError {
         #[source]
         source: Box<dyn std::error::Error + Send + Sync>,
     },
 
+    #[cfg(any(feature = "glsl", feature = "wgsl"))]
     #[error("Failed to generate SPIR-V shader code")]
     NagaSpvWriteError {
         #[from]
         source: naga::back::spv::Error,
     },
 
+    #[cfg(any(feature = "glsl", feature = "wgsl"))]
     #[error("Failed to validate shader module")]
     NagaValidationError {
         #[from]
@@ -1069,7 +1121,7 @@ pub mod shader_compiler {
         )?;
 
         if !binary_result.get_warning_messages().is_empty() {
-            tracing::warn!("{}", binary_result.get_warning_messages());
+            warn!("{}", binary_result.get_warning_messages());
         }
 
         Ok(binary_result.as_binary_u8().into())
