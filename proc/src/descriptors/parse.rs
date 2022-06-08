@@ -63,8 +63,8 @@ pub enum DescriptorType {
 }
 
 impl DescriptorType {
-    pub fn descriptor_kind(&self) -> TokenStream {
-        match self {
+    pub fn descriptor_kind(&self) -> Result<TokenStream, syn::Error> {
+        let tokens = match self {
             DescriptorType::Sampler(Sampler { kw }) => quote::quote_spanned! {
                 kw.span() => ::sierra::SamplerDescriptor
             },
@@ -116,7 +116,7 @@ impl DescriptorType {
                 kind: None | Some(buffer::Kind::Uniform(_)),
                 texel: Some(buffer::Texel { format, .. }),
             }) => {
-                let format = format.to_tokens();
+                let format = format.to_tokens()?;
                 quote::quote_spanned! {
                     kw.span()=> ::sierra::TexelBufferDescriptor<::sierra::Uniform, #format>
                 }
@@ -126,12 +126,13 @@ impl DescriptorType {
                 kind: Some(buffer::Kind::Storage(_)),
                 texel: Some(buffer::Texel { format, .. }),
             }) => {
-                let format = format.to_tokens();
+                let format = format.to_tokens()?;
                 quote::quote_spanned! {
                     kw.span()=> ::sierra::TexelBufferDescriptor<::sierra::Storage, #format>
                 }
             }
-        }
+        };
+        Ok(tokens)
     }
 }
 

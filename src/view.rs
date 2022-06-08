@@ -5,6 +5,7 @@ use crate::{
     encode::Encoder,
     image::{Image, ImageExtent, ImageMemoryBarrier, Layout, SubresourceRange},
     queue::{Ownership, QueueId},
+    sealed::Sealed,
     stage::PipelineStageFlags,
     OutOfMemory,
 };
@@ -250,3 +251,5 @@ impl ImageViewState {
         &self.view
     }
 }
+
+impl Sealed for (ImageView, Layout) {}

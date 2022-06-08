@@ -2333,7 +2333,7 @@ impl Device {
                     | DescriptorSlice::StorageImage(slice)
                     | DescriptorSlice::InputAttachment(slice) => {
                         for image in slice {
-                            assert_owner!(image.image, self);
+                            assert_owner!(image.0, self);
                         }
                     }
                     DescriptorSlice::UniformBuffer(regions)
@@ -2431,10 +2431,10 @@ impl Device {
                     DescriptorSlice::SampledImage(slice) => {
                         let start = images.len();
 
-                        images.extend(slice.iter().map(|image| {
+                        images.extend(slice.iter().map(|(image, layout)| {
                             vk1_0::DescriptorImageInfoBuilder::new()
-                                .image_view(image.image.handle())
-                                .image_layout(image.layout.to_erupt())
+                                .image_view(image.handle())
+                                .image_layout(layout.to_erupt())
                         }));
 
                         ranges.push(start..images.len());
@@ -2442,10 +2442,10 @@ impl Device {
                     DescriptorSlice::StorageImage(slice) => {
                         let start = images.len();
 
-                        images.extend(slice.iter().map(|image| {
+                        images.extend(slice.iter().map(|(image, layout)| {
                             vk1_0::DescriptorImageInfoBuilder::new()
-                                .image_view(image.image.handle())
-                                .image_layout(image.layout.to_erupt())
+                                .image_view(image.handle())
+                                .image_layout(layout.to_erupt())
                         }));
 
                         ranges.push(start..images.len());
@@ -2516,10 +2516,10 @@ impl Device {
                     DescriptorSlice::InputAttachment(slice) => {
                         let start = images.len();
 
-                        images.extend(slice.iter().map(|image| {
+                        images.extend(slice.iter().map(|(image, layout)| {
                             vk1_0::DescriptorImageInfoBuilder::new()
-                                .image_view(image.image.handle())
-                                .image_layout(image.layout.to_erupt())
+                                .image_view(image.handle())
+                                .image_layout(layout.to_erupt())
                         }));
 
                         ranges.push(start..images.len());

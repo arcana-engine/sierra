@@ -9,8 +9,11 @@ pub fn format(tokens: proc_macro::TokenStream) -> TokenStream {
 
 fn try_format(tokens: proc_macro::TokenStream) -> Result<TokenStream, syn::Error> {
     let ident = tokens.to_string();
+    parse_format(&*ident)
+}
 
-    let output = match &*ident {
+pub fn parse_format(s: &str) -> Result<TokenStream, syn::Error> {
+    let output = match s {
         "r8unorm" | "R8Unorm" => "::sierra::FormatDescription<::sierra::R, ::sierra::ConstBits<8>, ::sierra::Unorm>",
         "r8snorm" | "R8Snorm" => "::sierra::FormatDescription<::sierra::R, ::sierra::ConstBits<8>, ::sierra::Snorm>",
         "r8uscaled" | "R8Uscaled" => "::sierra::FormatDescription<::sierra::R, ::sierra::ConstBits<8>, ::sierra::Uscaled>",

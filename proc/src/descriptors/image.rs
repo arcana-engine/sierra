@@ -20,16 +20,8 @@ proc_easy::easy_argument_group! {
 
 proc_easy::easy_parse! {
     #[derive(Clone)]
-    pub struct ConstLayout {
-        pub kw: syn::Token![const],
-        pub ty: syn::Type,
-    }
-}
-
-proc_easy::easy_parse! {
-    #[derive(Clone)]
     pub enum LayoutValue {
-        Const(ConstLayout),
+        ! Const(syn::Ident),
         Dynamic(syn::Token![dyn]),
     }
 }
@@ -46,8 +38,7 @@ impl Layout {
     pub fn to_tokens(&self) -> TokenStream {
         match &self.value {
             LayoutValue::Const(layout) => {
-                let ty = &layout.ty;
-                quote::quote!(#ty)
+                quote::quote!(::sierra::#layout)
             }
             LayoutValue::Dynamic(token) => {
                 quote::quote_spanned!(token.span() => ::sierra::DynamicLayout)

@@ -1,7 +1,7 @@
 use proc_macro2::TokenStream;
 use syn::spanned::Spanned;
 
-use crate::kw;
+use crate::{format::parse_format, kw};
 
 impl Buffer {
     #[inline]
@@ -29,8 +29,8 @@ proc_easy::easy_parse! {
 proc_easy::easy_parse! {
     #[derive(Clone)]
     pub enum FormatValue {
-        ! Dynamic(syn::Token![dyn]),
-        Const(ConstFormat),
+        ! Const(syn::Ident),
+        Dynamic(syn::Token![dyn]),
     }
 }
 
@@ -49,15 +49,12 @@ proc_easy::easy_argument_value! {
 }
 
 impl FormatValue {
-    pub fn to_tokens(&self) -> TokenStream {
+    pub fn to_tokens(&self) -> Result<TokenStream, syn::Error> {
         match self {
             FormatValue::Dynamic(token) => {
-                quote::quote_spanned!(token.span() => ::sierra::DynamicFormat)
+                Ok(quote::quote_spanned!(token.span() => ::sierra::DynamicFormat))
             }
-            FormatValue::Const(format) => {
-                let ty = &format.ty;
-                quote::quote!(#ty)
-            }
+            FormatValue::Const(format) => parse_format(&*format.to_string()),
         }
     }
 }

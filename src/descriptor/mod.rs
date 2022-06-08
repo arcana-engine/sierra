@@ -88,20 +88,6 @@ pub struct DescriptorSetCopy<'a> {
     pub count: u32,
 }
 
-/// Image view and layout.\
-/// Accesses to this descriptor will assume that view
-/// is in that layout.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct ImageLayout<I> {
-    /// Descriptor image resource.
-    pub image: I,
-
-    /// View's layout when descriptor is accessed.
-    pub layout: Layout,
-}
-
-impl<I> Sealed for ImageLayout<I> where I: Sealed {}
-
 /// Image view, layout and sampler.\
 /// Unlike [`ImageViewDescriptor`] this descriptor contains a sampler.
 /// to do sampled reads.
@@ -129,10 +115,10 @@ pub enum DescriptorSlice<'a> {
     CombinedImageSampler(&'a [CombinedImageSampler]),
 
     /// Sampled image descriptors.
-    SampledImage(&'a [ImageLayout<ImageView>]),
+    SampledImage(&'a [(ImageView, Layout)]),
 
     /// Storage image descriptors.
-    StorageImage(&'a [ImageLayout<ImageView>]),
+    StorageImage(&'a [(ImageView, Layout)]),
 
     /// Uniform texel buffer descriptors.
     UniformTexelBuffer(&'a [BufferView]),
@@ -153,7 +139,7 @@ pub enum DescriptorSlice<'a> {
     StorageBufferDynamic(&'a [BufferRange]),
 
     /// Input attachments.
-    InputAttachment(&'a [ImageLayout<ImageView>]),
+    InputAttachment(&'a [(ImageView, Layout)]),
 
     /// Acceleration structures.
     AccelerationStructure(&'a [AccelerationStructure]),
@@ -261,9 +247,9 @@ impl DescriptorKind for CombinedImageSamplerDescriptor {
 impl<L> Sealed for ImageDescriptor<Sampled, L> {}
 impl<L> DescriptorKind for ImageDescriptor<Sampled, L> {
     const TYPE: DescriptorType = DescriptorType::SampledImage;
-    type Descriptor = ImageLayout<ImageView>;
+    type Descriptor = (ImageView, Layout);
 
-    fn descriptors(slice: &[ImageLayout<ImageView>]) -> DescriptorSlice<'_> {
+    fn descriptors(slice: &[(ImageView, Layout)]) -> DescriptorSlice<'_> {
         DescriptorSlice::SampledImage(slice)
     }
 }
@@ -271,9 +257,9 @@ impl<L> DescriptorKind for ImageDescriptor<Sampled, L> {
 impl<L> Sealed for ImageDescriptor<Storage, L> {}
 impl<L> DescriptorKind for ImageDescriptor<Storage, L> {
     const TYPE: DescriptorType = DescriptorType::StorageImage;
-    type Descriptor = ImageLayout<ImageView>;
+    type Descriptor = (ImageView, Layout);
 
-    fn descriptors(slice: &[ImageLayout<ImageView>]) -> DescriptorSlice<'_> {
+    fn descriptors(slice: &[(ImageView, Layout)]) -> DescriptorSlice<'_> {
         DescriptorSlice::StorageImage(slice)
     }
 }
@@ -341,9 +327,9 @@ impl<F> DescriptorKind for TexelBufferDescriptor<Storage, F> {
 impl Sealed for InputAttachmentDescriptor {}
 impl DescriptorKind for InputAttachmentDescriptor {
     const TYPE: DescriptorType = DescriptorType::InputAttachment;
-    type Descriptor = ImageLayout<ImageView>;
+    type Descriptor = (ImageView, Layout);
 
-    fn descriptors(slice: &[ImageLayout<ImageView>]) -> DescriptorSlice<'_> {
+    fn descriptors(slice: &[(ImageView, Layout)]) -> DescriptorSlice<'_> {
         DescriptorSlice::InputAttachment(slice)
     }
 }

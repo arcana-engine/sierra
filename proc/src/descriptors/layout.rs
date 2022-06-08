@@ -17,7 +17,7 @@ pub(super) fn layout_type_name(input: &Input) -> syn::Ident {
     quote::format_ident!("{}Layout", input.item_struct.ident)
 }
 
-pub(super) fn generate(input: &Input) -> TokenStream {
+pub(super) fn generate(input: &Input) -> Result<TokenStream, syn::Error> {
     let layout_ident = layout_type_name(input);
     let instance_ident = instance_type_name(input);
 
@@ -31,7 +31,7 @@ pub(super) fn generate(input: &Input) -> TokenStream {
                 u32::try_from(binding).expect("Too many descriptors"),
             )
         })
-        .collect::<Vec<_>>();
+        .collect::<Result<Vec<_>, _>>()?;
 
     if !input.uniforms.is_empty() {
         let stages = combined_stages_flags(
@@ -67,7 +67,7 @@ pub(super) fn generate(input: &Input) -> TokenStream {
         quote::quote!(#[doc(hidden)])
     };
 
-    quote::quote!(
+    let tokens = quote::quote!(
         #[derive(Clone, Debug)]
         #[repr(transparent)]
         #doc_attr
@@ -107,10 +107,14 @@ pub(super) fn generate(input: &Input) -> TokenStream {
                 self.instance()
             }
         }
-    )
+    );
+    Ok(tokens)
 }
 
-fn generate_layout_binding(descriptor: &Descriptor, binding: u32) -> TokenStream {
+fn generate_layout_binding(
+    descriptor: &Descriptor,
+    binding: u32,
+) -> Result<TokenStream, syn::Error> {
     let desc_ty = match descriptor.desc_ty {
         DescriptorType::Sampler(Sampler { kw }) => {
             quote::quote_spanned!(kw.span() => ::sierra::DescriptorType::Sampler)
@@ -165,10 +169,10 @@ fn generate_layout_binding(descriptor: &Descriptor, binding: u32) -> TokenStream
     let stages = descriptor.stages.bits();
     let flags = descriptor.flags.bits();
 
-    let descriptor_kind = descriptor.desc_ty.descriptor_kind();
+    let descriptor_kind = descriptor.desc_ty.descriptor_kind()?;
 
     let ty = &descriptor.field.ty;
-    quote::quote_spanned!(
+    Ok(quote::quote_spanned!(
         descriptor.field.span() =>
         ::sierra::DescriptorSetLayoutBinding {
             binding: #binding,
@@ -177,5 +181,5 @@ fn generate_layout_binding(descriptor: &Descriptor, binding: u32) -> TokenStream
             stages: ::sierra::ShaderStageFlags::from_bits_truncate(#stages),
             flags: ::sierra::DescriptorBindingFlags::from_bits_truncate(#flags | <#ty as ::sierra::DescriptorBindingArray<#descriptor_kind>>::FLAGS.bits()),
         }
-    )
+    ))
 }

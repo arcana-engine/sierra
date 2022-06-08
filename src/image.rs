@@ -1,3 +1,5 @@
+use crate::sealed::Sealed;
+
 pub use {
     self::Samples::*,
     crate::{
@@ -749,3 +751,5 @@ impl StaticLayout for Present {
 impl StaticLayout for General {
     const LAYOUT: Layout = Layout::General;
 }
+
+impl Sealed for (Image, Layout) {}

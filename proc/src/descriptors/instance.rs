@@ -7,7 +7,7 @@ pub(super) fn instance_type_name(input: &Input) -> syn::Ident {
     quote::format_ident!("{}Instance", input.item_struct.ident)
 }
 
-pub(super) fn generate(input: &Input) -> TokenStream {
+pub(super) fn generate(input: &Input) -> Result<TokenStream, syn::Error> {
     let ident = &input.item_struct.ident;
     let layout_ident = layout_type_name(input);
     let instance_ident = instance_type_name(input);
@@ -20,13 +20,13 @@ pub(super) fn generate(input: &Input) -> TokenStream {
             let descriptor_field = quote::format_ident!("descriptor_{}", input.member);
             let ty = &input.field.ty;
 
-            let descriptor_kind = input.desc_ty.descriptor_kind();
+            let descriptor_kind = input.desc_ty.descriptor_kind()?;
 
-            quote::quote_spanned!(
+            Ok::<_, syn::Error>(quote::quote_spanned!(
                 input.field.ty.span() => pub #descriptor_field: ::std::option::Option<<#ty as ::sierra::DescriptorBindingArray<#descriptor_kind>>::DescriptorArray>,
-            )
+            ))
         })
-        .collect();
+        .collect::<Result<_, _>>()?;
 
     let update_descriptor_statements: TokenStream = input
         .descriptors
@@ -34,10 +34,10 @@ pub(super) fn generate(input: &Input) -> TokenStream {
         .map(|input| {
             let field = &input.member;
 
-            let descriptor_kind = input.desc_ty.descriptor_kind();
+            let descriptor_kind = input.desc_ty.descriptor_kind()?;
             let descriptor_field = quote::format_ident!("descriptor_{}", input.member);
             let write_descriptor = quote::format_ident!("write_{}_descriptor", input.member);
-            quote::quote!(
+            Ok::<_, syn::Error>(quote::quote!(
                 let #write_descriptor;
                 match &elem.#descriptor_field {
                     Some(descriptors) if sierra::DescriptorBindingArray::<#descriptor_kind>::is_compatible(&input.#field, descriptors) => {
@@ -49,9 +49,9 @@ pub(super) fn generate(input: &Input) -> TokenStream {
                         #write_descriptor = true;
                     }
                 }
-            )
+            ))
         })
-        .collect();
+        .collect::<Result<_, _>>()?;
 
     let mut binding = 0u32;
     let write_updated_descriptor_statements: TokenStream = input
@@ -59,7 +59,7 @@ pub(super) fn generate(input: &Input) -> TokenStream {
         .iter()
         .map(|input| {
             let span = input.field.ty.span();
-            let descriptor_kind = input.desc_ty.descriptor_kind();
+            let descriptor_kind = input.desc_ty.descriptor_kind()?;
             let descriptors = quote::quote_spanned!(span => <#descriptor_kind as ::sierra::DescriptorKind>::descriptors(descriptors));
             let descriptor_field = quote::format_ident!("descriptor_{}", input.member);
             let write_descriptor = quote::format_ident!("write_{}_descriptor", input.member);
@@ -76,9 +76,9 @@ pub(super) fn generate(input: &Input) -> TokenStream {
             );
 
             binding += 1;
-            stream
+            Ok::<_, syn::Error>(stream)
         })
-        .collect();
+        .collect::<Result<_, _>>()?;
 
     let updated_descriptor_assertions: TokenStream = input
         .descriptors
@@ -177,7 +177,7 @@ pub(super) fn generate(input: &Input) -> TokenStream {
 
     let cycle_capacity = input.cycle_capacity;
 
-    quote::quote!(
+    let tokens = quote::quote!(
         #doc_attr
         #vis struct #instance_ident {
             pub layout: ::sierra::DescriptorSetLayout,
@@ -321,5 +321,7 @@ pub(super) fn generate(input: &Input) -> TokenStream {
                 self.raw_layout()
             }
         }
-    )
+    );
+
+    Ok(tokens)
 }

@@ -19,7 +19,7 @@ use crate::{
     buffer::BufferInfo,
     descriptor::{DescriptorSetInfo, DescriptorSetLayoutInfo},
     framebuffer::FramebufferInfo,
-    image::ImageInfo,
+    image::{ImageInfo, Layout},
     memory::MemoryUsage,
     pipeline::{
         ComputePipelineInfo, GraphicsPipelineInfo, PipelineLayoutInfo, RayTracingPipelineInfo,
@@ -31,7 +31,7 @@ use crate::{
     shader::ShaderModuleInfo,
     view::ImageViewInfo,
     BufferRange, BufferViewInfo, CombinedImageSampler, DescriptorSlice, DescriptorType,
-    DeviceAddress, ImageLayout,
+    DeviceAddress,
 };
 
 use self::resource_counting::{resource_allocated, resource_freed};
@@ -1448,10 +1448,10 @@ pub(super) enum ReferencedDescriptors {
     CombinedImageSampler(Box<[Option<CombinedImageSampler>]>),
 
     /// Sampled image descriptors.
-    SampledImage(Box<[Option<ImageLayout<ImageView>>]>),
+    SampledImage(Box<[Option<(ImageView, Layout)>]>),
 
     /// Storage image descriptors.
-    StorageImage(Box<[Option<ImageLayout<ImageView>>]>),
+    StorageImage(Box<[Option<(ImageView, Layout)>]>),
 
     /// Uniform texel buffer descriptors.
     UniformTexelBuffer(Box<[Option<BufferView>]>),
@@ -1472,7 +1472,7 @@ pub(super) enum ReferencedDescriptors {
     StorageBufferDynamic(Box<[Option<BufferRange>]>),
 
     /// Input attachments.
-    InputAttachment(Box<[Option<ImageLayout<ImageView>>]>),
+    InputAttachment(Box<[Option<(ImageView, Layout)>]>),
 
     /// Acceleration structures.
     AccelerationStructure(Box<[Option<AccelerationStructure>]>),

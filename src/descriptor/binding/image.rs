@@ -1,14 +1,14 @@
 use crate::{
     descriptor::{
         DescriptorBinding, DescriptorBindingFlags, DescriptorKind, DynamicLayout, ImageDescriptor,
-        ImageLayout, Sampled, Storage, ValidLayout,
+        Sampled, Storage, ValidLayout,
     },
-    image::{Image, StaticLayout},
+    image::{Image, Layout, StaticLayout},
     view::{ImageView, ImageViewInfo},
     Device, ImageUsage, OutOfMemory,
 };
 
-trait ImageDescriptorKind: DescriptorKind<Descriptor = ImageLayout<ImageView>> {
+trait ImageDescriptorKind: DescriptorKind<Descriptor = (ImageView, Layout)> {
     const USAGE: ImageUsage;
 }
 
@@ -42,19 +42,16 @@ where
     const FLAGS: DescriptorBindingFlags = DescriptorBindingFlags::empty();
 
     #[inline]
-    fn is_compatible(&self, descriptor: &ImageLayout<ImageView>) -> bool {
-        descriptor.layout == L::LAYOUT && *self == descriptor.image.info().image
+    fn is_compatible(&self, descriptor: &(ImageView, Layout)) -> bool {
+        descriptor.1 == L::LAYOUT && *self == descriptor.0.info().image
     }
 
     #[inline]
-    fn get_descriptor(&self, device: &Device) -> Result<ImageLayout<ImageView>, OutOfMemory> {
+    fn get_descriptor(&self, device: &Device) -> Result<(ImageView, Layout), OutOfMemory> {
         assert!(self.info().usage.contains(<ImageDescriptor<S, L>>::USAGE));
 
         let view = device.create_image_view(ImageViewInfo::new(self.clone()))?;
-        Ok(ImageLayout {
-            image: view,
-            layout: L::LAYOUT,
-        })
+        Ok((view, L::LAYOUT))
     }
 }
 
@@ -66,12 +63,12 @@ where
     const FLAGS: DescriptorBindingFlags = DescriptorBindingFlags::empty();
 
     #[inline]
-    fn is_compatible(&self, descriptor: &ImageLayout<ImageView>) -> bool {
-        descriptor.layout == L::LAYOUT && *self == descriptor.image
+    fn is_compatible(&self, descriptor: &(ImageView, Layout)) -> bool {
+        descriptor.1 == L::LAYOUT && *self == descriptor.0
     }
 
     #[inline]
-    fn get_descriptor(&self, _device: &Device) -> Result<ImageLayout<ImageView>, OutOfMemory> {
+    fn get_descriptor(&self, _device: &Device) -> Result<(ImageView, Layout), OutOfMemory> {
         assert!(self
             .info()
             .image
@@ -79,55 +76,49 @@ where
             .usage
             .contains(<ImageDescriptor<S, L>>::USAGE));
 
-        Ok(ImageLayout {
-            image: self.clone(),
-            layout: L::LAYOUT,
-        })
+        Ok((self.clone(), L::LAYOUT))
     }
 }
 
-impl<S> DescriptorBinding<ImageDescriptor<S, DynamicLayout>> for ImageLayout<Image>
+impl<S> DescriptorBinding<ImageDescriptor<S, DynamicLayout>> for (Image, Layout)
 where
     ImageDescriptor<S, DynamicLayout>: ImageDescriptorKind,
 {
     const FLAGS: DescriptorBindingFlags = DescriptorBindingFlags::empty();
 
     #[inline]
-    fn is_compatible(&self, descriptor: &ImageLayout<ImageView>) -> bool {
-        self.layout == descriptor.layout && self.image == descriptor.image.info().image
+    fn is_compatible(&self, descriptor: &(ImageView, Layout)) -> bool {
+        self.1 == descriptor.1 && self.0 == descriptor.0.info().image
     }
 
     #[inline]
-    fn get_descriptor(&self, device: &Device) -> Result<ImageLayout<ImageView>, OutOfMemory> {
+    fn get_descriptor(&self, device: &Device) -> Result<(ImageView, Layout), OutOfMemory> {
         assert!(self
-            .image
+            .0
             .info()
             .usage
             .contains(<ImageDescriptor<S, DynamicLayout>>::USAGE));
 
-        let view = device.create_image_view(ImageViewInfo::new(self.image.clone()))?;
-        Ok(ImageLayout {
-            image: view,
-            layout: self.layout,
-        })
+        let view = device.create_image_view(ImageViewInfo::new(self.0.clone()))?;
+        Ok((view, self.1))
     }
 }
 
-impl<S> DescriptorBinding<ImageDescriptor<S, DynamicLayout>> for ImageLayout<ImageView>
+impl<S> DescriptorBinding<ImageDescriptor<S, DynamicLayout>> for (ImageView, Layout)
 where
     ImageDescriptor<S, DynamicLayout>: ImageDescriptorKind,
 {
     const FLAGS: DescriptorBindingFlags = DescriptorBindingFlags::empty();
 
     #[inline]
-    fn is_compatible(&self, descriptor: &ImageLayout<ImageView>) -> bool {
+    fn is_compatible(&self, descriptor: &(ImageView, Layout)) -> bool {
         *self == *descriptor
     }
 
     #[inline]
-    fn get_descriptor(&self, _device: &Device) -> Result<ImageLayout<ImageView>, OutOfMemory> {
+    fn get_descriptor(&self, _device: &Device) -> Result<(ImageView, Layout), OutOfMemory> {
         assert!(self
-            .image
+            .0
             .info()
             .image
             .info()
