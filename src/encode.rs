@@ -1,30 +1,35 @@
-pub use crate::backend::CommandBuffer;
-use crate::{arith_ge, BufferInfo, BufferUsage, PipelinePushConstants};
-use {
-    crate::{
-        accel::AccelerationStructureBuildGeometryInfo,
-        access::AccessFlags,
-        arith_le,
-        buffer::{Buffer, BufferMemoryBarrier},
-        descriptor::{DescriptorSet, UpdatedPipelineDescriptors},
-        framebuffer::{Framebuffer, FramebufferError},
-        image::{Image, ImageBlit, ImageMemoryBarrier, Layout, SubresourceLayers},
-        memory::MemoryBarrier,
-        pipeline::{
-            ComputePipeline, DynamicGraphicsPipeline, GraphicsPipeline, PipelineInputLayout,
-            PipelineLayout, RayTracingPipeline, ShaderBindingTable, Viewport,
-        },
-        queue::QueueCapabilityFlags,
-        render_pass::{ClearValue, RenderPass, RenderPassInstance},
-        sampler::Filter,
-        shader::ShaderStageFlags,
-        stage::PipelineStageFlags,
-        Device, Extent3d, IndexType, Offset3d, OutOfMemory, Rect2d,
-    },
-    bytemuck::{cast_slice, Pod},
-    scoped_arena::Scope,
-    std::{fmt::Debug, mem::size_of_val, ops::Range},
+use std::{
+    fmt,
+    mem::{forget, size_of_val},
+    ops::Range,
 };
+
+use bytemuck::{cast_slice, Pod};
+use scoped_arena::Scope;
+
+use crate::{
+    accel::AccelerationStructureBuildGeometryInfo,
+    access::AccessFlags,
+    arith_ge, arith_le,
+    buffer::{Buffer, BufferMemoryBarrier},
+    descriptor::{DescriptorSet, UpdatedPipelineDescriptors},
+    framebuffer::{Framebuffer, FramebufferError},
+    image::{Image, ImageBlit, ImageMemoryBarrier, Layout, SubresourceLayers},
+    memory::MemoryBarrier,
+    pipeline::{
+        ComputePipeline, DynamicGraphicsPipeline, GraphicsPipeline, PipelineInputLayout,
+        PipelineLayout, RayTracingPipeline, ShaderBindingTable, Viewport,
+    },
+    queue::QueueCapabilityFlags,
+    render_pass::{ClearValue, RenderPass, RenderPassInstance},
+    sampler::Filter,
+    shader::ShaderStageFlags,
+    stage::PipelineStageFlags,
+    BufferInfo, BufferUsage, Device, Extent3d, IndexType, Offset3d, OutOfMemory,
+    PipelinePushConstants, Rect2d,
+};
+
+pub use crate::backend::CommandBuffer;
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
@@ -196,7 +201,7 @@ pub enum Command<'a> {
 /// Basis for encoding capabilities.
 /// Implements encoding of commands that can be inside and outside of render
 /// pass.
-#[derive(Debug)]
+#[allow(missing_debug_implementations)]
 pub struct EncoderCommon<'a> {
     capabilities: QueueCapabilityFlags,
     scope: &'a Scope<'a>,
@@ -383,9 +388,34 @@ impl<'a> EncoderCommon<'a> {
 }
 
 /// Command encoder that can encode commands outside render pass.
-#[derive(Debug)]
 pub struct Encoder<'a> {
     inner: EncoderCommon<'a>,
+    drop: EncoderDrop,
+}
+
+impl<'a> fmt::Debug for Encoder<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Encoder")
+            .field("command_buffer", &self.inner.command_buffer)
+            .field("capabilities", &self.inner.capabilities)
+            .finish()
+    }
+}
+
+struct EncoderDrop;
+
+impl Drop for EncoderDrop {
+    fn drop(&mut self) {
+        tracing::warn!(
+            "Encoder is dropped. Encoders must be either submitted or explicitly discarded"
+        );
+    }
+}
+
+impl<'a> Encoder<'a> {
+    pub fn discard(self) {
+        forget(self.drop)
+    }
 }
 
 impl<'a> std::ops::Deref for Encoder<'a> {
@@ -414,6 +444,7 @@ impl<'a> Encoder<'a> {
                 scope,
                 command_buffer,
             },
+            drop: EncoderDrop,
         }
     }
 
@@ -826,6 +857,8 @@ impl<'a> Encoder<'a> {
     /// Flushes commands recorded into this encoder to the underlying command
     /// buffer.
     pub fn finish(mut self) -> CommandBuffer {
+        forget(self.drop);
+
         self.inner
             .command_buffer
             .end()
@@ -836,12 +869,23 @@ impl<'a> Encoder<'a> {
 }
 
 /// Command encoder that can encode commands inside render pass.
-#[derive(Debug)]
 pub struct RenderPassEncoder<'a, 'b> {
     framebuffer: &'b Framebuffer,
     render_pass: &'b RenderPass,
     subpass: u32,
     inner: &'a mut EncoderCommon<'b>,
+}
+
+impl<'a, 'b> fmt::Debug for RenderPassEncoder<'a, 'b> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("RenderPassEncoder")
+            .field("framebuffer", self.framebuffer)
+            .field("render_pass", self.render_pass)
+            .field("subpass", &self.subpass)
+            .field("command_buffer", &self.inner.command_buffer)
+            .field("capabilities", &self.inner.capabilities)
+            .finish()
+    }
 }
 
 impl<'a, 'b> RenderPassEncoder<'a, 'b> {
