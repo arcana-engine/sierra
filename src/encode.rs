@@ -287,10 +287,10 @@ impl<'a> EncoderCommon<'a> {
         );
     }
 
-    pub fn bind_graphics_descriptors<P>(
+    pub fn bind_graphics_descriptors<P, const N: u32>(
         &mut self,
         layout: &P,
-        descriptors: &impl UpdatedPipelineDescriptors<P>,
+        descriptors: &impl UpdatedPipelineDescriptors<P, N>,
     ) where
         P: PipelineInputLayout,
     {
@@ -317,10 +317,10 @@ impl<'a> EncoderCommon<'a> {
         );
     }
 
-    pub fn bind_compute_descriptors<P>(
+    pub fn bind_compute_descriptors<P, const N: u32>(
         &mut self,
         layout: &P,
-        descriptors: &impl UpdatedPipelineDescriptors<P>,
+        descriptors: &impl UpdatedPipelineDescriptors<P, N>,
     ) where
         P: PipelineInputLayout,
     {
@@ -347,10 +347,10 @@ impl<'a> EncoderCommon<'a> {
         );
     }
 
-    pub fn bind_ray_tracing_descriptors<P>(
+    pub fn bind_ray_tracing_descriptors<P, const N: u32>(
         &mut self,
         layout: &P,
-        descriptors: &impl UpdatedPipelineDescriptors<P>,
+        descriptors: &impl UpdatedPipelineDescriptors<P, N>,
     ) where
         P: PipelineInputLayout,
     {
@@ -406,9 +406,13 @@ struct EncoderDrop;
 
 impl Drop for EncoderDrop {
     fn drop(&mut self) {
+        #[cfg(feature = "tracing")]
         tracing::warn!(
             "Encoder is dropped. Encoders must be either submitted or explicitly discarded"
         );
+
+        #[cfg(not(feature = "tracing"))]
+        eprintln!("Encoder is dropped. Encoders must be either submitted or explicitly discarded")
     }
 }
 

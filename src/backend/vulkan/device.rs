@@ -1,5 +1,4 @@
 use std::{
-    collections::hash_map::{Entry, HashMap},
     convert::{TryFrom as _, TryInto as _},
     ffi::CString,
     fmt::{self, Debug},
@@ -7,6 +6,8 @@ use std::{
     ops::Range,
     sync::{Arc, Weak},
 };
+
+use hashbrown::hash_map::{Entry, HashMap};
 
 use bytemuck::Pod;
 
@@ -1460,6 +1461,61 @@ impl Device {
         #[allow(unused)]
         let spv: Vec<u32>;
 
+        #[cfg(feature = "naga")]
+        let naga_caps = |inner: &Inner| {
+            let mut caps = naga::valid::Capabilities::PUSH_CONSTANT;
+
+            let features = &inner.features.v10;
+
+            if features.geometry_shader != 0 {
+                caps |= naga::valid::Capabilities::PRIMITIVE_INDEX;
+            }
+
+            if features.shader_float64 != 0 {
+                caps |= naga::valid::Capabilities::FLOAT64;
+            }
+
+            if features.shader_clip_distance != 0 {
+                caps |= naga::valid::Capabilities::CLIP_DISTANCE;
+            }
+
+            if features.shader_cull_distance != 0 {
+                caps |= naga::valid::Capabilities::CULL_DISTANCE;
+            }
+
+            if self.graphics().instance.enabled().vk1_2 {
+                let v12 = &inner.properties.v12;
+                if v12.shader_sampled_image_array_non_uniform_indexing_native != 0
+                    && v12.shader_storage_buffer_array_non_uniform_indexing_native != 0
+                {
+                    caps |= naga::valid::Capabilities::SAMPLED_TEXTURE_AND_STORAGE_BUFFER_ARRAY_NON_UNIFORM_INDEXING;
+                    caps |= naga::valid::Capabilities::SAMPLER_NON_UNIFORM_INDEXING;
+                };
+
+                if v12.shader_uniform_buffer_array_non_uniform_indexing_native != 0
+                    && v12.shader_storage_image_array_non_uniform_indexing_native != 0
+                {
+                    caps |= naga::valid::Capabilities::UNIFORM_BUFFER_AND_STORAGE_TEXTURE_ARRAY_NON_UNIFORM_INDEXING;
+                };
+            } else {
+                let edi = &inner.properties.edi;
+                if edi.shader_sampled_image_array_non_uniform_indexing_native != 0
+                    && edi.shader_storage_buffer_array_non_uniform_indexing_native != 0
+                {
+                    caps |= naga::valid::Capabilities::SAMPLED_TEXTURE_AND_STORAGE_BUFFER_ARRAY_NON_UNIFORM_INDEXING;
+                    caps |= naga::valid::Capabilities::SAMPLER_NON_UNIFORM_INDEXING;
+                };
+
+                if edi.shader_uniform_buffer_array_non_uniform_indexing_native != 0
+                    && edi.shader_storage_image_array_non_uniform_indexing_native != 0
+                {
+                    caps |= naga::valid::Capabilities::UNIFORM_BUFFER_AND_STORAGE_TEXTURE_ARRAY_NON_UNIFORM_INDEXING;
+                };
+            }
+
+            caps | naga::valid::Capabilities::all()
+        };
+
         let code = match info.language {
             ShaderLanguage::SPIRV => &*info.code,
 
@@ -1493,7 +1549,7 @@ impl Device {
 
                 let info = naga::valid::Validator::new(
                     naga::valid::ValidationFlags::all(),
-                    Default::default(),
+                    naga_caps(&self.inner),
                 )
                 .validate(&module)
                 .map_err(|err| {
@@ -1521,7 +1577,7 @@ impl Device {
                 })?;
                 let info = naga::valid::Validator::new(
                     naga::valid::ValidationFlags::all(),
-                    Default::default(),
+                    naga_caps(&self.inner),
                 )
                 .validate(&module)
                 .map_err(|err| {

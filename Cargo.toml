@@ -1,6 +1,6 @@
 [package]
 name = "sierra"
-version = "0.5.0"
+version = "0.6.0"
 edition = "2021"
 authors = ["Zakarum <zakarumych@ya.ru>"]
 license = "MIT OR Apache-2.0"
@@ -24,7 +24,7 @@ glsl = ["naga/glsl-in", "codespan-reporting"]
 wgsl = ["naga/wgsl-in", "codespan-reporting"]
 
 [dependencies]
-sierra-proc = { version = "=0.5.0", path = "proc" }
+sierra-proc = { version = "=0.6.0", path = "proc" }
 #bitsetium = { version = "0.0.2" }
 bitflags = "1.2"
 raw-window-handle = "0.4"
@@ -43,11 +43,13 @@ libloading = "0.7"
 scoped-arena = { version = "0.4", features = ["alloc"] }
 parking_lot = "0.12"
 once_cell = "1.5"
-naga = { version = "0.8", optional = true, features = ["spv-out"] }
+naga = { version = "0.8", optional = true, features = ["spv-out"], git = "https://github.com/gfx-rs/naga.git" }
 arrayvec = "0.7"
 codespan-reporting = { version = "0.11", optional = true }
 array-fu = "0.0.1-alpha"
 tracing = { version = "0.1", optional = true }
+bitsetium = "0.0.2"
+hashbrown = "0.12"
 
 [target.'cfg(any(target_os="macos", target_os="ios"))'.dependencies]
 mtl = { package = "metal", version = "0.23.1", optional = true }

@@ -1,8 +1,6 @@
-use std::{
-    collections::{HashMap, VecDeque},
-    convert::TryFrom as _,
-};
+use std::{collections::VecDeque, convert::TryFrom as _};
 
+use hashbrown::HashMap;
 use parking_lot::Mutex;
 use smallvec::SmallVec;
 

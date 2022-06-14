@@ -144,7 +144,8 @@ pub use self::{
 };
 
 pub use sierra_proc::{
-    format, graphics_pipeline_desc, swizzle, Descriptors, Pass, PipelineInput, ShaderRepr,
+    binding_flags, format, graphics_pipeline_desc, shader_stages, swizzle, Descriptors, Pass,
+    PipelineInput, ShaderRepr,
 };
 
 /// Re-exporting for code-gen.

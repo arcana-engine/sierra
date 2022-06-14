@@ -66,9 +66,7 @@ pub(super) fn generate(input: &Input) -> TokenStream {
             let ty = &set.field.ty;
             let index = u32::try_from(index).expect("Too many sets");
             quote::quote!(
-                impl ::sierra::UpdatedPipelineDescriptors<#layout_ident> for <<#ty as ::sierra::Descriptors>::Instance as ::sierra::DescriptorsInstance<#ty>>::Updated {
-                    const N: u32 = #index;
-                }
+                impl ::sierra::UpdatedPipelineDescriptors<#layout_ident, #index> for <<#ty as ::sierra::Descriptors>::Instance as ::sierra::DescriptorsInstance<#ty>>::Updated {}
             )
         })
         .collect::<TokenStream>();
@@ -151,37 +149,37 @@ pub(super) fn generate(input: &Input) -> TokenStream {
                 &self.pipeline_layout
             }
 
-            pub fn bind_graphics<D>(&self, updated_descriptors: &D, encoder: &mut ::sierra::EncoderCommon)
+            pub fn bind_graphics<D, const N: u32>(&self, updated_descriptors: &D, encoder: &mut ::sierra::EncoderCommon)
             where
-                D: ::sierra::UpdatedPipelineDescriptors<Self>,
+                D: ::sierra::UpdatedPipelineDescriptors<Self, N>,
             {
                 encoder.bind_graphics_descriptor_sets(
                     &self.pipeline_layout,
-                    D::N,
+                    N,
                     &[::sierra::UpdatedDescriptors::raw(updated_descriptors)],
                     &[],
                 )
             }
 
-            pub fn bind_compute<D>(&self, updated_descriptors: &D, encoder: &mut ::sierra::EncoderCommon)
+            pub fn bind_compute<D, const N: u32>(&self, updated_descriptors: &D, encoder: &mut ::sierra::EncoderCommon)
             where
-                D: ::sierra::UpdatedPipelineDescriptors<Self>,
+                D: ::sierra::UpdatedPipelineDescriptors<Self, N>,
             {
                 encoder.bind_compute_descriptor_sets(
                     &self.pipeline_layout,
-                    D::N,
+                    N,
                     &[::sierra::UpdatedDescriptors::raw(updated_descriptors)],
                     &[],
                 )
             }
 
-            pub fn bind_ray_tracing<D>(&self, updated_descriptors: &D, encoder: &mut ::sierra::EncoderCommon)
+            pub fn bind_ray_tracing<D, const N: u32>(&self, updated_descriptors: &D, encoder: &mut ::sierra::EncoderCommon)
             where
-                D: ::sierra::UpdatedPipelineDescriptors<Self>,
+                D: ::sierra::UpdatedPipelineDescriptors<Self, N>,
             {
                 encoder.bind_ray_tracing_descriptor_sets(
                     &self.pipeline_layout,
-                    D::N,
+                    N,
                     &[::sierra::UpdatedDescriptors::raw(updated_descriptors)],
                     &[],
                 )
@@ -209,23 +207,23 @@ pub(super) fn generate(input: &Input) -> TokenStream {
                 self.raw()
             }
 
-            fn bind_graphics<D>(&self, updated_descriptors: &D, encoder: &mut ::sierra::EncoderCommon)
+            fn bind_graphics<D, const N: u32>(&self, updated_descriptors: &D, encoder: &mut ::sierra::EncoderCommon)
             where
-                D: ::sierra::UpdatedPipelineDescriptors<Self>,
+                D: ::sierra::UpdatedPipelineDescriptors<Self, N>,
             {
                 self.bind_graphics(updated_descriptors, encoder);
             }
 
-            fn bind_compute<D>(&self, updated_descriptors: &D, encoder: &mut ::sierra::EncoderCommon)
+            fn bind_compute<D, const N: u32>(&self, updated_descriptors: &D, encoder: &mut ::sierra::EncoderCommon)
             where
-                D: ::sierra::UpdatedPipelineDescriptors<Self>,
+                D: ::sierra::UpdatedPipelineDescriptors<Self, N>,
             {
                 self.bind_compute(updated_descriptors, encoder);
             }
 
-            fn bind_ray_tracing<D>(&self, updated_descriptors: &D, encoder: &mut ::sierra::EncoderCommon)
+            fn bind_ray_tracing<D, const N: u32>(&self, updated_descriptors: &D, encoder: &mut ::sierra::EncoderCommon)
             where
-                D: ::sierra::UpdatedPipelineDescriptors<Self>,
+                D: ::sierra::UpdatedPipelineDescriptors<Self, N>,
             {
                 self.bind_ray_tracing(updated_descriptors, encoder);
             }

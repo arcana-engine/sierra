@@ -1,37 +1,39 @@
-use {
-    super::{
-        convert::from_erupt, device::Device, graphics::Graphics, surface::surface_error_from_erupt,
-        unexpected_result,
-    },
-    crate::{
-        arith_gt, assert_object, out_of_host_memory,
-        physical::*,
-        queue::{Family, FamilyInfo, Queue, QueueId, QueuesQuery},
-        surface::{Surface, SurfaceCapabilities, SurfaceError},
-        CreateDeviceError, OutOfMemory,
-    },
-    erupt::{
-        extensions::{
-            ext_descriptor_indexing::{self as edi, EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME},
-            ext_scalar_block_layout::{self as sbl, EXT_SCALAR_BLOCK_LAYOUT_EXTENSION_NAME},
-            // khr_16bit_storage::KHR_16BIT_STORAGE_EXTENSION_NAME,
-            // khr_8bit_storage::KHR_8BIT_STORAGE_EXTENSION_NAME,
-            khr_acceleration_structure::{self as acc, KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME},
-            khr_buffer_device_address::{self as bda, KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME},
-            khr_deferred_host_operations::KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
-            khr_get_physical_device_properties2::{
-                self as pdp, KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,
-            },
-            // khr_pipeline_library::KHR_PIPELINE_LIBRARY_EXTENSION_NAME,
-            // khr_push_descriptor::KHR_PUSH_DESCRIPTOR_EXTENSION_NAME,
-            khr_ray_tracing_pipeline::{self as rt, KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME},
-            khr_surface as vks,
-            khr_swapchain::KHR_SWAPCHAIN_EXTENSION_NAME,
+use std::{convert::TryInto as _, ffi::CStr, num::NonZeroU32, sync::Arc};
+
+use erupt::{
+    extensions::{
+        ext_descriptor_indexing::{self as edi, EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME},
+        ext_scalar_block_layout::{self as sbl, EXT_SCALAR_BLOCK_LAYOUT_EXTENSION_NAME},
+        // khr_16bit_storage::KHR_16BIT_STORAGE_EXTENSION_NAME,
+        // khr_8bit_storage::KHR_8BIT_STORAGE_EXTENSION_NAME,
+        khr_acceleration_structure::{self as acc, KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME},
+        khr_buffer_device_address::{self as bda, KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME},
+        khr_deferred_host_operations::KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
+        khr_get_physical_device_properties2::{
+            self as pdp, KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,
         },
-        vk1_0, vk1_1, vk1_2, DeviceLoader, ExtendableFrom as _, LoaderError,
+        // khr_pipeline_library::KHR_PIPELINE_LIBRARY_EXTENSION_NAME,
+        // khr_push_descriptor::KHR_PUSH_DESCRIPTOR_EXTENSION_NAME,
+        khr_ray_tracing_pipeline::{self as rt, KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME},
+        khr_surface as vks,
+        khr_swapchain::KHR_SWAPCHAIN_EXTENSION_NAME,
     },
-    smallvec::SmallVec,
-    std::{collections::HashMap, convert::TryInto as _, ffi::CStr, num::NonZeroU32, sync::Arc},
+    vk1_0, vk1_1, vk1_2, DeviceLoader, ExtendableFrom as _, LoaderError,
+};
+use hashbrown::HashMap;
+use smallvec::SmallVec;
+
+use crate::{
+    arith_gt, assert_object, out_of_host_memory,
+    physical::*,
+    queue::{Family, FamilyInfo, Queue, QueueId, QueuesQuery},
+    surface::{Surface, SurfaceCapabilities, SurfaceError},
+    CreateDeviceError, OutOfMemory,
+};
+
+use super::{
+    convert::from_erupt, device::Device, graphics::Graphics, surface::surface_error_from_erupt,
+    unexpected_result,
 };
 
 #[derive(Clone, Debug)]

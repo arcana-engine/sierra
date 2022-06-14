@@ -38,17 +38,26 @@ pub trait PipelineInputLayout {
 
     fn raw(&self) -> &PipelineLayout;
 
-    fn bind_graphics<D>(&self, updated_descriptors: &D, encoder: &mut EncoderCommon<'_>)
-    where
-        D: UpdatedPipelineDescriptors<Self>;
+    fn bind_graphics<D, const N: u32>(
+        &self,
+        updated_descriptors: &D,
+        encoder: &mut EncoderCommon<'_>,
+    ) where
+        D: UpdatedPipelineDescriptors<Self, N>;
 
-    fn bind_compute<D>(&self, updated_descriptors: &D, encoder: &mut EncoderCommon<'_>)
-    where
-        D: UpdatedPipelineDescriptors<Self>;
+    fn bind_compute<D, const N: u32>(
+        &self,
+        updated_descriptors: &D,
+        encoder: &mut EncoderCommon<'_>,
+    ) where
+        D: UpdatedPipelineDescriptors<Self, N>;
 
-    fn bind_ray_tracing<D>(&self, updated_descriptors: &D, encoder: &mut EncoderCommon<'_>)
-    where
-        D: UpdatedPipelineDescriptors<Self>;
+    fn bind_ray_tracing<D, const N: u32>(
+        &self,
+        updated_descriptors: &D,
+        encoder: &mut EncoderCommon<'_>,
+    ) where
+        D: UpdatedPipelineDescriptors<Self, N>;
 
     fn push_constants<P>(&self, push_constants: &P, encoder: &mut EncoderCommon<'_>)
     where

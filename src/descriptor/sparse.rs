@@ -1,22 +1,19 @@
-use crate::{DescriptorSetWrite, UpdateDescriptorSet};
+use std::{hash::Hash, marker::PhantomData};
 
-use {
-    super::{
-        Descriptor, DescriptorBindingFlags, DescriptorSet, DescriptorSetInfo, DescriptorSetLayout,
-        DescriptorSetLayoutBinding, DescriptorSetLayoutFlags, DescriptorSetLayoutInfo, Descriptors,
-        DescriptorsAllocationError, DescriptorsInstance, DescriptorsLayout, UpdatedDescriptors,
-    },
-    crate::{encode::Encoder, shader::ShaderStageFlags, Device, OutOfMemory},
-    bitsetium::{BitEmpty, BitSearch, BitSet, BitSetLimit, BitTest, Bits4096},
-    std::{
-        collections::hash_map::{Entry, HashMap},
-        hash::Hash,
-        marker::PhantomData,
-    },
+use bitsetium::{BitEmpty, BitSearch, BitSet, BitSetLimit, BitTest, BitUnset, Bits4096};
+use hashbrown::hash_map::{Entry, HashMap};
+
+use crate::{Device, Encoder, OutOfMemory, ShaderStageFlags};
+
+use super::{
+    DescriptorBindingFlags, DescriptorKind, DescriptorSet, DescriptorSetInfo, DescriptorSetLayout,
+    DescriptorSetLayoutBinding, DescriptorSetLayoutFlags, DescriptorSetLayoutInfo,
+    DescriptorSetWrite, Descriptors, DescriptorsAllocationError, DescriptorsInstance,
+    DescriptorsLayout, UpdateDescriptorSet, UpdatedDescriptors,
 };
 
 /// Descriptors layout for `SparseDescriptors`.
-#[derive(Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SparseDescriptorsLayout<T> {
     raw: DescriptorSetLayout,
     cap: u32,
@@ -25,28 +22,39 @@ pub struct SparseDescriptorsLayout<T> {
 
 impl<T> DescriptorsLayout for SparseDescriptorsLayout<T>
 where
-    T: Descriptor,
+    T: DescriptorKind,
 {
     type Instance = SparseDescriptorsInstance<T>;
 
+    #[inline]
     fn raw(&self) -> &DescriptorSetLayout {
         &self.raw
     }
 
+    #[inline]
     fn instance(&self) -> SparseDescriptorsInstance<T> {
         SparseDescriptorsInstance::new(self.cap, self.raw.clone())
     }
 }
 
 /// Descriptors input to be used in proc-macro pipelines.
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SparseDescriptors<T, const CAP: u32, const STAGES: u32> {
-    marker: PhantomData<fn() -> T>,
+    marker: PhantomData<T>,
+}
+
+impl<T, const CAP: u32, const STAGES: u32> SparseDescriptors<T, CAP, STAGES> {
+    #[inline]
+    pub const fn new() -> Self {
+        SparseDescriptors {
+            marker: PhantomData,
+        }
+    }
 }
 
 impl<T, const CAP: u32, const STAGES: u32> Descriptors for SparseDescriptors<T, CAP, STAGES>
 where
-    T: Descriptor,
+    T: DescriptorKind,
 {
     type Layout = SparseDescriptorsLayout<T>;
     type Instance = SparseDescriptorsInstance<T>;
@@ -74,7 +82,7 @@ where
 
 /// Descriptor instance with sparsely located resources.
 #[derive(Debug)]
-pub struct SparseDescriptorsInstance<T: Descriptor> {
+pub struct SparseDescriptorsInstance<T: DescriptorKind> {
     layout: DescriptorSetLayout,
     set: Option<SparseDescriptorSet>,
     indices: HashMap<T::Descriptor, u32>,
@@ -91,6 +99,7 @@ pub struct SparseDescriptorSet {
 }
 
 impl UpdatedDescriptors for SparseDescriptorSet {
+    #[inline]
     fn raw(&self) -> &DescriptorSet {
         &self.raw
     }
@@ -99,17 +108,100 @@ impl UpdatedDescriptors for SparseDescriptorSet {
 impl<T, const CAP: u32, const STAGES: u32> DescriptorsInstance<SparseDescriptors<T, CAP, STAGES>>
     for SparseDescriptorsInstance<T>
 where
-    T: Descriptor,
-    T::Descriptor: Hash + Eq,
+    T: DescriptorKind,
 {
     type Updated = SparseDescriptorSet;
 
-    fn update<'a, 'b: 'a>(
-        &'b mut self,
+    #[inline]
+    fn update(
+        &mut self,
         _input: &SparseDescriptors<T, CAP, STAGES>,
         device: &Device,
-        _encoder: &mut Encoder<'a>,
-    ) -> Result<&'b SparseDescriptorSet, DescriptorsAllocationError> {
+        _encoder: &mut Encoder<'_>,
+    ) -> Result<&SparseDescriptorSet, DescriptorsAllocationError> {
+        self.update(device)
+    }
+
+    #[inline]
+    fn raw_layout(&self) -> &DescriptorSetLayout {
+        &self.layout
+    }
+}
+
+impl<T> SparseDescriptorsInstance<T>
+where
+    T: DescriptorKind,
+{
+    /// Returns new empty instance of `SparseDescriptorsInstance`.
+    #[inline]
+    pub fn new(cap: u32, layout: DescriptorSetLayout) -> Self {
+        SparseDescriptorsInstance {
+            layout,
+            set: None,
+            upper_bounds: 0,
+            indices: HashMap::new(),
+            unused: Bits4096::empty(),
+            updates: Vec::with_capacity(cap as usize),
+        }
+    }
+
+    /// Returns index for specified resource inside this array.
+    /// Inserts resource if not in array yet.
+    ///
+    /// # Panics
+    ///
+    ///
+    pub fn get_or_insert(&mut self, descriptor: T::Descriptor) -> u32
+    where
+        T::Descriptor: Hash + Clone + Eq,
+    {
+        match self.indices.entry(descriptor.clone()) {
+            Entry::Occupied(entry) => *entry.get(),
+            Entry::Vacant(entry) => match self.unused.find_first_set(0) {
+                None => {
+                    if self.upper_bounds == Bits4096::MAX_SET_INDEX as u32 {
+                        panic!("Too many resources inserted");
+                    }
+                    let index = self.upper_bounds;
+                    self.upper_bounds += 1;
+                    self.updates.push(descriptor.clone());
+                    entry.insert(index);
+                    index
+                }
+                Some(idx) => *entry.insert(idx as u32),
+            },
+        }
+    }
+
+    pub fn remove(&mut self, descriptor: T::Descriptor) -> bool
+    where
+        T::Descriptor: Hash + Eq,
+    {
+        match self.indices.remove(&descriptor) {
+            None => false,
+            Some(idx) => {
+                let index = idx as usize;
+
+                self.unused.set(index);
+
+                while self.upper_bounds > 0 && self.unused.test(self.upper_bounds as usize - 1) {
+                    self.unused.unset(self.upper_bounds as usize - 1);
+                    debug_assert!(self
+                        .unused
+                        .find_first_set(self.upper_bounds as usize - 1)
+                        .is_none());
+                    self.upper_bounds -= 1;
+                }
+
+                true
+            }
+        }
+    }
+
+    pub fn update(
+        &mut self,
+        device: &Device,
+    ) -> Result<&SparseDescriptorSet, DescriptorsAllocationError> {
         if self.set.is_none() {
             self.set = Some(SparseDescriptorSet {
                 raw: device
@@ -148,73 +240,11 @@ where
 
         Ok(set)
     }
-
-    fn raw_layout(&self) -> &DescriptorSetLayout {
-        &self.layout
-    }
 }
 
-impl<T> SparseDescriptorsInstance<T>
-where
-    T: Descriptor,
-{
-    /// Returns new empty instance of `SparseDescriptorsInstance`.
-    pub fn new(cap: u32, layout: DescriptorSetLayout) -> Self {
-        SparseDescriptorsInstance {
-            layout,
-            set: None,
-            upper_bounds: 0,
-            indices: HashMap::new(),
-            unused: Bits4096::empty(),
-            updates: Vec::with_capacity(cap as usize),
-        }
-    }
-
-    /// Returns index for specified resource inside this array.
-    /// Inserts resource if not in array yet.
-    ///
-    /// # Panics
-    ///
-    ///
-    pub fn get_or_insert(&mut self, descriptor: T::Descriptor) -> u32
-    where
-        T::Descriptor: Hash + Clone + Eq,
-    {
-        match self.indices.entry(descriptor.clone()) {
-            Entry::Occupied(entry) => *entry.get(),
-            Entry::Vacant(entry) => match self.unused.find_first_set(0) {
-                None => {
-                    if self.upper_bounds == Bits4096::MAX_SET_INDEX as u32 {
-                        panic!("Too many resources inserted");
-                    }
-                    self.updates.push(descriptor.clone());
-                    entry.insert(self.upper_bounds);
-                    self.upper_bounds += 1;
-                    self.upper_bounds - 1
-                }
-                Some(idx) => *entry.insert(idx as u32),
-            },
-        }
-    }
-
-    pub fn remove(&mut self, descriptor: T::Descriptor) -> bool
-    where
-        T::Descriptor: Hash + Eq,
-    {
-        match self.indices.get(&descriptor) {
-            None => false,
-            Some(idx) => {
-                if *idx == self.upper_bounds {
-                    self.upper_bounds -= 1;
-
-                    while self.upper_bounds > 0 && self.unused.test(self.upper_bounds - 1) {
-                        self.unused.set(self.upper_bounds - 1, false);
-                        debug_assert!(self.unused.find_set(self.upper_bounds - 1).is_none());
-                        self.upper_bounds -= 1;
-                    }
-                }
-                true
-            }
-        }
-    }
+#[macro_export]
+macro_rules! sparse_descriptors {
+    (sampled image, $cap:expr, $($stages:tt)*) => {
+        $crate::SparseDescriptors<$crate::ImageDescriptor<$crate::Sampled, $crate::ShaderReadOnlyOptimal>, $cap, {$crate::shader_stages!($($stages)*)}>
+    };
 }
