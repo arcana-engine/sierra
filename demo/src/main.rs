@@ -55,10 +55,7 @@ fn main() -> eyre::Result<()> {
         .ok_or_else(|| eyre::eyre!("Failed to find physical device"))?;
 
     let (device, mut queue) = physical.create_device(
-        &[
-            sierra::Feature::SurfacePresentation,
-            sierra::Feature::DisplayTiming,
-        ],
+        &[sierra::Feature::SurfacePresentation],
         sierra::SingleQueueQuery::GRAPHICS,
     )?;
 
@@ -100,15 +97,8 @@ fn fs_main() -> @location(0) vec4<f32> {
 
     let mut fences = [None, None, None];
     let mut fence_index = 0;
-    let non_optimal_limit = 100u32;
+    let non_optimal_limit = 10u32;
     let mut non_optimal_count = 0;
-
-    let target_fps = 1;
-    let target_duration = 1_000_000_000 / target_fps;
-
-    let mut last_presentation_time = 0;
-    let mut last_presentation_id = 0;
-    let mut next_presentation_id = 1;
 
     event_loop.run(move |event, _target, flow| {
         *flow = winit::event_loop::ControlFlow::Poll;
@@ -170,6 +160,9 @@ fn fs_main() -> @location(0) vec4<f32> {
                     None => fences[fence_index].get_or_insert(device.create_fence()?),
                 };
 
+                fence_index += 1;
+                fence_index %= fences.len();
+
                 queue.submit(
                     &mut [(sierra::PipelineStageFlags::TOP_OF_PIPE, wait)],
                     Some(encoder.finish()),
@@ -182,24 +175,12 @@ fn fs_main() -> @location(0) vec4<f32> {
                     non_optimal_count += 1;
                 }
 
-                let desired_present_time = match last_presentation_id {
-                    0 => 0,
-                    _ => {
-                        (next_presentation_id - last_presentation_id) as u64 * target_duration
-                            + last_presentation_time
-                    }
-                };
-
-                queue.present_with_timing(image, next_presentation_id, desired_present_time)?;
-                next_presentation_id = next_presentation_id.wrapping_add(1);
+                queue.present(image)?;
 
                 if non_optimal_count >= non_optimal_limit {
                     swapchain.update()?;
                     non_optimal_count = 0;
                 }
-
-                fence_index += 1;
-                fence_index %= fences.len();
 
                 scope.reset();
                 Ok(())
