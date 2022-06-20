@@ -23,9 +23,9 @@ use erupt::{
         khr_acceleration_structure as vkacc, khr_deferred_host_operations as vkdho,
         khr_ray_tracing_pipeline as vkrt, khr_swapchain as vksw,
     },
-    vk1_0, vk1_2, DeviceLoader, ExtendableFrom as _,
+    vk1_0, vk1_1, vk1_2, DeviceLoader, ExtendableFrom as _,
 };
-use gpu_alloc::{GpuAllocator, MemoryBlock};
+use gpu_alloc::{Dedicated, GpuAllocator, MemoryBlock};
 use gpu_alloc_erupt::EruptMemoryDevice;
 use gpu_descriptor::{DescriptorAllocator, DescriptorSetLayoutCreateFlags, DescriptorTotalCount};
 use gpu_descriptor_erupt::EruptDescriptorDevice;
@@ -85,6 +85,7 @@ use super::{
     epochs::Epochs,
     graphics::Graphics,
     physical::{Features, Properties},
+    resources::FenceState,
     unexpected_result,
 };
 
@@ -366,27 +367,61 @@ impl Device {
         .result()
         .map_err(oom_error_from_erupt)?;
 
-        let reqs = unsafe { self.inner.logical.get_buffer_memory_requirements(handle) };
+        let mut dedicated = vk1_1::MemoryDedicatedRequirementsBuilder::new();
+        let reqs = if self.graphics().instance.enabled().vk1_1 {
+            unsafe {
+                self.inner.logical.get_buffer_memory_requirements2(
+                    &vk1_1::BufferMemoryRequirementsInfo2Builder::new().buffer(handle),
+                    Some(
+                        vk1_1::MemoryRequirements2Builder::new()
+                            .extend_from(&mut dedicated)
+                            .build_dangling(),
+                    ),
+                )
+            }
+            .memory_requirements
+        } else {
+            unsafe { self.inner.logical.get_buffer_memory_requirements(handle) }
+        };
 
         debug_assert!(reqs.alignment.is_power_of_two());
 
-        let block = unsafe {
-            self.inner.allocator.lock().alloc(
-                EruptMemoryDevice::wrap(&self.inner.logical),
-                gpu_alloc::Request {
-                    size: reqs.size,
-                    align_mask: (reqs.alignment - 1) | info.align,
-                    memory_types: reqs.memory_type_bits,
-                    usage: buffer_memory_usage_to_gpu_alloc(info.usage, memory_usage),
-                },
-            )
-        }
-        .map_err(|err| {
-            unsafe { self.inner.logical.destroy_buffer(handle, None) }
+        let block = {
+            let device = EruptMemoryDevice::wrap(&self.inner.logical);
+            let request = gpu_alloc::Request {
+                size: reqs.size,
+                align_mask: (reqs.alignment - 1) | info.align,
+                memory_types: reqs.memory_type_bits,
+                usage: buffer_memory_usage_to_gpu_alloc(info.usage, memory_usage),
+            };
 
-            error!("{:#}", err);
-            OutOfMemory
-        })?;
+            let dedicated = if dedicated.requires_dedicated_allocation != 0 {
+                Some(Dedicated::Required)
+            } else if dedicated.prefers_dedicated_allocation != 0 {
+                Some(Dedicated::Preferred)
+            } else {
+                None
+            };
+
+            unsafe {
+                match dedicated {
+                    None => self.inner.allocator.lock().alloc(device, request),
+                    Some(dedicated) => self
+                        .inner
+                        .allocator
+                        .lock()
+                        .alloc_with_dedicated(device, request, dedicated),
+                }
+            }
+            .map_err(|err| {
+                unsafe {
+                    self.inner.logical.destroy_buffer(handle, None);
+                }
+
+                error!("{:#}", err);
+                OutOfMemory
+            })?
+        };
 
         let result = unsafe {
             self.inner
@@ -519,6 +554,293 @@ impl Device {
     pub(super) unsafe fn destroy_buffer_view(&self, index: usize) {
         let handle = self.inner.buffer_views.lock().remove(index);
         self.inner.logical.destroy_buffer_view(handle, None);
+    }
+
+    /// Creates image with uninitialized content.
+    #[cfg_attr(feature = "tracing", tracing::instrument)]
+    pub fn create_image(&self, info: ImageInfo) -> Result<Image, OutOfMemory> {
+        let handle = unsafe {
+            self.inner.logical.create_image(
+                &vk1_0::ImageCreateInfoBuilder::new()
+                    .image_type(info.extent.to_erupt())
+                    .format(info.format.to_erupt())
+                    .extent(info.extent.into_3d().to_erupt())
+                    .mip_levels(info.levels)
+                    .array_layers(info.layers)
+                    .samples(info.samples.to_erupt())
+                    .tiling(vk1_0::ImageTiling::OPTIMAL)
+                    .usage(info.usage.to_erupt())
+                    .sharing_mode(vk1_0::SharingMode::EXCLUSIVE)
+                    .initial_layout(vk1_0::ImageLayout::UNDEFINED),
+                None,
+            )
+        }
+        .result()
+        .map_err(oom_error_from_erupt)?;
+
+        let mut dedicated = vk1_1::MemoryDedicatedRequirementsBuilder::new();
+        let reqs = if self.graphics().instance.enabled().vk1_1 {
+            unsafe {
+                self.inner.logical.get_image_memory_requirements2(
+                    &vk1_1::ImageMemoryRequirementsInfo2Builder::new().image(handle),
+                    Some(
+                        vk1_1::MemoryRequirements2Builder::new()
+                            .extend_from(&mut dedicated)
+                            .build_dangling(),
+                    ),
+                )
+            }
+            .memory_requirements
+        } else {
+            unsafe { self.inner.logical.get_image_memory_requirements(handle) }
+        };
+
+        debug_assert!(reqs.alignment.is_power_of_two());
+
+        let block = {
+            let device = EruptMemoryDevice::wrap(&self.inner.logical);
+            let request = gpu_alloc::Request {
+                size: reqs.size,
+                align_mask: reqs.alignment - 1,
+                memory_types: reqs.memory_type_bits,
+                usage: gpu_alloc::UsageFlags::empty(),
+            };
+
+            let dedicated = if dedicated.requires_dedicated_allocation != 0 {
+                Some(Dedicated::Required)
+            } else if dedicated.prefers_dedicated_allocation != 0 {
+                Some(Dedicated::Preferred)
+            } else {
+                None
+            };
+
+            unsafe {
+                match dedicated {
+                    None => self.inner.allocator.lock().alloc(device, request),
+                    Some(dedicated) => self
+                        .inner
+                        .allocator
+                        .lock()
+                        .alloc_with_dedicated(device, request, dedicated),
+                }
+            }
+            .map_err(|err| {
+                unsafe {
+                    self.inner.logical.destroy_image(handle, None);
+                }
+
+                error!("{:#}", err);
+                OutOfMemory
+            })?
+        };
+
+        let result = unsafe {
+            self.inner
+                .logical
+                .bind_image_memory(handle, *block.memory(), block.offset())
+        }
+        .result();
+
+        match result {
+            Ok(()) => {
+                let index = self.inner.images.lock().insert(handle);
+
+                debug!("Image created {:p}", handle);
+                Ok(Image::new(info, self.downgrade(), handle, block, index))
+            }
+            Err(err) => {
+                unsafe {
+                    self.inner.logical.destroy_image(handle, None);
+                    self.inner
+                        .allocator
+                        .lock()
+                        .dealloc(EruptMemoryDevice::wrap(&self.inner.logical), block);
+                }
+
+                Err(oom_error_from_erupt(err))
+            }
+        }
+    }
+
+    pub(super) unsafe fn destroy_image(
+        &self,
+        index: usize,
+        block: MemoryBlock<vk1_0::DeviceMemory>,
+    ) {
+        self.inner
+            .allocator
+            .lock()
+            .dealloc(EruptMemoryDevice::wrap(self.logical()), block);
+
+        let handle = self.inner.images.lock().remove(index);
+        self.inner.logical.destroy_image(handle, None);
+    }
+
+    // /// Creates static image with preinitialized content from `data`.
+    // ///
+    // /// # Panics
+    // ///
+    // /// Function will panic if creating image size does not equal data size.
+    // #[cfg_attr(feature = "tracing", tracing::instrument(skip(data)))]
+    // pub fn create_image_static<T>(
+    //     &self,
+    //     info: ImageInfo,
+    //     data: &[T],
+    // ) -> Result<Image, OutOfMemory>
+    // where
+    //     T: Pod,
+    // {
+    //     assert!(info.memory.intersects(
+    //         MemoryUsage::HOST_ACCESS
+    //             | MemoryUsage::UPLOAD
+    //             | MemoryUsage::DOWNLOAD
+    //     ));
+
+    //     let image = unsafe {
+    //         self.inner.logical.create_image(
+    //             &vk1_0::ImageCreateInfoBuilder::new()
+    //                 .image_type(info.extent.to_erupt())
+    //                 .format(info.format.to_erupt())
+    //                 .extent(info.extent.into_3d().to_erupt())
+    //                 .mip_levels(info.levels)
+    //                 .array_layers(info.layers)
+    //                 .samples(info.samples.to_erupt())
+    //                 .tiling(vk1_0::ImageTiling::LINEAR)
+    //                 .usage(info.usage.to_erupt())
+    //                 .sharing_mode(vk1_0::SharingMode::EXCLUSIVE)
+    //                 .initial_layout(vk1_0::ImageLayout::UNDEFINED),
+    //             None,
+    //             None,
+    //         )
+    //     }
+    //     .result()
+    //     .map_err(oom_error_from_erupt)?;
+
+    //     let reqs = unsafe {
+    //         self.inner
+    //             .logical
+    //             .get_image_memory_requirements(image, None)
+    //     };
+
+    //     debug_assert!(arith_eq(reqs.size, data.len()));
+    //     debug_assert!(reqs.alignment.is_power_of_two());
+
+    //     let mut block = unsafe {
+    //         self.inner
+    //             .allocator
+    //             .lock()
+    //             .alloc(
+    //                 EruptMemoryDevice::wrap(&self.inner.logical),
+    //                 gpu_alloc::Request {
+    //                     size: reqs.size,
+    //                     align_mask: reqs.alignment - 1,
+    //                     memory_types: reqs.memory_type_bits,
+    //                     usage: image_memory_usage_to_gpu_alloc(info.usage),
+    //                 },
+    //             )
+    //             .map_err(|err| {
+    //                 self.inner.logical.destroy_image(image, None);
+    //                 error!("{:#}", err);
+    //                 OutOfMemory
+    //             })
+    //     }?;
+
+    //     let result = unsafe {
+    //         self.inner.logical.bind_image_memory(
+    //             image,
+    //             *block.memory(),
+    //             block.offset(),
+    //         )
+    //     }
+    //     .result();
+
+    //     if let Err(err) = result {
+    //         unsafe {
+    //             self.inner.logical.destroy_image(image, None);
+    //             self.inner.allocator.lock().dealloc(
+    //                 EruptMemoryDevice::wrap(&self.inner.logical),
+    //                 block,
+    //             );
+    //         }
+    //         return Err(oom_error_from_erupt(err).into());
+    //     }
+
+    //     unsafe {
+    //         match block.map(
+    //             EruptMemoryDevice::wrap(&self.inner.logical),
+    //             0,
+    //             size_of_val(data),
+    //         ) {
+    //             Ok(ptr) => {
+    //                 std::ptr::copy_nonoverlapping(
+    //                     data.as_ptr() as *const u8,
+    //                     ptr.as_ptr(),
+    //                     size_of_val(data),
+    //                 );
+
+    //                 block.unmap(EruptMemoryDevice::wrap(&self.inner.logical));
+    //             }
+    //             Err(gpu_alloc::MapError::OutOfDeviceMemory) => {
+    //                 return Err(OutOfMemory.into())
+    //             }
+    //             Err(gpu_alloc::MapError::OutOfHostMemory) => {
+    //                 out_of_host_memory()
+    //             }
+    //             Err(gpu_alloc::MapError::NonHostVisible)
+    //             | Err(gpu_alloc::MapError::AlreadyMapped) => unreachable!(),
+    //             Err(gpu_alloc::MapError::MapFailed) => panic!("Map failed"),
+    //         }
+    //     }
+
+    //     let index = self.inner.images.lock().insert(image);
+
+    //     Ok(Image::new(
+    //         info,
+    //         self.downgrade(),
+    //         image,
+    //         Some(block),
+    //         Some(index),
+    //     ))
+    // }
+
+    /// Creates view to an image.
+    #[cfg_attr(feature = "tracing", tracing::instrument)]
+    pub fn create_image_view(&self, info: ImageViewInfo) -> Result<ImageView, OutOfMemory> {
+        assert_owner!(info.image, self);
+
+        let image = &info.image;
+
+        let view = unsafe {
+            self.inner.logical.create_image_view(
+                &vk1_0::ImageViewCreateInfoBuilder::new()
+                    .image(image.handle())
+                    .format(info.image.info().format.to_erupt())
+                    .view_type(info.view_kind.to_erupt())
+                    .subresource_range(
+                        vk1_0::ImageSubresourceRangeBuilder::new()
+                            .aspect_mask(info.range.aspect.to_erupt())
+                            .base_mip_level(info.range.first_level)
+                            .level_count(info.range.level_count)
+                            .base_array_layer(info.range.first_layer)
+                            .layer_count(info.range.layer_count)
+                            .build(),
+                    )
+                    .components(info.mapping.to_erupt()),
+                None,
+            )
+        }
+        .result()
+        .map_err(oom_error_from_erupt)?;
+
+        let index = self.inner.image_views.lock().insert(view);
+
+        debug!("ImageView created {:p}", view);
+        Ok(ImageView::new(info, self.downgrade(), view, index))
+    }
+
+    pub(super) unsafe fn destroy_image_view(&self, index: usize) {
+        let handle = self.inner.image_views.lock().remove(index);
+        self.inner.logical.destroy_image_view(handle, None);
     }
 
     /// Returns handle to newly created [`Fence`].
@@ -983,262 +1305,6 @@ impl Device {
     pub(super) unsafe fn destroy_pipeline(&self, index: usize) {
         let handle = self.inner.pipelines.lock().remove(index);
         self.inner.logical.destroy_pipeline(handle, None);
-    }
-
-    /// Creates image with uninitialized content.
-    #[cfg_attr(feature = "tracing", tracing::instrument)]
-    pub fn create_image(&self, info: ImageInfo) -> Result<Image, OutOfMemory> {
-        let image = unsafe {
-            self.inner.logical.create_image(
-                &vk1_0::ImageCreateInfoBuilder::new()
-                    .image_type(info.extent.to_erupt())
-                    .format(info.format.to_erupt())
-                    .extent(info.extent.into_3d().to_erupt())
-                    .mip_levels(info.levels)
-                    .array_layers(info.layers)
-                    .samples(info.samples.to_erupt())
-                    .tiling(vk1_0::ImageTiling::OPTIMAL)
-                    .usage(info.usage.to_erupt())
-                    .sharing_mode(vk1_0::SharingMode::EXCLUSIVE)
-                    .initial_layout(vk1_0::ImageLayout::UNDEFINED),
-                None,
-            )
-        }
-        .result()
-        .map_err(oom_error_from_erupt)?;
-
-        let reqs = unsafe { self.inner.logical.get_image_memory_requirements(image) };
-
-        debug_assert!(reqs.alignment.is_power_of_two());
-
-        let block = unsafe {
-            self.inner
-                .allocator
-                .lock()
-                .alloc(
-                    EruptMemoryDevice::wrap(&self.inner.logical),
-                    gpu_alloc::Request {
-                        size: reqs.size,
-                        align_mask: reqs.alignment - 1,
-                        memory_types: reqs.memory_type_bits,
-                        usage: gpu_alloc::UsageFlags::empty(),
-                    },
-                )
-                .map_err(|err| {
-                    self.inner.logical.destroy_image(image, None);
-
-                    error!("{:#}", err);
-                    OutOfMemory
-                })
-        }?;
-
-        let result = unsafe {
-            self.inner
-                .logical
-                .bind_image_memory(image, *block.memory(), block.offset())
-        }
-        .result();
-
-        match result {
-            Ok(()) => {
-                let index = self.inner.images.lock().insert(image);
-
-                debug!("Image created {:p}", image);
-                Ok(Image::new(info, self.downgrade(), image, block, index))
-            }
-            Err(err) => {
-                unsafe {
-                    self.inner.logical.destroy_image(image, None);
-                    self.inner
-                        .allocator
-                        .lock()
-                        .dealloc(EruptMemoryDevice::wrap(&self.inner.logical), block);
-                }
-
-                Err(oom_error_from_erupt(err))
-            }
-        }
-    }
-
-    pub(super) unsafe fn destroy_image(
-        &self,
-        index: usize,
-        block: MemoryBlock<vk1_0::DeviceMemory>,
-    ) {
-        self.inner
-            .allocator
-            .lock()
-            .dealloc(EruptMemoryDevice::wrap(self.logical()), block);
-
-        let handle = self.inner.images.lock().remove(index);
-        self.inner.logical.destroy_image(handle, None);
-    }
-
-    // /// Creates static image with preinitialized content from `data`.
-    // ///
-    // /// # Panics
-    // ///
-    // /// Function will panic if creating image size does not equal data size.
-    // #[cfg_attr(feature = "tracing", tracing::instrument(skip(data)))]
-    // pub fn create_image_static<T>(
-    //     &self,
-    //     info: ImageInfo,
-    //     data: &[T],
-    // ) -> Result<Image, OutOfMemory>
-    // where
-    //     T: Pod,
-    // {
-    //     assert!(info.memory.intersects(
-    //         MemoryUsage::HOST_ACCESS
-    //             | MemoryUsage::UPLOAD
-    //             | MemoryUsage::DOWNLOAD
-    //     ));
-
-    //     let image = unsafe {
-    //         self.inner.logical.create_image(
-    //             &vk1_0::ImageCreateInfoBuilder::new()
-    //                 .image_type(info.extent.to_erupt())
-    //                 .format(info.format.to_erupt())
-    //                 .extent(info.extent.into_3d().to_erupt())
-    //                 .mip_levels(info.levels)
-    //                 .array_layers(info.layers)
-    //                 .samples(info.samples.to_erupt())
-    //                 .tiling(vk1_0::ImageTiling::LINEAR)
-    //                 .usage(info.usage.to_erupt())
-    //                 .sharing_mode(vk1_0::SharingMode::EXCLUSIVE)
-    //                 .initial_layout(vk1_0::ImageLayout::UNDEFINED),
-    //             None,
-    //             None,
-    //         )
-    //     }
-    //     .result()
-    //     .map_err(oom_error_from_erupt)?;
-
-    //     let reqs = unsafe {
-    //         self.inner
-    //             .logical
-    //             .get_image_memory_requirements(image, None)
-    //     };
-
-    //     debug_assert!(arith_eq(reqs.size, data.len()));
-    //     debug_assert!(reqs.alignment.is_power_of_two());
-
-    //     let mut block = unsafe {
-    //         self.inner
-    //             .allocator
-    //             .lock()
-    //             .alloc(
-    //                 EruptMemoryDevice::wrap(&self.inner.logical),
-    //                 gpu_alloc::Request {
-    //                     size: reqs.size,
-    //                     align_mask: reqs.alignment - 1,
-    //                     memory_types: reqs.memory_type_bits,
-    //                     usage: image_memory_usage_to_gpu_alloc(info.usage),
-    //                 },
-    //             )
-    //             .map_err(|err| {
-    //                 self.inner.logical.destroy_image(image, None);
-    //                 error!("{:#}", err);
-    //                 OutOfMemory
-    //             })
-    //     }?;
-
-    //     let result = unsafe {
-    //         self.inner.logical.bind_image_memory(
-    //             image,
-    //             *block.memory(),
-    //             block.offset(),
-    //         )
-    //     }
-    //     .result();
-
-    //     if let Err(err) = result {
-    //         unsafe {
-    //             self.inner.logical.destroy_image(image, None);
-    //             self.inner.allocator.lock().dealloc(
-    //                 EruptMemoryDevice::wrap(&self.inner.logical),
-    //                 block,
-    //             );
-    //         }
-    //         return Err(oom_error_from_erupt(err).into());
-    //     }
-
-    //     unsafe {
-    //         match block.map(
-    //             EruptMemoryDevice::wrap(&self.inner.logical),
-    //             0,
-    //             size_of_val(data),
-    //         ) {
-    //             Ok(ptr) => {
-    //                 std::ptr::copy_nonoverlapping(
-    //                     data.as_ptr() as *const u8,
-    //                     ptr.as_ptr(),
-    //                     size_of_val(data),
-    //                 );
-
-    //                 block.unmap(EruptMemoryDevice::wrap(&self.inner.logical));
-    //             }
-    //             Err(gpu_alloc::MapError::OutOfDeviceMemory) => {
-    //                 return Err(OutOfMemory.into())
-    //             }
-    //             Err(gpu_alloc::MapError::OutOfHostMemory) => {
-    //                 out_of_host_memory()
-    //             }
-    //             Err(gpu_alloc::MapError::NonHostVisible)
-    //             | Err(gpu_alloc::MapError::AlreadyMapped) => unreachable!(),
-    //             Err(gpu_alloc::MapError::MapFailed) => panic!("Map failed"),
-    //         }
-    //     }
-
-    //     let index = self.inner.images.lock().insert(image);
-
-    //     Ok(Image::new(
-    //         info,
-    //         self.downgrade(),
-    //         image,
-    //         Some(block),
-    //         Some(index),
-    //     ))
-    // }
-
-    /// Creates view to an image.
-    #[cfg_attr(feature = "tracing", tracing::instrument)]
-    pub fn create_image_view(&self, info: ImageViewInfo) -> Result<ImageView, OutOfMemory> {
-        assert_owner!(info.image, self);
-
-        let image = &info.image;
-
-        let view = unsafe {
-            self.inner.logical.create_image_view(
-                &vk1_0::ImageViewCreateInfoBuilder::new()
-                    .image(image.handle())
-                    .format(info.image.info().format.to_erupt())
-                    .view_type(info.view_kind.to_erupt())
-                    .subresource_range(
-                        vk1_0::ImageSubresourceRangeBuilder::new()
-                            .aspect_mask(info.range.aspect.to_erupt())
-                            .base_mip_level(info.range.first_level)
-                            .level_count(info.range.level_count)
-                            .base_array_layer(info.range.first_layer)
-                            .layer_count(info.range.layer_count)
-                            .build(),
-                    )
-                    .components(info.mapping.to_erupt()),
-                None,
-            )
-        }
-        .result()
-        .map_err(oom_error_from_erupt)?;
-
-        let index = self.inner.image_views.lock().insert(view);
-
-        debug!("ImageView created {:p}", view);
-        Ok(ImageView::new(info, self.downgrade(), view, index))
-    }
-
-    pub(super) unsafe fn destroy_image_view(&self, index: usize) {
-        let handle = self.inner.image_views.lock().remove(index);
-        self.inner.logical.destroy_image_view(handle, None);
     }
 
     /// Creates pipeline layout.
@@ -1707,8 +1773,17 @@ impl Device {
         }
 
         let handles = fences
-            .iter()
-            .map(|fence| fence.handle())
+            .iter_mut()
+            .map(|fence| {
+                if let FenceState::Armed { .. } = fence.state() {
+                    // Could be come signalled already.
+                    // User may be sure because they called device or queue wait idle method.
+                    if !self.is_fence_signalled(fence) {
+                        panic!("Fence must not be reset while associated submission is pending")
+                    }
+                }
+                fence.handle()
+            })
             .collect::<SmallVec<[_; 16]>>();
 
         match unsafe { self.inner.logical.reset_fences(&handles) }.result() {
@@ -1756,7 +1831,13 @@ impl Device {
 
         let handles = fences
             .iter()
-            .map(|fence| fence.handle())
+            .filter_map(|fence| match fence.state() {
+                FenceState::Signalled => None,
+                FenceState::Armed { .. } => Some(fence.handle()),
+                FenceState::UnSignalled => {
+                    panic!("Unsignalled fences must not be used in wait function")
+                }
+            })
             .collect::<SmallVec<[_; 16]>>();
 
         match unsafe { self.inner.logical.wait_for_fences(&handles, all, !0) }.result() {

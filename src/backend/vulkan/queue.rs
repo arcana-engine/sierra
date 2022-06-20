@@ -1,24 +1,31 @@
-use {
-    super::{
-        convert::{oom_error_from_erupt, ToErupt as _},
-        device::Device,
-        device_lost,
-        swapchain::SwapchainImage,
-        unexpected_result,
+use std::fmt;
+
+use arrayvec::ArrayVec;
+use erupt::{
+    extensions::{
+        google_display_timing::{PresentTimeGOOGLEBuilder, PresentTimesInfoGOOGLEBuilder},
+        khr_swapchain::PresentInfoKHRBuilder,
     },
-    crate::{
-        encode::{CommandBuffer, Encoder},
-        fence::Fence,
-        out_of_host_memory,
-        queue::*,
-        semaphore::Semaphore,
-        stage::PipelineStageFlags,
-        OutOfMemory,
-    },
-    arrayvec::ArrayVec,
-    erupt::{extensions::khr_swapchain::PresentInfoKHRBuilder, vk1_0},
-    scoped_arena::Scope,
-    std::fmt::{self, Debug},
+    vk1_0, ExtendableFrom,
+};
+use scoped_arena::Scope;
+
+use crate::{
+    encode::{CommandBuffer, Encoder},
+    fence::Fence,
+    out_of_host_memory,
+    queue::*,
+    semaphore::Semaphore,
+    stage::PipelineStageFlags,
+    OutOfMemory,
+};
+
+use super::{
+    convert::{oom_error_from_erupt, ToErupt as _},
+    device::Device,
+    device_lost,
+    swapchain::SwapchainImage,
+    unexpected_result,
 };
 
 pub struct Queue {
@@ -30,7 +37,7 @@ pub struct Queue {
     cbufs: Vec<CommandBuffer>,
 }
 
-impl Debug for Queue {
+impl fmt::Debug for Queue {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         if fmt.alternate() {
             fmt.debug_struct("Queue")
@@ -193,7 +200,29 @@ impl Queue {
     }
 
     #[cfg_attr(feature = "tracing", tracing::instrument)]
-    pub fn present(&mut self, mut image: SwapchainImage<'_>) -> Result<PresentOk, OutOfMemory> {
+    pub fn present(&mut self, image: SwapchainImage<'_>) -> Result<PresentOk, OutOfMemory> {
+        self.present_impl(image, None)
+    }
+
+    #[cfg_attr(feature = "tracing", tracing::instrument)]
+    pub fn present_with_timing(
+        &mut self,
+        image: SwapchainImage<'_>,
+        present_id: u32,
+        desired_present_time: u64,
+    ) -> Result<PresentOk, OutOfMemory> {
+        assert!(
+            self.device.logical().enabled().google_display_timing,
+            "`DisplayTiming` feature is not enabled"
+        );
+        self.present_impl(image, Some((present_id, desired_present_time)))
+    }
+
+    pub fn present_impl(
+        &mut self,
+        mut image: SwapchainImage<'_>,
+        timing: Option<(u32, u64)>,
+    ) -> Result<PresentOk, OutOfMemory> {
         assert_owner!(image, self.device);
 
         // FIXME: Check semaphore states.
@@ -211,10 +240,25 @@ impl Queue {
 
         let [_, signal] = image.wait_signal();
 
+        let mut info = PresentInfoKHRBuilder::new();
+
+        let mut present_times_info = PresentTimesInfoGOOGLEBuilder::new();
+        let mut present_time = PresentTimeGOOGLEBuilder::new();
+
+        if let Some((present_id, desired_present_time)) = timing {
+            present_time = present_time
+                .present_id(present_id)
+                .desired_present_time(desired_present_time);
+
+            present_times_info = present_times_info.times(std::slice::from_ref(&present_time));
+
+            info = info.extend_from(&mut present_times_info);
+        }
+
         let result = unsafe {
             self.device.logical().queue_present_khr(
                 self.handle,
-                &PresentInfoKHRBuilder::new()
+                &info
                     .wait_semaphores(&[signal.handle()])
                     .swapchains(&[image.handle()])
                     .image_indices(&[image.index()]),

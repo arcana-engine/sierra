@@ -736,7 +736,7 @@ impl Drop for Fence {
 }
 
 #[derive(Clone, Copy)]
-enum FenceState {
+pub(super) enum FenceState {
     /// Fence is not signalled and won't be signalled by any pending submissions.
     /// It must not be used in `Device::wait_for_fences` without timeout.
     UnSignalled,
@@ -869,6 +869,11 @@ impl Fence {
                 }
             }
         }
+    }
+
+    #[inline]
+    pub(super) fn state(&self) -> FenceState {
+        self.state
     }
 }
 

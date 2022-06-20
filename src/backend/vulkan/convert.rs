@@ -6,13 +6,13 @@ use crate::{
     Extent3d, Filter, Format, FrontFace, GeometryFlags, ImageBlit, ImageCopy, ImageExtent,
     ImageUsage, ImageViewKind, IndexType, Layout, LoadOp, LogicOp, MemoryUsage, MipmapMode,
     Offset2d, Offset3d, OutOfMemory, PipelineStageFlags, PolygonMode, PresentMode,
-    PrimitiveTopology, QueueCapabilityFlags, Rect2d, SamplerAddressMode, Samples, ShaderStage,
-    ShaderStageFlags, StencilOp, StoreOp, Subresource, SubresourceLayers, SubresourceRange,
-    SurfaceTransformFlags, Swizzle, VertexInputRate, Viewport,
+    PresentationTiming, PrimitiveTopology, QueueCapabilityFlags, Rect2d, SamplerAddressMode,
+    Samples, ShaderStage, ShaderStageFlags, StencilOp, StoreOp, Subresource, SubresourceLayers,
+    SubresourceRange, SurfaceTransformFlags, Swizzle, VertexInputRate, Viewport,
 };
 use erupt::{
     extensions::{
-        khr_acceleration_structure as vkacc,
+        google_display_timing as gdt, khr_acceleration_structure as vkacc,
         khr_surface::{CompositeAlphaFlagsKHR, PresentModeKHR, SurfaceTransformFlagsKHR},
     },
     vk1_0, vk1_2,
@@ -1549,6 +1549,18 @@ impl ToErupt<vk1_0::ComponentMapping> for ComponentMapping {
             g: self.g.to_erupt(),
             b: self.b.to_erupt(),
             a: self.a.to_erupt(),
+        }
+    }
+}
+
+impl FromErupt<gdt::PastPresentationTimingGOOGLE> for PresentationTiming {
+    fn from_erupt(value: gdt::PastPresentationTimingGOOGLE) -> Self {
+        PresentationTiming {
+            present_id: value.present_id,
+            desired_present_time: value.desired_present_time,
+            actual_present_time: value.actual_present_time,
+            earliest_present_time: value.earliest_present_time,
+            present_margin: value.present_margin,
         }
     }
 }

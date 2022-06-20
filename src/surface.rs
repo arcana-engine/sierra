@@ -1,4 +1,5 @@
 pub use crate::backend::Surface;
+use crate::DisplayTimingUnavailable;
 use {
     crate::{assert_error, format::Format, image::ImageUsage, Extent2d, OutOfMemory},
     raw_window_handle::RawWindowHandle,
@@ -42,6 +43,12 @@ pub enum SurfaceError {
 
     #[error("Swapchain not configured")]
     NotConfigured,
+
+    #[error(transparent)]
+    DisplayTimingUnavailable {
+        #[from]
+        source: DisplayTimingUnavailable,
+    },
 }
 
 #[allow(dead_code)]

@@ -1,16 +1,17 @@
-use {
-    super::unexpected_result,
-    crate::{
-        out_of_host_memory,
-        surface::{SurfaceError, SurfaceInfo},
-        OutOfMemory,
-    },
-    erupt::{extensions::khr_surface::SurfaceKHR, vk1_0},
-    std::{
-        fmt::Debug,
-        sync::atomic::{AtomicBool, Ordering},
-    },
+use std::{
+    fmt::Debug,
+    sync::atomic::{AtomicBool, Ordering},
 };
+
+use erupt::{extensions::khr_surface::SurfaceKHR, vk1_0};
+
+use crate::{
+    out_of_host_memory,
+    surface::{SurfaceError, SurfaceInfo},
+    OutOfMemory,
+};
+
+use super::{device_lost, unexpected_result};
 
 #[derive(Debug)]
 pub(crate) struct Inner {
@@ -73,6 +74,7 @@ pub(crate) fn surface_error_from_erupt(err: vk1_0::Result) -> SurfaceError {
         vk1_0::Result::ERROR_SURFACE_LOST_KHR => SurfaceError::SurfaceLost,
         vk1_0::Result::ERROR_NATIVE_WINDOW_IN_USE_KHR => SurfaceError::WindowIsInUse,
         vk1_0::Result::ERROR_INITIALIZATION_FAILED => SurfaceError::InitializationFailed,
+        vk1_0::Result::ERROR_DEVICE_LOST => device_lost(),
         _ => unexpected_result(err),
     }
 }

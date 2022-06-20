@@ -71,6 +71,8 @@ pub enum Feature {
     RuntimeDescriptorArray,
     ScalarBlockLayout,
     SurfacePresentation,
+
+    DisplayTiming,
 }
 
 #[allow(dead_code)]

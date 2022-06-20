@@ -1,25 +1,3 @@
-use super::{
-    convert::ToErupt as _,
-    device::{Device, WeakDevice},
-    physical::surface_capabilities,
-    surface::{surface_error_from_erupt, Surface},
-    unexpected_result,
-};
-use crate::{
-    format::Format,
-    image::{Image, ImageInfo, ImageUsage, Samples},
-    out_of_host_memory,
-    semaphore::Semaphore,
-    surface::{PresentMode, SurfaceCapabilities, SurfaceError},
-    OutOfMemory,
-};
-use erupt::{
-    extensions::{
-        khr_surface as vks,
-        khr_swapchain::{self as vksw, SwapchainKHR},
-    },
-    vk1_0,
-};
 use std::{
     collections::VecDeque,
     convert::TryInto as _,
@@ -30,6 +8,32 @@ use std::{
     },
 };
 
+use erupt::{
+    extensions::{
+        khr_surface as vks,
+        khr_swapchain::{self as vksw, SwapchainKHR},
+    },
+    vk1_0,
+};
+use smallvec::SmallVec;
+
+use crate::{
+    backend::vulkan::{convert::from_erupt, device_lost},
+    format::Format,
+    image::{Image, ImageInfo, ImageUsage, Samples},
+    out_of_host_memory,
+    semaphore::Semaphore,
+    surface::{PresentMode, SurfaceCapabilities, SurfaceError},
+    DisplayTimingUnavailable, OutOfMemory, PresentationTiming,
+};
+
+use super::{
+    convert::ToErupt as _,
+    device::{Device, WeakDevice},
+    physical::surface_capabilities,
+    surface::{surface_error_from_erupt, Surface},
+    unexpected_result,
+};
 static UID: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Debug)]
@@ -201,6 +205,11 @@ impl Swapchain {
     ) -> Result<(), SurfaceError> {
         let device = self.device.upgrade().ok_or(SurfaceError::SurfaceLost)?;
 
+        debug_assert!(
+            device.logical().enabled().khr_swapchain,
+            "Should be enabled given that there is a Swapchain"
+        );
+
         // TODO: Configurable count
         if self.retired.len() > 16 {
             // Too many swapchains accumulated.
@@ -210,21 +219,7 @@ impl Swapchain {
             device.wait_idle();
         }
 
-        'a: while let Some(mut inner) = self.retired.pop_front() {
-            while let Some(mut iws) = inner.images.pop() {
-                if let Err(image) = iws.image.try_dispose() {
-                    iws.image = image;
-                    inner.images.push(iws);
-                    break 'a;
-                }
-            }
-
-            debug!("Destroying retired swapchain. {} left", self.retired.len());
-            unsafe {
-                // This swapchain and its images are no longer in use.
-                device.destroy_swapchain(inner.index)
-            }
-        }
+        self.try_dispose_retired_swapchains(&device);
 
         assert!(
             self.retired.len() <= 16,
@@ -243,7 +238,7 @@ impl Swapchain {
         );
 
         let instance = &device.graphics().instance;
-        let logical = &device.logical();
+        let logical = device.logical();
 
         self.surface_capabilities = surface_capabilities(instance, device.physical(), surface)?;
         let caps = &self.surface_capabilities;
@@ -392,10 +387,12 @@ impl Swapchain {
     pub fn acquire_image(&mut self) -> Result<SwapchainImage<'_>, SurfaceError> {
         let device = self.device.upgrade().ok_or(SurfaceError::SurfaceLost)?;
 
-        assert!(
+        debug_assert!(
             device.logical().enabled().khr_swapchain,
             "Should be enabled given that there is a Swapchain"
         );
+
+        self.try_dispose_retired_swapchains(&device);
 
         let index = loop {
             let inner = self.inner.as_mut().ok_or(SurfaceError::NotConfigured)?;
@@ -473,5 +470,120 @@ impl Swapchain {
             index,
             optimal: inner.optimal,
         })
+    }
+
+    /// Returns refresh duration of the display associated with this swapchain.
+    /// Returned value is the number of nanoseconds from the start of one refresh cycle to the next.
+    pub fn get_refresh_cycle_duration(&self) -> Result<u64, SurfaceError> {
+        let device = self.device.upgrade().ok_or(SurfaceError::SurfaceLost)?;
+
+        debug_assert!(
+            device.logical().enabled().khr_swapchain,
+            "Should be enabled given that there is a Swapchain"
+        );
+
+        if !device.logical().enabled().google_display_timing {
+            return Err(DisplayTimingUnavailable.into());
+        }
+
+        let inner = self.inner.as_ref().ok_or(SurfaceError::NotConfigured)?;
+
+        let refresh_cycle_duration = unsafe {
+            device
+                .logical()
+                .get_refresh_cycle_duration_google(inner.handle)
+        }
+        .result()
+        .map_err(surface_error_from_erupt)?;
+
+        Ok(refresh_cycle_duration.refresh_duration)
+    }
+
+    pub fn get_past_presentation_timing(
+        &self,
+    ) -> Result<SmallVec<[PresentationTiming; 8]>, SurfaceError> {
+        let device = self.device.upgrade().ok_or(SurfaceError::SurfaceLost)?;
+
+        debug_assert!(
+            device.logical().enabled().khr_swapchain,
+            "Should be enabled given that there is a Swapchain"
+        );
+
+        if !device.logical().enabled().google_display_timing {
+            return Err(DisplayTimingUnavailable.into());
+        }
+
+        let inner = self.inner.as_ref().ok_or(SurfaceError::NotConfigured)?;
+
+        let f = device
+            .logical()
+            .get_past_presentation_timing_google
+            .unwrap();
+
+        let mut timings = SmallVec::<[_; 8]>::from_elem(Default::default(), 8);
+
+        let mut count = 8;
+        let mut result = unsafe {
+            f(
+                device.logical().handle,
+                inner.handle,
+                &mut count,
+                timings.as_mut_ptr(),
+            )
+        };
+
+        loop {
+            match result {
+                vk1_0::Result::INCOMPLETE => {
+                    timings.resize(count as usize, Default::default());
+
+                    result = unsafe {
+                        f(
+                            device.logical().handle,
+                            inner.handle,
+                            &mut count,
+                            timings.as_mut_ptr(),
+                        )
+                    };
+                }
+                _ => break,
+            }
+        }
+
+        match result {
+            vk1_0::Result::INCOMPLETE => unreachable!(),
+            vk1_0::Result::SUCCESS => {
+                let mut timings = timings
+                    .into_iter()
+                    .map(from_erupt)
+                    .collect::<SmallVec<[PresentationTiming; 8]>>();
+                timings.sort_by_key(|timing| timing.present_id);
+                Ok(timings)
+            }
+            vk1_0::Result::ERROR_OUT_OF_HOST_MEMORY => out_of_host_memory(),
+            vk1_0::Result::ERROR_DEVICE_LOST => device_lost(),
+            vk1_0::Result::ERROR_OUT_OF_DATE_KHR => Ok(SmallVec::new()),
+            vk1_0::Result::ERROR_SURFACE_LOST_KHR => Err(SurfaceError::SurfaceLost),
+            _ => unexpected_result(result),
+        }
+    }
+
+    fn try_dispose_retired_swapchains(&mut self, device: &Device) {
+        'a: while let Some(mut inner) = self.retired.pop_front() {
+            while let Some(mut iws) = inner.images.pop() {
+                if let Err(image) = iws.image.try_dispose() {
+                    iws.image = image;
+                    inner.images.push(iws);
+                    self.retired.push_front(inner);
+                    break 'a;
+                }
+            }
+
+            debug!("Destroying retired swapchain. {} left", self.retired.len());
+            unsafe {
+                // This swapchain and its images are no longer in use.
+                device.destroy_swapchain(inner.index)
+            }
+        }
     }
 }

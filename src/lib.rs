@@ -577,3 +577,11 @@ mod sealed {
     #[doc(hidden)]
     pub trait Sealed {}
 }
+
+/// Errors that may occur if display timing functionality is used
+/// but was not enabled.
+///
+/// See [`Feature::DisplayTiming`].
+#[derive(Clone, Copy, Debug, thiserror::Error, PartialEq, Eq)]
+#[error("DisplayTiming feature is not active")]
+pub struct DisplayTimingUnavailable;

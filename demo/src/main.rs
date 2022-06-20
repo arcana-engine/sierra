@@ -1,5 +1,3 @@
-use sierra::{ImageDescriptor, Sampled, ShaderReadOnlyOptimal, SparseDescriptors};
-
 #[derive(sierra::Descriptors)]
 struct Descriptors {
     #[sierra(buffer, vertex)]
@@ -57,7 +55,10 @@ fn main() -> eyre::Result<()> {
         .ok_or_else(|| eyre::eyre!("Failed to find physical device"))?;
 
     let (device, mut queue) = physical.create_device(
-        &[sierra::Feature::SurfacePresentation],
+        &[
+            sierra::Feature::SurfacePresentation,
+            sierra::Feature::DisplayTiming,
+        ],
         sierra::SingleQueueQuery::GRAPHICS,
     )?;
 
@@ -97,6 +98,18 @@ fn fs_main() -> @location(0) vec4<f32> {
             fragment_shader: Some(sierra::FragmentShader::new(shader_module, "fs_main")),
         ));
 
+    let mut fences = [None, None, None];
+    let mut fence_index = 0;
+    let non_optimal_limit = 100u32;
+    let mut non_optimal_count = 0;
+
+    let target_fps = 1;
+    let target_duration = 1_000_000_000 / target_fps;
+
+    let mut last_presentation_time = 0;
+    let mut last_presentation_id = 0;
+    let mut next_presentation_id = 1;
+
     event_loop.run(move |event, _target, flow| {
         *flow = winit::event_loop::ControlFlow::Poll;
 
@@ -109,7 +122,28 @@ fn fs_main() -> @location(0) vec4<f32> {
                 *flow = winit::event_loop::ControlFlow::Exit;
             }
 
+            winit::event::Event::MainEventsCleared => {
+                window.request_redraw();
+            }
+
             winit::event::Event::RedrawRequested(_) => (|| -> eyre::Result<()> {
+                if let Some(fence) = &mut fences[fence_index] {
+                    device.wait_fences(&mut [fence], true);
+                    device.reset_fences(&mut [fence]);
+                }
+
+                let timings = swapchain.get_past_presentation_timing()?;
+                for timing in timings {
+                    if timing.present_id > last_presentation_id {
+                        // if timing.present_id % 100 == 0 {
+                        println!("timing = {timing:?}");
+                        // }
+
+                        last_presentation_id = timing.present_id;
+                        last_presentation_time = timing.actual_present_time;
+                    }
+                }
+
                 let mut image = swapchain.acquire_image()?;
 
                 let mut encoder = queue.create_encoder(&scope)?;
@@ -131,21 +165,41 @@ fn fs_main() -> @location(0) vec4<f32> {
 
                 let [wait, signal] = image.wait_signal();
 
+                let fence = match &mut fences[fence_index] {
+                    Some(fence) => fence,
+                    None => fences[fence_index].get_or_insert(device.create_fence()?),
+                };
+
                 queue.submit(
                     &mut [(sierra::PipelineStageFlags::TOP_OF_PIPE, wait)],
                     Some(encoder.finish()),
                     &mut [signal],
-                    None,
+                    Some(fence),
                     &scope,
                 );
 
-                let optimal = image.is_optimal();
-
-                queue.present(image)?;
-
-                if !optimal {
-                    swapchain.update()?;
+                if !image.is_optimal() {
+                    non_optimal_count += 1;
                 }
+
+                let desired_present_time = match last_presentation_id {
+                    0 => 0,
+                    _ => {
+                        (next_presentation_id - last_presentation_id) as u64 * target_duration
+                            + last_presentation_time
+                    }
+                };
+
+                queue.present_with_timing(image, next_presentation_id, desired_present_time)?;
+                next_presentation_id = next_presentation_id.wrapping_add(1);
+
+                if non_optimal_count >= non_optimal_limit {
+                    swapchain.update()?;
+                    non_optimal_count = 0;
+                }
+
+                fence_index += 1;
+                fence_index %= fences.len();
 
                 scope.reset();
                 Ok(())

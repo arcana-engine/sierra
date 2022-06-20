@@ -4,6 +4,7 @@ use erupt::{
     extensions::{
         ext_descriptor_indexing::{self as edi, EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME},
         ext_scalar_block_layout::{self as sbl, EXT_SCALAR_BLOCK_LAYOUT_EXTENSION_NAME},
+        google_display_timing::GOOGLE_DISPLAY_TIMING_EXTENSION_NAME,
         // khr_16bit_storage::KHR_16BIT_STORAGE_EXTENSION_NAME,
         // khr_8bit_storage::KHR_8BIT_STORAGE_EXTENSION_NAME,
         khr_acceleration_structure::{self as acc, KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME},
@@ -426,6 +427,13 @@ impl PhysicalDevice {
                 .has_extension(unsafe { CStr::from_ptr(KHR_SWAPCHAIN_EXTENSION_NAME) })
         {
             features.push(Feature::SurfacePresentation);
+
+            if self
+                .properties
+                .has_extension(unsafe { CStr::from_ptr(GOOGLE_DISPLAY_TIMING_EXTENSION_NAME) })
+            {
+                features.push(Feature::DisplayTiming);
+            }
         }
 
         DeviceInfo {
@@ -962,6 +970,9 @@ impl PhysicalDevice {
             features2
                 .features
                 .shader_storage_buffer_array_dynamic_indexing = 1;
+        }
+        if requested_features.take(Feature::DisplayTiming) {
+            push_ext(GOOGLE_DISPLAY_TIMING_EXTENSION_NAME);
         }
 
         if !self.graphics().instance.enabled().vk1_1 {
