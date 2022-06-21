@@ -16,9 +16,15 @@ bitflags::bitflags! {
 
         /// Stage at which vertex shader is executed.
         const VERTEX_SHADER = 0x00000008;
-        // const TESSELLATION_CONTROL_SHADER = 0x00000010;
-        // const TESSELLATION_EVALUATION_SHADER = 0x00000020;
-        // const GEOMETRY_SHADER = 0x00000040;
+
+        /// Stage at which tessellation control shader is executed.
+        const TESSELLATION_CONTROL_SHADER = 0x00000010;
+
+        /// Stage at which tessellation evaluation shader is executed.
+        const TESSELLATION_EVALUATION_SHADER = 0x00000020;
+
+        /// Stage at which geometry shader is executed.
+        const GEOMETRY_SHADER = 0x00000040;
 
         /// Stage at which early fragment depth and stencil test is performed
         /// before fragment shader execution.

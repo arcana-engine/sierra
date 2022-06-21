@@ -132,6 +132,23 @@ pub(crate) struct Inner {
     epochs: Epochs,
 }
 
+impl Inner {
+    fn wait_idle(&self) {
+        let epochs = self.epochs.next_epoch_all_queues();
+        let result = unsafe { self.logical.device_wait_idle() }.result();
+
+        match result {
+            Ok(()) => {
+                for (queue, epoch) in epochs {
+                    self.epochs.close_epoch(queue, epoch);
+                }
+            }
+            Err(vk1_0::Result::ERROR_DEVICE_LOST) => device_lost(),
+            Err(result) => unexpected_result(result),
+        }
+    }
+}
+
 impl Debug for Inner {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         if fmt.alternate() {
@@ -147,6 +164,8 @@ impl Debug for Inner {
 
 impl Drop for Inner {
     fn drop(&mut self) {
+        self.wait_idle();
+
         unsafe {
             self.allocator
                 .get_mut()
@@ -1880,18 +1899,7 @@ impl Device {
     /// destruction.
     #[cfg_attr(feature = "tracing", tracing::instrument)]
     pub fn wait_idle(&self) {
-        let epochs = self.inner.epochs.next_epoch_all_queues();
-        let result = unsafe { self.inner.logical.device_wait_idle() }.result();
-
-        match result {
-            Ok(()) => {
-                for (queue, epoch) in epochs {
-                    self.inner.epochs.close_epoch(queue, epoch);
-                }
-            }
-            Err(vk1_0::Result::ERROR_DEVICE_LOST) => device_lost(),
-            Err(result) => unexpected_result(result),
-        }
+        self.inner.wait_idle()
     }
 
     /// Returns memory size requirements for accelelration structure build operations.

@@ -1,6 +1,6 @@
 use proc_easy::{private::Spanned, EasyAttributes};
 
-use crate::{kw, layout::StructLayout, stage::Stages};
+use crate::{kw, layout::StructLayout, shader_stage::ShaderStages};
 
 pub(super) struct Input {
     pub item_struct: syn::ItemStruct,
@@ -26,13 +26,13 @@ proc_easy::easy_attributes! {
     @(sierra)
     struct FieldAttrs {
         kind: KindAttr,
-        stages: Option<Stages>,
+        stages: Option<ShaderStages>,
     }
 }
 
 pub(super) struct PushConstants {
     pub field: syn::Field,
-    pub stages: Stages,
+    pub stages: ShaderStages,
     pub layout: StructLayout,
 }
 
@@ -63,7 +63,9 @@ pub(super) fn parse(item: proc_macro::TokenStream) -> syn::Result<Input> {
                 });
             }
             KindAttr::PushConstants(Push { layout, .. }) => {
-                let stages = attrs.stages.unwrap_or_else(|| Stages::new(field.span()));
+                let stages = attrs
+                    .stages
+                    .unwrap_or_else(|| ShaderStages::new(field.span()));
                 let layout = layout.unwrap_or_default();
 
                 push_constants.push(PushConstants {

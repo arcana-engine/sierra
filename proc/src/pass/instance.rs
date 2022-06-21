@@ -3,7 +3,7 @@ use std::convert::TryFrom;
 use proc_easy::ReferenceExpr;
 use proc_macro2::TokenStream;
 
-use super::parse::{Clear, Input, Load, LoadOp, Store, StoreOp};
+use super::parse::{Clear, Input, Load, LoadOp, Store, StoreOp, SubpassDependency};
 
 pub(super) fn generate(input: &Input) -> TokenStream {
     let vis = &input.item_struct.vis;
@@ -112,9 +112,11 @@ pub(super) fn generate(input: &Input) -> TokenStream {
             let push_colors = s
                 .colors
                 .iter()
-                .map(
-                    |&c| quote::quote!(colors.push((#c, ::sierra::Layout::ColorAttachmentOptimal));),
-                )
+                .map(|&c| {
+                    quote::quote! {
+                        colors.push((#c, ::sierra::Layout::ColorAttachmentOptimal));
+                    }
+                })
                 .collect::<TokenStream>();
 
             let color_count = s.colors.len();
@@ -145,6 +147,38 @@ pub(super) fn generate(input: &Input) -> TokenStream {
                     )
                 }
             }
+        })
+        .collect::<TokenStream>();
+
+    let push_subpass_dependencies = input
+        .dependencies
+        .iter()
+        .map(|s| {
+            let SubpassDependency {
+                src,
+                src_stages,
+                dst,
+                dst_stages,
+            } = s;
+
+            let src = match src {
+                None => quote::quote!(None),
+                Some(src) => quote::quote!(Some(#src)),
+            };
+
+            let dst = match dst {
+                None => quote::quote!(None),
+                Some(dst) => quote::quote!(Some(#dst)),
+            };
+
+            quote::quote!(
+                dependencies.push(::sierra::SubpassDependency {
+                    src: #src,
+                    src_stages: ::sierra::PipelineStageFlags::from_bits_truncate(#src_stages),
+                    dst: #dst,
+                    dst_stages: ::sierra::PipelineStageFlags::from_bits_truncate(#dst_stages),
+                });
+            )
         })
         .collect::<TokenStream>();
 
@@ -199,8 +233,7 @@ pub(super) fn generate(input: &Input) -> TokenStream {
         .collect::<TokenStream>();
 
     let subpass_count = input.subpasses.len();
-    // let dependency_count = input.dependencies.len();
-    let dependency_count = 0usize;
+    let dependency_count = input.dependencies.len();
 
     let clear_values = input
         .attachments
@@ -255,6 +288,7 @@ pub(super) fn generate(input: &Input) -> TokenStream {
                     #push_subpass_infos
 
                     let mut dependencies = ::std::vec::Vec::with_capacity(#dependency_count);
+                    #push_subpass_dependencies
 
                     let render_pass = self.render_pass.get_or_insert(::sierra::Device::create_render_pass(
                         device,

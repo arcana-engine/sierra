@@ -4,7 +4,7 @@ use proc_easy::EasyAttributes;
 use proc_macro2::TokenStream;
 use syn::spanned::Spanned;
 
-use crate::{flags::BindingFlags, kw, stage::Stages};
+use crate::{binding_flags::BindingFlags, kw, shader_stage::ShaderStages};
 
 use super::{
     acceleration_structure::AccelerationStructure,
@@ -22,7 +22,7 @@ pub(super) struct Input {
 }
 
 pub struct Descriptor {
-    pub stages: Stages,
+    pub stages: ShaderStages,
     pub flags: BindingFlags,
     pub desc_ty: DescriptorType,
     pub member: syn::Member,
@@ -42,7 +42,7 @@ impl Descriptor {
 }
 
 pub(super) struct UniformField {
-    pub stages: Stages,
+    pub stages: ShaderStages,
     pub field: syn::Field,
     pub member: syn::Member,
     pub uniform: Uniform,
@@ -165,7 +165,7 @@ proc_easy::easy_attributes! {
     @(sierra)
     struct FieldAttributes {
         kind: Kind,
-        stages: Stages,
+        stages: ShaderStages,
         flags: Option<BindingFlags>,
     }
 }

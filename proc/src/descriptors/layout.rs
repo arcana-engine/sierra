@@ -11,7 +11,7 @@ use super::{
     sampler::Sampler,
 };
 
-use crate::stage::combined_stages_flags;
+use crate::shader_stage::combined_shader_stage_flags;
 
 pub(super) fn layout_type_name(input: &Input) -> syn::Ident {
     quote::format_ident!("{}Layout", input.item_struct.ident)
@@ -34,7 +34,7 @@ pub(super) fn generate(input: &Input) -> Result<TokenStream, syn::Error> {
         .collect::<Result<Vec<_>, _>>()?;
 
     if !input.uniforms.is_empty() {
-        let stages = combined_stages_flags(
+        let stages = combined_shader_stage_flags(
             input
                 .uniforms
                 .iter()

@@ -35,6 +35,7 @@ struct PipelineInput {
 
 #[derive(sierra::Pass)]
 #[sierra(subpass(color = target))]
+#[sierra(dependency([external, color_attachment_output] => [0, color_attachment_output]))]
 pub struct Main {
     #[sierra(attachment(clear = const sierra::ClearColor(0.3, 0.1, 0.8, 1.0), store = const sierra::Layout::Present))]
     target: sierra::Image,
@@ -96,8 +97,9 @@ fn fs_main() -> @location(0) vec4<f32> {
         ));
 
     let mut fences = [None, None, None];
+    let fences_len = fences.len();
     let mut fence_index = 0;
-    let non_optimal_limit = 10u32;
+    let non_optimal_limit = 100u32;
     let mut non_optimal_count = 0;
 
     event_loop.run(move |event, _target, flow| {
@@ -120,18 +122,6 @@ fn fs_main() -> @location(0) vec4<f32> {
                 if let Some(fence) = &mut fences[fence_index] {
                     device.wait_fences(&mut [fence], true);
                     device.reset_fences(&mut [fence]);
-                }
-
-                let timings = swapchain.get_past_presentation_timing()?;
-                for timing in timings {
-                    if timing.present_id > last_presentation_id {
-                        // if timing.present_id % 100 == 0 {
-                        println!("timing = {timing:?}");
-                        // }
-
-                        last_presentation_id = timing.present_id;
-                        last_presentation_time = timing.actual_present_time;
-                    }
                 }
 
                 let mut image = swapchain.acquire_image()?;
@@ -159,12 +149,11 @@ fn fs_main() -> @location(0) vec4<f32> {
                     Some(fence) => fence,
                     None => fences[fence_index].get_or_insert(device.create_fence()?),
                 };
-
                 fence_index += 1;
-                fence_index %= fences.len();
+                fence_index %= fences_len;
 
                 queue.submit(
-                    &mut [(sierra::PipelineStageFlags::TOP_OF_PIPE, wait)],
+                    &mut [(sierra::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT, wait)],
                     Some(encoder.finish()),
                     &mut [signal],
                     Some(fence),

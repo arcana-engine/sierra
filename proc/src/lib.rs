@@ -2,15 +2,16 @@ use std::convert::TryFrom as _;
 
 extern crate proc_macro;
 
+mod binding_flags;
 mod descriptors;
-mod flags;
 mod format;
 mod graphics_pipeline;
 mod layout;
 mod pass;
 mod pipeline;
+mod pipeline_stages;
 mod repr;
-mod stage;
+mod shader_stage;
 mod swizzle;
 
 #[proc_macro_derive(Descriptors, attributes(sierra))]
@@ -40,12 +41,17 @@ pub fn graphics_pipeline_desc(item: proc_macro::TokenStream) -> proc_macro::Toke
 
 #[proc_macro]
 pub fn shader_stages(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    stage::shader_stages(tokens).into()
+    shader_stage::shader_stages(tokens).into()
 }
 
 #[proc_macro]
 pub fn binding_flags(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    flags::binding_flags(tokens).into()
+    binding_flags::binding_flags(tokens).into()
+}
+
+#[proc_macro]
+pub fn pipeline_stages(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    pipeline_stages::pipeline_stages(tokens).into()
 }
 
 #[proc_macro]
@@ -138,4 +144,25 @@ mod kw {
     proc_easy::easy_token!(push);
     proc_easy::easy_token!(layout);
     proc_easy::easy_token!(attachment);
+    proc_easy::easy_token!(top_of_pipe);
+    proc_easy::easy_token!(draw_indirect);
+    proc_easy::easy_token!(vertex_input);
+    proc_easy::easy_token!(vertex_shader);
+    proc_easy::easy_token!(tessellation_control_shader);
+    proc_easy::easy_token!(tessellation_evaluation_shader);
+    proc_easy::easy_token!(geometry_shader);
+    proc_easy::easy_token!(early_fragment_tests);
+    proc_easy::easy_token!(fragment_shader);
+    proc_easy::easy_token!(late_fragment_tests);
+    proc_easy::easy_token!(color_attachment_output);
+    proc_easy::easy_token!(compute_shader);
+    proc_easy::easy_token!(transfer);
+    proc_easy::easy_token!(bottom_of_pipe);
+    proc_easy::easy_token!(host);
+    proc_easy::easy_token!(all_graphics);
+    proc_easy::easy_token!(all_commands);
+    proc_easy::easy_token!(ray_tracing_shader);
+    proc_easy::easy_token!(acceleration_structure_build);
+    proc_easy::easy_token!(dependency);
+    proc_easy::easy_token!(external);
 }

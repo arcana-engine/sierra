@@ -280,7 +280,7 @@ impl Queue {
     }
 
     #[cfg_attr(feature = "tracing", tracing::instrument)]
-    pub fn wait_for_idle(&self) -> Result<(), OutOfMemory> {
+    pub fn wait_idle(&self) -> Result<(), OutOfMemory> {
         unsafe { self.device.logical().queue_wait_idle(self.handle) }
             .result()
             .map_err(queue_error)
