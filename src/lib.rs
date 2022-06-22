@@ -102,6 +102,7 @@ mod fence;
 mod format;
 mod framebuffer;
 // mod glsl;
+mod cache;
 mod image;
 mod memory;
 mod physical;
@@ -122,6 +123,7 @@ pub use self::{
     access::*,
     backend::{Device, Graphics},
     buffer::*,
+    cache::*,
     descriptor::*,
     encode::*,
     fence::*,
