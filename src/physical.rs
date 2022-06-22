@@ -73,6 +73,7 @@ pub enum Feature {
     SurfacePresentation,
 
     DisplayTiming,
+    DynamicRendering,
 }
 
 #[allow(dead_code)]

@@ -113,6 +113,36 @@ impl ImageViewInfo {
             mapping: ComponentMapping::default(),
         }
     }
+
+    pub fn is_whole_image(&self, image: &Image) -> bool {
+        let info = image.info();
+        if self.image != *image {
+            return false;
+        }
+
+        if self.range
+            != SubresourceRange::new(
+                self.image.info().format.aspect_flags(),
+                0..info.levels,
+                0..info.layers,
+            )
+        {
+            return false;
+        }
+
+        if self.mapping != ComponentMapping::default() {
+            return false;
+        }
+
+        match (info.extent, self.view_kind) {
+            (ImageExtent::D1 { .. }, ImageViewKind::D1) => {}
+            (ImageExtent::D2 { .. }, ImageViewKind::D2) => {}
+            (ImageExtent::D3 { .. }, ImageViewKind::D3) => {}
+            _ => return false,
+        }
+
+        true
+    }
 }
 
 #[doc(hidden)]

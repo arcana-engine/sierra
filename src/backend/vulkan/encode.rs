@@ -1,3 +1,5 @@
+use crate::{Format, RenderingAttachmentInfo};
+
 use {
     super::{
         access::supported_access,
@@ -16,7 +18,7 @@ use {
     },
     erupt::{
         extensions::{khr_acceleration_structure as vkacc, khr_ray_tracing_pipeline as vkrt},
-        vk1_0,
+        vk1_0, vk1_3,
     },
     scoped_arena::Scope,
     std::{
@@ -127,45 +129,15 @@ impl CommandBuffer {
                 let pass = &framebuffer.info().render_pass;
 
                 let mut clears = clears.iter();
-                let clear_values = scope.to_scope_from_iter(
-                    pass
-                        .info()
-                        .attachments
-                        .iter()
-                        .map(|attachment| {
-                            use Channels::*;
-
-                            if attachment.load_op == LoadOp::Clear {
-                                let clear = clears.next().expect("Not enough clear values");
-                                match *clear {
-                                    ClearValue::Color(r, g, b, a) => vk1_0::ClearValue {
-                                        color: match attachment.format.description() {
-                                            FormatDescription { channels: R|RG|RGB|RGBA|BGR|BGRA, bits, ty } => colors_f32_to_value(r, g, b, a, bits, ty),
-                                            _ => panic!("Attempt to clear depth-stencil attachment with color value"),
-                                        }
-                                    },
-                                    ClearValue::DepthStencil(depth, stencil) => {
-                                        assert!(
-                                            attachment.format.is_depth()
-                                                || attachment.format.is_stencil()
-                                        );
-                                        vk1_0::ClearValue {
-                                            depth_stencil: vk1_0::ClearDepthStencilValue {
-                                                depth,
-                                                stencil,
-                                            },
-                                        }
-                                    }
-                                }
-                            } else {
-                                vk1_0::ClearValue {
-                                    color: vk1_0::ClearColorValue {
-                                        uint32: [0; 4],
-                                    }
-                                }
-                            }
-                        })
-                    );
+                let clear_values =
+                    scope.to_scope_from_iter(pass.info().attachments.iter().map(|attachment| {
+                        if attachment.load_op == LoadOp::Clear {
+                            let clear = clears.next().expect("Not enough clear values");
+                            clear.to_erupt(attachment.format)
+                        } else {
+                            vk1_0::ClearValue::default()
+                        }
+                    }));
 
                 assert!(clears.next().is_none(), "Too many clear values");
 
@@ -782,6 +754,63 @@ impl CommandBuffer {
                 )
             },
             Command::Dispatch { x, y, z } => unsafe { logical.cmd_dispatch(self.handle, x, y, z) },
+
+            Command::BeginRendering { info } => {
+                assert_ne!(
+                    device.features().v13.dynamic_rendering,
+                    0,
+                    "DynamicRendering feature is not enabled"
+                );
+
+                let attachment_to_erupt = |attachment: &RenderingAttachmentInfo| {
+                    let clear_value = match attachment.load_op {
+                        LoadOp::Clear => match attachment.clear_value {
+                            None => vk1_0::ClearValue::default(),
+                            Some(clear_value) => clear_value
+                                .to_erupt(attachment.image_view.info().image.info().format),
+                        },
+                        _ => vk1_0::ClearValue::default(),
+                    };
+
+                    vk1_3::RenderingAttachmentInfoBuilder::new()
+                        .image_view(attachment.image_view.handle())
+                        .image_layout(attachment.image_layout.to_erupt())
+                        .load_op(attachment.load_op.to_erupt())
+                        .store_op(attachment.store_op.to_erupt())
+                        .clear_value(clear_value)
+                };
+
+                let mut builder =
+                    vk1_3::RenderingInfoBuilder::new().render_area(info.render_area.to_erupt());
+
+                let colors = scope.to_scope_from_iter(info.colors.iter().map(attachment_to_erupt));
+
+                builder = builder.color_attachments(&*colors);
+
+                let depth_attachment_info;
+                if let Some(depth) = &info.depth {
+                    depth_attachment_info = attachment_to_erupt(depth);
+                    builder = builder.depth_attachment(&depth_attachment_info);
+                }
+
+                let stencil_attachment_info;
+                if let Some(stencil) = &info.stencil {
+                    stencil_attachment_info = attachment_to_erupt(stencil);
+                    builder = builder.stencil_attachment(&stencil_attachment_info);
+                }
+
+                unsafe { logical.cmd_begin_rendering(self.handle, &builder) }
+            }
+
+            Command::EndRendering => {
+                assert_ne!(
+                    device.features().v13.dynamic_rendering,
+                    0,
+                    "DynamicRendering feature is not enabled"
+                );
+
+                unsafe { logical.cmd_end_rendering(self.handle) }
+            }
         }
     }
 
@@ -989,4 +1018,29 @@ fn strided_buffer_range_to_erupt(
         .stride(sbr.stride)
         .size(sbr.range.size)
         .build()
+}
+
+impl ClearValue {
+    fn to_erupt(self, format: Format) -> vk1_0::ClearValue {
+        use Channels::*;
+
+        match self {
+            ClearValue::Color(r, g, b, a) => vk1_0::ClearValue {
+                color: match format.description() {
+                    FormatDescription {
+                        channels: R | RG | RGB | RGBA | BGR | BGRA,
+                        bits,
+                        ty,
+                    } => colors_f32_to_value(r, g, b, a, bits, ty),
+                    _ => panic!("Attempt to clear depth-stencil attachment with color value"),
+                },
+            },
+            ClearValue::DepthStencil(depth, stencil) => {
+                assert!(format.is_depth() || format.is_stencil());
+                vk1_0::ClearValue {
+                    depth_stencil: vk1_0::ClearDepthStencilValue { depth, stencil },
+                }
+            }
+        }
+    }
 }

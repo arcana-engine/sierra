@@ -524,34 +524,6 @@ pub struct LayoutTransition<'a> {
     pub range: SubresourceRange,
 }
 
-impl<'a> LayoutTransition<'a> {
-    pub fn transition_whole(
-        image: &'a Image,
-        access: Range<AccessFlags>,
-        layout: Range<Layout>,
-    ) -> Self {
-        LayoutTransition {
-            range: SubresourceRange::whole(image.info()),
-            image,
-            old_access: access.start,
-            new_access: access.end,
-            old_layout: Some(layout.start),
-            new_layout: layout.end,
-        }
-    }
-
-    pub fn initialize_whole(image: &'a Image, access: AccessFlags, layout: Layout) -> Self {
-        LayoutTransition {
-            range: SubresourceRange::whole(image.info()),
-            image,
-            old_access: AccessFlags::empty(),
-            old_layout: None,
-            new_access: access,
-            new_layout: layout,
-        }
-    }
-}
-
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub struct ImageMemoryBarrier<'a> {
     pub image: &'a Image,
@@ -561,6 +533,36 @@ pub struct ImageMemoryBarrier<'a> {
     pub new_layout: Layout,
     pub family_transfer: Option<(u32, u32)>,
     pub range: SubresourceRange,
+}
+
+impl<'a> ImageMemoryBarrier<'a> {
+    pub fn transition_whole(
+        image: &'a Image,
+        access: Range<AccessFlags>,
+        layout: Range<Layout>,
+    ) -> Self {
+        ImageMemoryBarrier {
+            range: SubresourceRange::whole(image.info()),
+            image,
+            old_access: access.start,
+            new_access: access.end,
+            old_layout: Some(layout.start),
+            new_layout: layout.end,
+            family_transfer: None,
+        }
+    }
+
+    pub fn initialize_whole(image: &'a Image, access: AccessFlags, layout: Layout) -> Self {
+        ImageMemoryBarrier {
+            range: SubresourceRange::whole(image.info()),
+            image,
+            old_access: AccessFlags::empty(),
+            old_layout: None,
+            new_access: access,
+            new_layout: layout,
+            family_transfer: None,
+        }
+    }
 }
 
 impl<'a> From<LayoutTransition<'a>> for ImageMemoryBarrier<'a> {

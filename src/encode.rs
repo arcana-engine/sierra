@@ -25,8 +25,8 @@ use crate::{
     sampler::Filter,
     shader::ShaderStageFlags,
     stage::PipelineStageFlags,
-    BufferInfo, BufferUsage, Device, Extent3d, IndexType, Offset3d, OutOfMemory,
-    PipelinePushConstants, Rect2d,
+    BufferInfo, BufferUsage, Device, Extent3d, Format, IndexType, Offset3d, OutOfMemory,
+    PipelinePushConstants, Rect2d, RenderingAttachmentInfo, RenderingInfo,
 };
 
 pub use crate::backend::CommandBuffer;
@@ -196,6 +196,12 @@ pub enum Command<'a> {
         y: u32,
         z: u32,
     },
+
+    BeginRendering {
+        info: RenderingInfo<'a>,
+    },
+
+    EndRendering,
 }
 
 /// Basis for encoding capabilities.
@@ -504,6 +510,35 @@ impl<'a> Encoder<'a> {
         R: RenderPassInstance<Input = I>,
     {
         render_pass.begin_render_pass(input, device, self)
+    }
+
+    /// Begins rendering
+    pub fn begin_rendering(&mut self, info: RenderingInfo<'_>) -> RenderingEncoder<'_, 'a> {
+        assert!(self.inner.capabilities.supports_graphics());
+
+        let attachment_format =
+            |a: &RenderingAttachmentInfo| a.image_view.info().image.info().format;
+
+        let colors = &*self
+            .scope
+            .to_scope_from_iter(info.colors.iter().map(attachment_format));
+
+        let depth = info.depth.as_ref().map(attachment_format);
+        let stencil = info.stencil.as_ref().map(attachment_format);
+
+        let render_area = info.render_area;
+
+        self.inner
+            .command_buffer
+            .write(self.scope, Command::BeginRendering { info });
+
+        RenderingEncoder {
+            render_area,
+            colors,
+            depth,
+            stencil,
+            inner: &mut self.inner,
+        }
     }
 
     /// Updates a buffer's contents from host memory
@@ -947,7 +982,7 @@ impl<'a, 'b> RenderPassEncoder<'a, 'b> {
                 .set_viewport(self.framebuffer.info().extent.into());
         }
 
-        let gp = pipeline.get(self.render_pass, self.subpass, device)?;
+        let gp = pipeline.get_for_render_pass(self.render_pass, self.subpass, device)?;
         self.inner.bind_graphics_pipeline(gp);
         Ok(())
     }
@@ -970,6 +1005,98 @@ impl<'a, 'b> std::ops::Deref for RenderPassEncoder<'a, 'b> {
 }
 
 impl<'a, 'b> std::ops::DerefMut for RenderPassEncoder<'a, 'b> {
+    fn deref_mut(&mut self) -> &mut EncoderCommon<'b> {
+        self.inner
+    }
+}
+
+/// Command encoder that can encode commands inside render pass.
+pub struct RenderingEncoder<'a, 'b> {
+    render_area: Rect2d,
+    colors: &'b [Format],
+    depth: Option<Format>,
+    stencil: Option<Format>,
+    inner: &'a mut EncoderCommon<'b>,
+}
+
+impl<'a, 'b> fmt::Debug for RenderingEncoder<'a, 'b> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("RenderingEncoder")
+            .field("command_buffer", &self.inner.command_buffer)
+            .field("capabilities", &self.inner.capabilities)
+            .finish()
+    }
+}
+
+impl<'a, 'b> RenderingEncoder<'a, 'b> {
+    pub fn draw(&mut self, vertices: Range<u32>, instances: Range<u32>) {
+        self.inner.command_buffer.write(
+            self.scope,
+            Command::Draw {
+                vertices,
+                instances,
+            },
+        );
+    }
+
+    pub fn draw_indexed(&mut self, indices: Range<u32>, vertex_offset: i32, instances: Range<u32>) {
+        self.inner.command_buffer.write(
+            self.scope,
+            Command::DrawIndexed {
+                indices,
+                vertex_offset,
+                instances,
+            },
+        );
+    }
+
+    pub fn bind_dynamic_graphics_pipeline(
+        &mut self,
+        pipeline: &mut DynamicGraphicsPipeline,
+        device: &Device,
+    ) -> Result<(), OutOfMemory> {
+        assert!(self.capabilities.supports_graphics());
+
+        let mut set_viewport = false;
+        let mut set_scissor = false;
+
+        if let Some(rasterizer) = &pipeline.desc.rasterizer {
+            set_viewport = rasterizer.viewport.is_dynamic();
+            set_scissor = rasterizer.scissor.is_dynamic();
+        }
+
+        if set_scissor {
+            self.inner.set_scissor(self.render_area);
+        }
+
+        if set_viewport {
+            self.inner.set_viewport(self.render_area.into());
+        }
+
+        let gp =
+            pipeline.get_for_dynamic_rendering(&self.colors, self.depth, self.stencil, device)?;
+        self.inner.bind_graphics_pipeline(gp);
+        Ok(())
+    }
+}
+
+impl Drop for RenderingEncoder<'_, '_> {
+    fn drop(&mut self) {
+        self.inner
+            .command_buffer
+            .write(self.scope, Command::EndRendering);
+    }
+}
+
+impl<'a, 'b> std::ops::Deref for RenderingEncoder<'a, 'b> {
+    type Target = EncoderCommon<'b>;
+
+    fn deref(&self) -> &EncoderCommon<'b> {
+        self.inner
+    }
+}
+
+impl<'a, 'b> std::ops::DerefMut for RenderingEncoder<'a, 'b> {
     fn deref_mut(&mut self) -> &mut EncoderCommon<'b> {
         self.inner
     }

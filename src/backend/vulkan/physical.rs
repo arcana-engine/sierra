@@ -2,24 +2,22 @@ use std::{convert::TryInto as _, ffi::CStr, num::NonZeroU32, sync::Arc};
 
 use erupt::{
     extensions::{
-        ext_descriptor_indexing::{self as edi, EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME},
-        ext_scalar_block_layout::{self as sbl, EXT_SCALAR_BLOCK_LAYOUT_EXTENSION_NAME},
+        ext_descriptor_indexing::EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
+        ext_scalar_block_layout::EXT_SCALAR_BLOCK_LAYOUT_EXTENSION_NAME,
         google_display_timing::GOOGLE_DISPLAY_TIMING_EXTENSION_NAME,
         // khr_16bit_storage::KHR_16BIT_STORAGE_EXTENSION_NAME,
         // khr_8bit_storage::KHR_8BIT_STORAGE_EXTENSION_NAME,
         khr_acceleration_structure::{self as acc, KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME},
-        khr_buffer_device_address::{self as bda, KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME},
+        khr_buffer_device_address::KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME,
         khr_deferred_host_operations::KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
-        khr_get_physical_device_properties2::{
-            self as pdp, KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,
-        },
+        khr_dynamic_rendering::KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
         // khr_pipeline_library::KHR_PIPELINE_LIBRARY_EXTENSION_NAME,
         // khr_push_descriptor::KHR_PUSH_DESCRIPTOR_EXTENSION_NAME,
         khr_ray_tracing_pipeline::{self as rt, KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME},
         khr_surface as vks,
         khr_swapchain::KHR_SWAPCHAIN_EXTENSION_NAME,
     },
-    vk1_0, vk1_1, vk1_2, DeviceLoader, ExtendableFrom as _, LoaderError,
+    vk1_0, vk1_1, vk1_2, vk1_3, DeviceLoader, ExtendableFrom as _, LoaderError,
 };
 use hashbrown::HashMap;
 use smallvec::SmallVec;
@@ -38,17 +36,18 @@ use super::{
 };
 
 #[derive(Clone, Debug)]
-pub(crate) struct Properties {
-    pub(crate) extension: SmallVec<[vk1_0::ExtensionProperties; 8]>,
-    pub(crate) family: SmallVec<[vk1_0::QueueFamilyProperties; 8]>,
-    pub(crate) memory: vk1_0::PhysicalDeviceMemoryProperties,
+pub(super) struct Properties {
+    pub extension: SmallVec<[vk1_0::ExtensionProperties; 8]>,
+    pub family: SmallVec<[vk1_0::QueueFamilyProperties; 8]>,
+    pub memory: vk1_0::PhysicalDeviceMemoryProperties,
 
-    pub(crate) v10: vk1_0::PhysicalDeviceProperties,
-    pub(crate) v11: vk1_2::PhysicalDeviceVulkan11Properties,
-    pub(crate) v12: vk1_2::PhysicalDeviceVulkan12Properties,
-    pub(crate) edi: edi::PhysicalDeviceDescriptorIndexingPropertiesEXT,
-    pub(crate) acc: acc::PhysicalDeviceAccelerationStructurePropertiesKHR,
-    pub(crate) rt: rt::PhysicalDeviceRayTracingPipelinePropertiesKHR,
+    pub v10: vk1_0::PhysicalDeviceProperties,
+    pub v11: vk1_2::PhysicalDeviceVulkan11Properties,
+    pub v12: vk1_2::PhysicalDeviceVulkan12Properties,
+    pub v13: vk1_3::PhysicalDeviceVulkan13Properties,
+
+    pub acc: acc::PhysicalDeviceAccelerationStructurePropertiesKHR,
+    pub rt: rt::PhysicalDeviceRayTracingPipelinePropertiesKHR,
 }
 
 // Not auto-implemented because of raw pointer in fields.
@@ -57,15 +56,14 @@ unsafe impl Sync for Properties {}
 unsafe impl Send for Properties {}
 
 #[derive(Clone, Debug)]
-pub(crate) struct Features {
-    pub(crate) v10: vk1_0::PhysicalDeviceFeatures,
-    pub(crate) v11: vk1_2::PhysicalDeviceVulkan11Features,
-    pub(crate) v12: vk1_2::PhysicalDeviceVulkan12Features,
-    pub(crate) sbl: sbl::PhysicalDeviceScalarBlockLayoutFeaturesEXT,
-    pub(crate) edi: edi::PhysicalDeviceDescriptorIndexingFeaturesEXT,
-    pub(crate) bda: bda::PhysicalDeviceBufferDeviceAddressFeaturesKHR,
-    pub(crate) acc: acc::PhysicalDeviceAccelerationStructureFeaturesKHR,
-    pub(crate) rt: rt::PhysicalDeviceRayTracingPipelineFeaturesKHR,
+pub(super) struct Features {
+    pub v10: vk1_0::PhysicalDeviceFeatures,
+    pub v11: vk1_2::PhysicalDeviceVulkan11Features,
+    pub v12: vk1_2::PhysicalDeviceVulkan12Features,
+    pub v13: vk1_3::PhysicalDeviceVulkan13Features,
+
+    pub acc: acc::PhysicalDeviceAccelerationStructureFeaturesKHR,
+    pub rt: rt::PhysicalDeviceRayTracingPipelineFeaturesKHR,
 }
 
 // Not auto-implemented because of raw pointer in fields.
@@ -93,23 +91,30 @@ unsafe fn collect_properties_and_features(
     let properties10;
     let mut properties11 = vk1_2::PhysicalDeviceVulkan11PropertiesBuilder::new();
     let mut properties12 = vk1_2::PhysicalDeviceVulkan12PropertiesBuilder::new();
-    let mut properties_edi = edi::PhysicalDeviceDescriptorIndexingPropertiesEXTBuilder::new();
+    let mut properties13 = vk1_3::PhysicalDeviceVulkan13PropertiesBuilder::new();
+    let mut properties_edi = vk1_2::PhysicalDeviceDescriptorIndexingPropertiesBuilder::new();
     let mut properties_rt = rt::PhysicalDeviceRayTracingPipelinePropertiesKHRBuilder::new();
     let mut properties_acc = acc::PhysicalDeviceAccelerationStructurePropertiesKHRBuilder::new();
+
     let features10;
     let mut features11 = vk1_2::PhysicalDeviceVulkan11FeaturesBuilder::new();
     let mut features12 = vk1_2::PhysicalDeviceVulkan12FeaturesBuilder::new();
-    let mut features_sbl = sbl::PhysicalDeviceScalarBlockLayoutFeaturesEXTBuilder::new();
-    let mut features_edi = edi::PhysicalDeviceDescriptorIndexingFeaturesEXTBuilder::new();
-    let mut features_bda = bda::PhysicalDeviceBufferDeviceAddressFeaturesKHRBuilder::new();
+    let mut features13 = vk1_3::PhysicalDeviceVulkan13FeaturesBuilder::new();
+    let mut features_sbl = vk1_2::PhysicalDeviceScalarBlockLayoutFeaturesBuilder::new();
+    let mut features_edi = vk1_2::PhysicalDeviceDescriptorIndexingFeaturesBuilder::new();
+    let mut features_bda = vk1_2::PhysicalDeviceBufferDeviceAddressFeaturesBuilder::new();
     let mut features_acc = acc::PhysicalDeviceAccelerationStructureFeaturesKHRBuilder::new();
     let mut features_rt = rt::PhysicalDeviceRayTracingPipelineFeaturesKHRBuilder::new();
+    let mut features_dr = vk1_3::PhysicalDeviceDynamicRenderingFeaturesBuilder::new();
 
     if graphics.instance.enabled().vk1_1
-        || has_extension(KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)
+        || graphics
+            .instance
+            .enabled()
+            .khr_get_physical_device_properties2
     {
-        let mut properties2 = pdp::PhysicalDeviceProperties2KHRBuilder::new();
-        let mut features2 = pdp::PhysicalDeviceFeatures2KHRBuilder::new();
+        let mut properties2 = vk1_1::PhysicalDeviceProperties2Builder::new();
+        let mut features2 = vk1_1::PhysicalDeviceFeatures2Builder::new();
 
         if graphics.instance.enabled().vk1_1 {
             properties2 = properties2.extend_from(&mut properties11);
@@ -121,17 +126,33 @@ unsafe fn collect_properties_and_features(
             features2 = features2.extend_from(&mut features12);
         }
 
-        if has_extension(EXT_SCALAR_BLOCK_LAYOUT_EXTENSION_NAME) {
+        if graphics.instance.enabled().vk1_3 {
+            properties2 = properties2.extend_from(&mut properties13);
+            features2 = features2.extend_from(&mut features13);
+        }
+
+        if !graphics.instance.enabled().vk1_2
+            || has_extension(EXT_SCALAR_BLOCK_LAYOUT_EXTENSION_NAME)
+        {
             features2 = features2.extend_from(&mut features_sbl);
         }
 
-        if has_extension(EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME) {
+        if !graphics.instance.enabled().vk1_2
+            || has_extension(EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME)
+        {
             features2 = features2.extend_from(&mut features_edi);
             properties2 = properties2.extend_from(&mut properties_edi);
         }
 
-        if has_extension(KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME) {
+        if !graphics.instance.enabled().vk1_2
+            || has_extension(KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME)
+        {
             features2 = features2.extend_from(&mut features_bda);
+        }
+
+        if !graphics.instance.enabled().vk1_3 || has_extension(KHR_DYNAMIC_RENDERING_EXTENSION_NAME)
+        {
+            features2 = features2.extend_from(&mut features_dr);
         }
 
         if has_extension(KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME) {
@@ -167,6 +188,111 @@ unsafe fn collect_properties_and_features(
         .instance
         .get_physical_device_memory_properties(physical);
 
+    if !graphics.instance.enabled().vk1_2 && has_extension(EXT_SCALAR_BLOCK_LAYOUT_EXTENSION_NAME) {
+        features12.scalar_block_layout = features_sbl.scalar_block_layout;
+    }
+
+    if !graphics.instance.enabled().vk1_2 && has_extension(EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME) {
+        properties12.max_update_after_bind_descriptors_in_all_pools =
+            properties_edi.max_update_after_bind_descriptors_in_all_pools;
+        properties12.shader_uniform_buffer_array_non_uniform_indexing_native =
+            properties_edi.shader_uniform_buffer_array_non_uniform_indexing_native;
+        properties12.shader_sampled_image_array_non_uniform_indexing_native =
+            properties_edi.shader_sampled_image_array_non_uniform_indexing_native;
+        properties12.shader_storage_buffer_array_non_uniform_indexing_native =
+            properties_edi.shader_storage_buffer_array_non_uniform_indexing_native;
+        properties12.shader_storage_image_array_non_uniform_indexing_native =
+            properties_edi.shader_storage_image_array_non_uniform_indexing_native;
+        properties12.shader_input_attachment_array_non_uniform_indexing_native =
+            properties_edi.shader_input_attachment_array_non_uniform_indexing_native;
+        properties12.robust_buffer_access_update_after_bind =
+            properties_edi.robust_buffer_access_update_after_bind;
+        properties12.quad_divergent_implicit_lod = properties_edi.quad_divergent_implicit_lod;
+        properties12.max_per_stage_descriptor_update_after_bind_samplers =
+            properties_edi.max_per_stage_descriptor_update_after_bind_samplers;
+        properties12.max_per_stage_descriptor_update_after_bind_uniform_buffers =
+            properties_edi.max_per_stage_descriptor_update_after_bind_uniform_buffers;
+        properties12.max_per_stage_descriptor_update_after_bind_storage_buffers =
+            properties_edi.max_per_stage_descriptor_update_after_bind_storage_buffers;
+        properties12.max_per_stage_descriptor_update_after_bind_sampled_images =
+            properties_edi.max_per_stage_descriptor_update_after_bind_sampled_images;
+        properties12.max_per_stage_descriptor_update_after_bind_storage_images =
+            properties_edi.max_per_stage_descriptor_update_after_bind_storage_images;
+        properties12.max_per_stage_descriptor_update_after_bind_input_attachments =
+            properties_edi.max_per_stage_descriptor_update_after_bind_input_attachments;
+        properties12.max_per_stage_update_after_bind_resources =
+            properties_edi.max_per_stage_update_after_bind_resources;
+        properties12.max_descriptor_set_update_after_bind_samplers =
+            properties_edi.max_descriptor_set_update_after_bind_samplers;
+        properties12.max_descriptor_set_update_after_bind_uniform_buffers =
+            properties_edi.max_descriptor_set_update_after_bind_uniform_buffers;
+        properties12.max_descriptor_set_update_after_bind_uniform_buffers_dynamic =
+            properties_edi.max_descriptor_set_update_after_bind_uniform_buffers_dynamic;
+        properties12.max_descriptor_set_update_after_bind_storage_buffers =
+            properties_edi.max_descriptor_set_update_after_bind_storage_buffers;
+        properties12.max_descriptor_set_update_after_bind_storage_buffers_dynamic =
+            properties_edi.max_descriptor_set_update_after_bind_storage_buffers_dynamic;
+        properties12.max_descriptor_set_update_after_bind_sampled_images =
+            properties_edi.max_descriptor_set_update_after_bind_sampled_images;
+        properties12.max_descriptor_set_update_after_bind_storage_images =
+            properties_edi.max_descriptor_set_update_after_bind_storage_images;
+        properties12.max_descriptor_set_update_after_bind_input_attachments =
+            properties_edi.max_descriptor_set_update_after_bind_input_attachments;
+
+        features12.shader_input_attachment_array_dynamic_indexing =
+            features_edi.shader_input_attachment_array_dynamic_indexing;
+        features12.shader_uniform_texel_buffer_array_dynamic_indexing =
+            features_edi.shader_uniform_texel_buffer_array_dynamic_indexing;
+        features12.shader_storage_texel_buffer_array_dynamic_indexing =
+            features_edi.shader_storage_texel_buffer_array_dynamic_indexing;
+        features12.shader_uniform_buffer_array_non_uniform_indexing =
+            features_edi.shader_uniform_buffer_array_non_uniform_indexing;
+        features12.shader_sampled_image_array_non_uniform_indexing =
+            features_edi.shader_sampled_image_array_non_uniform_indexing;
+        features12.shader_storage_buffer_array_non_uniform_indexing =
+            features_edi.shader_storage_buffer_array_non_uniform_indexing;
+        features12.shader_storage_image_array_non_uniform_indexing =
+            features_edi.shader_storage_image_array_non_uniform_indexing;
+        features12.shader_input_attachment_array_non_uniform_indexing =
+            features_edi.shader_input_attachment_array_non_uniform_indexing;
+        features12.shader_uniform_texel_buffer_array_non_uniform_indexing =
+            features_edi.shader_uniform_texel_buffer_array_non_uniform_indexing;
+        features12.shader_storage_texel_buffer_array_non_uniform_indexing =
+            features_edi.shader_storage_texel_buffer_array_non_uniform_indexing;
+        features12.descriptor_binding_uniform_buffer_update_after_bind =
+            features_edi.descriptor_binding_uniform_buffer_update_after_bind;
+        features12.descriptor_binding_sampled_image_update_after_bind =
+            features_edi.descriptor_binding_sampled_image_update_after_bind;
+        features12.descriptor_binding_storage_image_update_after_bind =
+            features_edi.descriptor_binding_storage_image_update_after_bind;
+        features12.descriptor_binding_storage_buffer_update_after_bind =
+            features_edi.descriptor_binding_storage_buffer_update_after_bind;
+        features12.descriptor_binding_uniform_texel_buffer_update_after_bind =
+            features_edi.descriptor_binding_uniform_texel_buffer_update_after_bind;
+        features12.descriptor_binding_storage_texel_buffer_update_after_bind =
+            features_edi.descriptor_binding_storage_texel_buffer_update_after_bind;
+        features12.descriptor_binding_update_unused_while_pending =
+            features_edi.descriptor_binding_update_unused_while_pending;
+        features12.descriptor_binding_partially_bound =
+            features_edi.descriptor_binding_partially_bound;
+        features12.descriptor_binding_variable_descriptor_count =
+            features_edi.descriptor_binding_variable_descriptor_count;
+        features12.runtime_descriptor_array = features_edi.runtime_descriptor_array;
+    }
+
+    if !graphics.instance.enabled().vk1_2 && has_extension(KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME)
+    {
+        features12.buffer_device_address = features_bda.buffer_device_address;
+        features12.buffer_device_address_capture_replay =
+            features_bda.buffer_device_address_capture_replay;
+        features12.buffer_device_address_multi_device =
+            features_bda.buffer_device_address_multi_device;
+    }
+
+    if !graphics.instance.enabled().vk1_3 && has_extension(KHR_DYNAMIC_RENDERING_EXTENSION_NAME) {
+        features13.dynamic_rendering = features_dr.dynamic_rendering;
+    }
+
     let mut properties = Properties {
         extension: extension_properties,
         family: family_properties,
@@ -174,7 +300,7 @@ unsafe fn collect_properties_and_features(
         v10: properties10,
         v11: properties11.build_dangling(),
         v12: properties12.build_dangling(),
-        edi: properties_edi.build_dangling(),
+        v13: properties13.build_dangling(),
         acc: properties_acc.build_dangling(),
         rt: properties_rt.build_dangling(),
     };
@@ -183,23 +309,19 @@ unsafe fn collect_properties_and_features(
         v10: features10,
         v11: features11.build_dangling(),
         v12: features12.build_dangling(),
-        sbl: features_sbl.build_dangling(),
-        edi: features_edi.build_dangling(),
-        bda: features_bda.build_dangling(),
+        v13: features13.build_dangling(),
         acc: features_acc.build_dangling(),
         rt: features_rt.build_dangling(),
     };
 
     properties.v11.p_next = std::ptr::null_mut();
     properties.v12.p_next = std::ptr::null_mut();
-    properties.edi.p_next = std::ptr::null_mut();
+    properties.v13.p_next = std::ptr::null_mut();
     properties.acc.p_next = std::ptr::null_mut();
     properties.rt.p_next = std::ptr::null_mut();
     features.v11.p_next = std::ptr::null_mut();
     features.v12.p_next = std::ptr::null_mut();
-    features.sbl.p_next = std::ptr::null_mut();
-    features.edi.p_next = std::ptr::null_mut();
-    features.bda.p_next = std::ptr::null_mut();
+    features.v13.p_next = std::ptr::null_mut();
     features.acc.p_next = std::ptr::null_mut();
     features.rt.p_next = std::ptr::null_mut();
 
@@ -245,178 +367,89 @@ impl PhysicalDevice {
 
     /// Returns information about this device.
     pub fn info(&self) -> DeviceInfo {
-        let graphics = unsafe { Graphics::get_unchecked() };
         let mut features = Vec::new();
 
-        if self
-            .properties
-            .has_extension(unsafe { CStr::from_ptr(EXT_SCALAR_BLOCK_LAYOUT_EXTENSION_NAME) })
-        {
-            if self.features.sbl.scalar_block_layout > 0 {
-                features.push(Feature::ScalarBlockLayout);
-            }
-        } else if graphics.instance.enabled().vk1_2 && self.features.v12.scalar_block_layout > 0 {
+        if self.features.v12.scalar_block_layout > 0 {
             features.push(Feature::ScalarBlockLayout);
         }
 
-        if self
-            .properties
-            .has_extension(unsafe { CStr::from_ptr(EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME) })
-        {
-            if self.features.edi.runtime_descriptor_array > 0 {
-                features.push(Feature::RuntimeDescriptorArray);
-            }
-
-            if self
-                .features
-                .edi
-                .descriptor_binding_uniform_buffer_update_after_bind
-                > 0
-            {
-                features.push(Feature::DescriptorBindingUniformBufferUpdateAfterBind);
-            }
-            if self
-                .features
-                .edi
-                .descriptor_binding_sampled_image_update_after_bind
-                > 0
-            {
-                features.push(Feature::DescriptorBindingSampledImageUpdateAfterBind);
-            }
-            if self
-                .features
-                .edi
-                .descriptor_binding_storage_image_update_after_bind
-                > 0
-            {
-                features.push(Feature::DescriptorBindingStorageImageUpdateAfterBind);
-            }
-            if self
-                .features
-                .edi
-                .descriptor_binding_storage_buffer_update_after_bind
-                > 0
-            {
-                features.push(Feature::DescriptorBindingStorageBufferUpdateAfterBind);
-            }
-            if self
-                .features
-                .edi
-                .descriptor_binding_uniform_texel_buffer_update_after_bind
-                > 0
-            {
-                features.push(Feature::DescriptorBindingUniformTexelBufferUpdateAfterBind);
-            }
-            if self
-                .features
-                .edi
-                .descriptor_binding_storage_texel_buffer_update_after_bind
-                > 0
-            {
-                features.push(Feature::DescriptorBindingStorageTexelBufferUpdateAfterBind);
-            }
-            if self
-                .features
-                .edi
-                .descriptor_binding_update_unused_while_pending
-                > 0
-            {
-                features.push(Feature::DescriptorBindingUpdateUnusedWhilePending);
-            }
-            if self.features.edi.descriptor_binding_partially_bound > 0 {
-                features.push(Feature::DescriptorBindingPartiallyBound);
-            }
-        } else if graphics.instance.enabled().vk1_2 {
-            if self.features.v12.runtime_descriptor_array > 0 {
-                features.push(Feature::RuntimeDescriptorArray);
-            }
-
-            if self
-                .features
-                .v12
-                .descriptor_binding_uniform_buffer_update_after_bind
-                > 0
-            {
-                features.push(Feature::DescriptorBindingUniformBufferUpdateAfterBind);
-            }
-            if self
-                .features
-                .v12
-                .descriptor_binding_sampled_image_update_after_bind
-                > 0
-            {
-                features.push(Feature::DescriptorBindingSampledImageUpdateAfterBind);
-            }
-            if self
-                .features
-                .v12
-                .descriptor_binding_storage_image_update_after_bind
-                > 0
-            {
-                features.push(Feature::DescriptorBindingStorageImageUpdateAfterBind);
-            }
-            if self
-                .features
-                .v12
-                .descriptor_binding_storage_buffer_update_after_bind
-                > 0
-            {
-                features.push(Feature::DescriptorBindingStorageBufferUpdateAfterBind);
-            }
-            if self
-                .features
-                .v12
-                .descriptor_binding_uniform_texel_buffer_update_after_bind
-                > 0
-            {
-                features.push(Feature::DescriptorBindingUniformTexelBufferUpdateAfterBind);
-            }
-            if self
-                .features
-                .v12
-                .descriptor_binding_storage_texel_buffer_update_after_bind
-                > 0
-            {
-                features.push(Feature::DescriptorBindingStorageTexelBufferUpdateAfterBind);
-            }
-            if self
-                .features
-                .v12
-                .descriptor_binding_update_unused_while_pending
-                > 0
-            {
-                features.push(Feature::DescriptorBindingUpdateUnusedWhilePending);
-            }
-            if self.features.v12.descriptor_binding_partially_bound > 0 {
-                features.push(Feature::DescriptorBindingPartiallyBound);
-            }
+        if self.features.v12.runtime_descriptor_array > 0 {
+            features.push(Feature::RuntimeDescriptorArray);
         }
 
         if self
-            .properties
-            .has_extension(unsafe { CStr::from_ptr(KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME) })
+            .features
+            .v12
+            .descriptor_binding_uniform_buffer_update_after_bind
+            > 0
         {
-            if self.features.bda.buffer_device_address > 0 {
-                features.push(Feature::BufferDeviceAddress);
-            }
-        } else if graphics.instance.enabled().vk1_2 && self.features.v12.buffer_device_address > 0 {
+            features.push(Feature::DescriptorBindingUniformBufferUpdateAfterBind);
+        }
+        if self
+            .features
+            .v12
+            .descriptor_binding_sampled_image_update_after_bind
+            > 0
+        {
+            features.push(Feature::DescriptorBindingSampledImageUpdateAfterBind);
+        }
+        if self
+            .features
+            .v12
+            .descriptor_binding_storage_image_update_after_bind
+            > 0
+        {
+            features.push(Feature::DescriptorBindingStorageImageUpdateAfterBind);
+        }
+        if self
+            .features
+            .v12
+            .descriptor_binding_storage_buffer_update_after_bind
+            > 0
+        {
+            features.push(Feature::DescriptorBindingStorageBufferUpdateAfterBind);
+        }
+        if self
+            .features
+            .v12
+            .descriptor_binding_uniform_texel_buffer_update_after_bind
+            > 0
+        {
+            features.push(Feature::DescriptorBindingUniformTexelBufferUpdateAfterBind);
+        }
+        if self
+            .features
+            .v12
+            .descriptor_binding_storage_texel_buffer_update_after_bind
+            > 0
+        {
+            features.push(Feature::DescriptorBindingStorageTexelBufferUpdateAfterBind);
+        }
+        if self
+            .features
+            .v12
+            .descriptor_binding_update_unused_while_pending
+            > 0
+        {
+            features.push(Feature::DescriptorBindingUpdateUnusedWhilePending);
+        }
+        if self.features.v12.descriptor_binding_partially_bound > 0 {
+            features.push(Feature::DescriptorBindingPartiallyBound);
+        }
+        if self.features.v12.buffer_device_address > 0 {
             features.push(Feature::BufferDeviceAddress);
         }
 
-        if self
-            .properties
-            .has_extension(unsafe { CStr::from_ptr(KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME) })
-            && self.features.acc.acceleration_structure != 0
-        {
+        if self.features.v13.dynamic_rendering != 0 {
+            features.push(Feature::DynamicRendering);
+        }
+
+        if self.features.acc.acceleration_structure != 0 {
             assert!(features.contains(&Feature::BufferDeviceAddress));
             features.push(Feature::AccelerationStructure);
         }
 
-        if self
-            .properties
-            .has_extension(unsafe { CStr::from_ptr(KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME) })
-            && self.features.rt.ray_tracing_pipeline != 0
-        {
+        if self.features.rt.ray_tracing_pipeline != 0 {
             assert!(features.contains(&Feature::AccelerationStructure));
             features.push(Feature::RayTracingPipeline);
         }
@@ -563,19 +596,24 @@ impl PhysicalDevice {
         let mut features2 = vk1_1::PhysicalDeviceFeatures2Builder::new();
         let mut features11 = vk1_2::PhysicalDeviceVulkan11FeaturesBuilder::new();
         let mut features12 = vk1_2::PhysicalDeviceVulkan12FeaturesBuilder::new();
-        let mut features_sbl = sbl::PhysicalDeviceScalarBlockLayoutFeaturesEXTBuilder::new();
-        let mut features_edi = edi::PhysicalDeviceDescriptorIndexingFeaturesEXTBuilder::new();
-        let mut features_bda = bda::PhysicalDeviceBufferDeviceAddressFeaturesKHRBuilder::new();
+        let mut features13 = vk1_3::PhysicalDeviceVulkan13FeaturesBuilder::new();
+        let mut features_sbl = vk1_2::PhysicalDeviceScalarBlockLayoutFeaturesBuilder::new();
+        let mut features_edi = vk1_2::PhysicalDeviceDescriptorIndexingFeaturesBuilder::new();
+        let mut features_bda = vk1_2::PhysicalDeviceBufferDeviceAddressFeaturesBuilder::new();
         let mut features_acc = acc::PhysicalDeviceAccelerationStructureFeaturesKHRBuilder::new();
         let mut features_rt = rt::PhysicalDeviceRayTracingPipelineFeaturesKHRBuilder::new();
+        let mut features_dr = vk1_3::PhysicalDeviceDynamicRenderingFeaturesBuilder::new();
+
         let include_features11 = false;
         let mut include_features12 = false;
+        let mut include_features13 = false;
 
         let mut include_features_sbl = false;
         let mut include_features_edi = false;
         let mut include_features_bda = false;
         let mut include_features_acc = false;
         let mut include_features_rt = false;
+        let mut include_features_dr = false;
 
         // Enable requested extensions.
         let mut enable_exts = SmallVec::<[_; 10]>::new();
@@ -600,9 +638,8 @@ impl PhysicalDevice {
         if requested_features.take(Feature::ScalarBlockLayout) {
             if self.features.v12.scalar_block_layout > 0 {
                 features12.scalar_block_layout = 1;
-                include_features12 = true;
-            } else if self.features.sbl.scalar_block_layout > 0 {
                 features_sbl.scalar_block_layout = 1;
+                include_features12 = true;
                 include_features_sbl = true;
             } else {
                 panic!("Attempt to enable unsupported feature `ScalarBlockLayout`");
@@ -612,9 +649,8 @@ impl PhysicalDevice {
         if requested_features.take(Feature::BufferDeviceAddress) {
             if self.features.v12.buffer_device_address > 0 {
                 features12.buffer_device_address = 1;
-                include_features12 = true;
-            } else if self.features.bda.buffer_device_address > 0 {
                 features_bda.buffer_device_address = 1;
+                include_features12 = true;
                 include_features_bda = true;
             } else {
                 panic!("Attempt to enable unsupported feature `BufferDeviceAddress`");
@@ -649,22 +685,11 @@ impl PhysicalDevice {
             include_features_rt = true;
         }
 
-        if requested_features.take(Feature::ScalarBlockLayout) {
-            assert_ne!(
-                self.features.v12.scalar_block_layout, 0,
-                "Attempt to enable unsupported feature `ScalarBlockLayout`"
-            );
-
-            features12.scalar_block_layout = 1;
-            include_features12 = true;
-        }
-
         if requested_features.take(Feature::RuntimeDescriptorArray) {
             if self.features.v12.runtime_descriptor_array != 0 {
                 features12.runtime_descriptor_array = 1;
-                include_features12 = true;
-            } else if self.features.edi.runtime_descriptor_array != 0 {
                 features_edi.runtime_descriptor_array = 1;
+                include_features12 = true;
                 include_features_edi = true;
             } else {
                 panic!("Attempt to enable unsupported feature `RuntimeDescriptorArray`");
@@ -680,13 +705,6 @@ impl PhysicalDevice {
             {
                 features12.descriptor_binding_uniform_buffer_update_after_bind = 1;
                 include_features12 = true;
-            } else if self
-                .features
-                .edi
-                .descriptor_binding_sampled_image_update_after_bind
-                > 0
-            {
-                features_edi.descriptor_binding_uniform_buffer_update_after_bind = 1;
                 include_features_edi = true;
             } else {
                 panic!("Attempt to enable unsupported feature `DescriptorBindingUniformBufferUpdateAfterBind`")
@@ -700,14 +718,8 @@ impl PhysicalDevice {
                 > 0
             {
                 features12.descriptor_binding_sampled_image_update_after_bind = 1;
-                include_features12 = true;
-            } else if self
-                .features
-                .edi
-                .descriptor_binding_sampled_image_update_after_bind
-                > 0
-            {
                 features_edi.descriptor_binding_sampled_image_update_after_bind = 1;
+                include_features12 = true;
                 include_features_edi = true;
             } else {
                 panic!("Attempt to enable unsupported feature `DescriptorBindingSampledImageUpdateAfterBind`")
@@ -721,14 +733,8 @@ impl PhysicalDevice {
                 > 0
             {
                 features12.descriptor_binding_storage_image_update_after_bind = 1;
-                include_features12 = true;
-            } else if self
-                .features
-                .edi
-                .descriptor_binding_storage_image_update_after_bind
-                > 0
-            {
                 features_edi.descriptor_binding_storage_image_update_after_bind = 1;
+                include_features12 = true;
                 include_features_edi = true;
             } else {
                 panic!("Attempt to enable unsupported feature `DescriptorBindingStorageImageUpdateAfterBind`")
@@ -742,15 +748,9 @@ impl PhysicalDevice {
                 > 0
             {
                 features12.descriptor_binding_storage_buffer_update_after_bind = 1;
-                include_features12 = true;
-            } else if self
-                .features
-                .edi
-                .descriptor_binding_storage_buffer_update_after_bind
-                > 0
-            {
                 features_edi.descriptor_binding_storage_buffer_update_after_bind = 1;
                 include_features_edi = true;
+                include_features12 = true;
             } else {
                 panic!("Attempt to enable unsupported feature `DescriptorBindingStorageBufferUpdateAfterBind`")
             }
@@ -763,15 +763,9 @@ impl PhysicalDevice {
                 > 0
             {
                 features12.descriptor_binding_uniform_texel_buffer_update_after_bind = 1;
-                include_features12 = true;
-            } else if self
-                .features
-                .edi
-                .descriptor_binding_uniform_texel_buffer_update_after_bind
-                > 0
-            {
                 features_edi.descriptor_binding_uniform_texel_buffer_update_after_bind = 1;
                 include_features_edi = true;
+                include_features12 = true;
             } else {
                 panic!("Attempt to enable unsupported feature `DescriptorBindingUniformTexelBufferUpdateAfterBind`")
             }
@@ -784,15 +778,9 @@ impl PhysicalDevice {
                 > 0
             {
                 features12.descriptor_binding_storage_texel_buffer_update_after_bind = 1;
-                include_features12 = true;
-            } else if self
-                .features
-                .edi
-                .descriptor_binding_storage_texel_buffer_update_after_bind
-                > 0
-            {
                 features_edi.descriptor_binding_storage_texel_buffer_update_after_bind = 1;
                 include_features_edi = true;
+                include_features12 = true;
             } else {
                 panic!("Attempt to enable unsupported feature `DescriptorBindingStorageTexelBufferUpdateAfterBind`")
             }
@@ -805,26 +793,22 @@ impl PhysicalDevice {
                 > 0
             {
                 features12.descriptor_binding_update_unused_while_pending = 1;
-                include_features12 = true;
-            } else if self
-                .features
-                .edi
-                .descriptor_binding_update_unused_while_pending
-                > 0
-            {
                 features_edi.descriptor_binding_update_unused_while_pending = 1;
                 include_features_edi = true;
+                include_features12 = true;
             } else {
                 panic!("Attempt to enable unsupported feature `DescriptorBindingUpdateUnusedWhilePending`")
             }
         }
         if requested_features.take(Feature::DescriptorBindingPartiallyBound) {
-            assert_ne!(
-                self.features.v12.descriptor_binding_partially_bound, 0,
-                "Attempt to enable unsupported feature `DescriptorBindingPartiallyBound`"
-            );
-            features12.descriptor_binding_partially_bound = 1;
-            include_features12 = true;
+            if self.features.v12.descriptor_binding_partially_bound > 0 {
+                features12.descriptor_binding_partially_bound = 1;
+                features_edi.descriptor_binding_partially_bound = 1;
+                include_features_edi = true;
+                include_features12 = true;
+            } else {
+                panic!("Attempt to enable unsupported feature `DescriptorBindingPartiallyBound`")
+            }
         }
 
         if requested_features.take(Feature::ShaderSampledImageNonUniformIndexing) {
@@ -836,15 +820,9 @@ impl PhysicalDevice {
                 > 0
             {
                 features12.shader_sampled_image_array_non_uniform_indexing = 1;
-                include_features12 = true;
-            } else if self
-                .features
-                .edi
-                .shader_sampled_image_array_non_uniform_indexing
-                > 0
-            {
                 features_edi.shader_sampled_image_array_non_uniform_indexing = 1;
                 include_features_edi = true;
+                include_features12 = true;
             } else {
                 panic!(
                     "Attempt to enable unsupported feature `ShaderSampledImageNonUniformIndexing`"
@@ -872,15 +850,9 @@ impl PhysicalDevice {
                 > 0
             {
                 features12.shader_storage_image_array_non_uniform_indexing = 1;
-                include_features12 = true;
-            } else if self
-                .features
-                .edi
-                .shader_storage_image_array_non_uniform_indexing
-                > 0
-            {
                 features_edi.shader_storage_image_array_non_uniform_indexing = 1;
                 include_features_edi = true;
+                include_features12 = true;
             } else {
                 panic!(
                     "Attempt to enable unsupported feature `ShaderStorageImageNonUniformIndexing`"
@@ -908,15 +880,9 @@ impl PhysicalDevice {
                 > 0
             {
                 features12.shader_uniform_buffer_array_non_uniform_indexing = 1;
-                include_features12 = true;
-            } else if self
-                .features
-                .edi
-                .shader_uniform_buffer_array_non_uniform_indexing
-                > 0
-            {
                 features_edi.shader_uniform_buffer_array_non_uniform_indexing = 1;
                 include_features_edi = true;
+                include_features12 = true;
             } else {
                 panic!(
                     "Attempt to enable unsupported feature `ShaderUniformBufferNonUniformIndexing`"
@@ -944,14 +910,8 @@ impl PhysicalDevice {
                 > 0
             {
                 features12.shader_storage_buffer_array_non_uniform_indexing = 1;
-                include_features12 = true;
-            } else if self
-                .features
-                .edi
-                .shader_storage_buffer_array_non_uniform_indexing
-                > 0
-            {
                 features_edi.shader_storage_buffer_array_non_uniform_indexing = 1;
+                include_features12 = true;
                 include_features_edi = true;
             } else {
                 panic!(
@@ -974,55 +934,79 @@ impl PhysicalDevice {
         if requested_features.take(Feature::DisplayTiming) {
             push_ext(GOOGLE_DISPLAY_TIMING_EXTENSION_NAME);
         }
+        if requested_features.take(Feature::DynamicRendering) {
+            assert_ne!(
+                self.features.v13.dynamic_rendering, 0,
+                "Attempt to enable unsupported feature `DynamicRendering`"
+            );
+            features13.dynamic_rendering = 1;
+            features_dr.dynamic_rendering = 1;
+            include_features13 = true;
+            include_features_dr = true;
+        }
 
-        if !self.graphics().instance.enabled().vk1_1 {
-            device_create_info = device_create_info.enabled_features(&features2.features);
-            assert!(!include_features11);
-            assert!(!include_features12);
-            assert!(!include_features_rt);
+        device_create_info = device_create_info.enabled_features(&features2.features);
+
+        if self.graphics().instance.enabled().vk1_1 {
         } else {
-            if !self.graphics().instance.enabled().vk1_2 {
-                assert!(!include_features12);
-            } else {
-                // assert!(!include_features_edi);
-            }
+            assert!(!include_features11);
+            assert!(!include_features_rt);
+        }
+        if self.graphics().instance.enabled().vk1_2 {
+            include_features_sbl = false;
+            include_features_edi = false;
+            include_features_bda = false;
+        } else {
+            include_features12 = false;
+        }
+        if self.graphics().instance.enabled().vk1_3 {
+            include_features_dr = false;
+        } else {
+            include_features13 = false;
+        }
 
-            // Push structure to the list if at least one feature is enabled.
-            if include_features_sbl {
-                push_ext(EXT_SCALAR_BLOCK_LAYOUT_EXTENSION_NAME);
-                device_create_info = device_create_info.extend_from(&mut features_sbl);
-            }
+        // Push structure to the list if at least one feature is enabled.
+        if include_features_sbl {
+            push_ext(EXT_SCALAR_BLOCK_LAYOUT_EXTENSION_NAME);
+            device_create_info = device_create_info.extend_from(&mut features_sbl);
+        }
 
-            if include_features_edi {
-                push_ext(EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME);
-                device_create_info = device_create_info.extend_from(&mut features_edi);
-            }
+        if include_features_edi {
+            push_ext(EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME);
+            device_create_info = device_create_info.extend_from(&mut features_edi);
+        }
 
-            if include_features_bda {
-                push_ext(KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME);
-                device_create_info = device_create_info.extend_from(&mut features_bda);
-            }
+        if include_features_bda {
+            push_ext(KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME);
+            device_create_info = device_create_info.extend_from(&mut features_bda);
+        }
 
-            if include_features_acc {
-                push_ext(KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME);
-                push_ext(KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
-                device_create_info = device_create_info.extend_from(&mut features_acc);
-            }
+        if include_features_acc {
+            push_ext(KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME);
+            push_ext(KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
+            device_create_info = device_create_info.extend_from(&mut features_acc);
+        }
 
-            if include_features_rt {
-                push_ext(KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME);
-                device_create_info = device_create_info.extend_from(&mut features_rt);
-            }
+        if include_features_rt {
+            push_ext(KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME);
+            device_create_info = device_create_info.extend_from(&mut features_rt);
+        }
 
-            if include_features12 {
-                device_create_info = device_create_info.extend_from(&mut features12);
-            }
+        if include_features_dr {
+            push_ext(KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
+            device_create_info = device_create_info.extend_from(&mut features_dr);
+        }
 
-            if include_features11 {
-                device_create_info = device_create_info.extend_from(&mut features11);
-            }
+        if include_features13 {
+            device_create_info = device_create_info.extend_from(&mut features13);
+        }
 
-            device_create_info = device_create_info.extend_from(&mut features2);
+        if include_features12 {
+            device_create_info = device_create_info.extend_from(&mut features12);
+        }
+
+        if include_features11 {
+            device_create_info = device_create_info.extend_from(&mut features11);
         }
 
         device_create_info = device_create_info.enabled_extension_names(&enable_exts);
@@ -1061,9 +1045,7 @@ impl PhysicalDevice {
                 v10: features2.features,
                 v11: features11.build_dangling(),
                 v12: features12.build_dangling(),
-                sbl: features_sbl.build_dangling(),
-                edi: features_edi.build_dangling(),
-                bda: features_bda.build_dangling(),
+                v13: features13.build_dangling(),
                 acc: features_acc.build_dangling(),
                 rt: features_rt.build_dangling(),
             },

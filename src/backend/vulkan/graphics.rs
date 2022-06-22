@@ -201,7 +201,10 @@ impl Graphics {
             }
         };
 
-        push_ext(KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+        if vk1_0::api_version_major(version) >= 1 && vk1_0::api_version_major(version) >= 1 {
+        } else {
+            push_ext(KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+        }
 
         if cfg!(debug_assertions) {
             // Enable debug utils and report extensions in debug build.

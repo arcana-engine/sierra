@@ -71,10 +71,35 @@ impl Hash for Bounds {
     }
 }
 
+/// Defines rendering info for the pipeline creation.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum GraphicsPipelineRenderingInfo {
+    /// Rendering info for a graphics pipeline that will be used in render pass
+    RenderPass {
+        /// Render pass within which this pipeline will be executed.
+        render_pass: RenderPass,
+
+        /// Subpass of the render pass within which this pipeline will be executed.
+        subpass: u32,
+    },
+
+    /// Rendering info for a graphics pipeline that will be used in with dynamic rendering.
+    DynamicRendering {
+        /// Defines the format of color attachments used in this pipeline.
+        colors: Vec<Format>,
+
+        /// Defines the format of the depth attachment used in this pipeline.
+        depth: Option<Format>,
+
+        /// Defines the format of the stencil attachment used in this pipeline.
+        stencil: Option<Format>,
+    },
+}
+
 /// Graphics pipeline state definition.
 /// Fields are ordered to match pipeline stages, including fixed functions.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct GraphicsPipelineInfo {
+pub struct GraphicsPipelineDesc {
     /// For each vertex buffer specifies how it is bound.
     pub vertex_bindings: Vec<VertexInputBinding>,
 
@@ -98,12 +123,15 @@ pub struct GraphicsPipelineInfo {
 
     /// Pipeline layout.
     pub layout: PipelineLayout,
+}
 
-    /// Render pass within which this pipeline will be executed.
-    pub render_pass: RenderPass,
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct GraphicsPipelineInfo {
+    /// Pipeline description.
+    pub desc: GraphicsPipelineDesc,
 
-    /// Subpass of the render pass within which this pipeline will be executed.
-    pub subpass: u32,
+    /// Pipeline rendering info.
+    pub rendering: GraphicsPipelineRenderingInfo,
 }
 
 /// Vertex buffer binding bahavior.
@@ -227,6 +255,25 @@ pub struct Viewport {
 
     /// Viewport bounds along Z (depth) axis.
     pub z: Bounds,
+}
+
+impl From<Rect2d> for Viewport {
+    fn from(rect: Rect2d) -> Self {
+        Viewport {
+            x: Bounds {
+                offset: rect.offset.x as f32,
+                size: rect.extent.width as f32,
+            },
+            y: Bounds {
+                offset: rect.offset.y as f32,
+                size: rect.extent.height as f32,
+            },
+            z: Bounds {
+                offset: 0.0,
+                size: 1.0,
+            },
+        }
+    }
 }
 
 impl From<Extent2d> for Viewport {
@@ -886,17 +933,6 @@ bitflags::bitflags! {
 }
 
 #[derive(Debug)]
-pub struct GraphicsPipelineDesc {
-    pub vertex_shader: VertexShader,
-    pub layout: PipelineLayout,
-    pub vertex_bindings: Vec<VertexInputBinding>,
-    pub vertex_attributes: Vec<VertexInputAttribute>,
-    pub primitive_topology: PrimitiveTopology,
-    pub primitive_restart_enable: bool,
-    pub rasterizer: Option<Rasterizer>,
-}
-
-#[derive(Debug)]
 pub struct DynamicGraphicsPipeline {
     graphics_pipeline: Option<GraphicsPipeline>,
     pub desc: GraphicsPipelineDesc,
@@ -910,76 +946,103 @@ impl DynamicGraphicsPipeline {
         }
     }
 
-    pub fn get(
+    pub fn get_for_dynamic_rendering(
+        &mut self,
+        colors: &[Format],
+        depth: Option<Format>,
+        stencil: Option<Format>,
+        device: &Device,
+    ) -> Result<&GraphicsPipeline, OutOfMemory> {
+        if let Some(graphics_pipeline) = &mut self.graphics_pipeline {
+            let info = graphics_pipeline.info();
+
+            let compatible = match info.rendering {
+                GraphicsPipelineRenderingInfo::DynamicRendering {
+                    colors: ref current_colors,
+                    depth: current_depth,
+                    stencil: current_stencil,
+                } => {
+                    current_colors[..] != colors[..]
+                        || current_depth != depth
+                        || current_stencil != stencil
+                }
+                _ => false,
+            };
+
+            if !compatible || info.desc != self.desc {
+                self.graphics_pipeline = None;
+            }
+        }
+
+        let graphics_pipeline = match &mut self.graphics_pipeline {
+            Some(graphics_pipeline) => graphics_pipeline,
+            graphics_pipeline => graphics_pipeline.get_or_insert(device.create_graphics_pipeline(
+                desc_to_info_dynamic_rendering(&self.desc, colors, depth, stencil),
+            )?),
+        };
+
+        Ok(graphics_pipeline)
+    }
+
+    pub fn get_for_render_pass(
         &mut self,
         render_pass: &RenderPass,
         subpass: u32,
         device: &Device,
     ) -> Result<&GraphicsPipeline, OutOfMemory> {
-        match &mut self.graphics_pipeline {
-            Some(graphics_pipeline) => {
-                let mut compatible = true;
-                let info = graphics_pipeline.info();
+        if let Some(graphics_pipeline) = &mut self.graphics_pipeline {
+            let info = graphics_pipeline.info();
 
-                if info.render_pass != *render_pass {
-                    compatible = false;
-                }
-                if info.subpass != subpass {
-                    compatible = false;
-                }
-                if info.vertex_shader != self.desc.vertex_shader {
-                    compatible = false;
-                }
-                if info.primitive_topology != self.desc.primitive_topology {
-                    compatible = false;
-                }
-                if info.primitive_restart_enable != self.desc.primitive_restart_enable {
-                    compatible = false;
-                }
-                if info.layout != self.desc.layout {
-                    compatible = false;
-                }
-                if info.rasterizer != self.desc.rasterizer {
-                    compatible = false;
-                }
-                if info.vertex_bindings != self.desc.vertex_bindings {
-                    compatible = false;
-                }
-                if info.vertex_attributes != self.desc.vertex_attributes {
-                    compatible = false;
-                }
+            let compatible = match info.rendering {
+                GraphicsPipelineRenderingInfo::RenderPass {
+                    render_pass: ref current_render_pass,
+                    subpass: current_subpass,
+                } => *current_render_pass != *render_pass || current_subpass != subpass,
+                _ => false,
+            };
 
-                if !compatible {
-                    *graphics_pipeline = device.create_graphics_pipeline(desc_to_info(
-                        &self.desc,
-                        render_pass,
-                        subpass,
-                    ))?;
-                }
-
-                Ok(graphics_pipeline)
+            if !compatible || info.desc != self.desc {
+                self.graphics_pipeline = None;
             }
-            graphics_pipeline => Ok(graphics_pipeline.get_or_insert(
-                device.create_graphics_pipeline(desc_to_info(&self.desc, render_pass, subpass))?,
-            )),
         }
+
+        let graphics_pipeline = match &mut self.graphics_pipeline {
+            Some(graphics_pipeline) => graphics_pipeline,
+            graphics_pipeline => graphics_pipeline.get_or_insert(device.create_graphics_pipeline(
+                desc_to_info_render_pass(&self.desc, render_pass, subpass),
+            )?),
+        };
+
+        Ok(graphics_pipeline)
     }
 }
 
-fn desc_to_info(
+fn desc_to_info_render_pass(
     desc: &GraphicsPipelineDesc,
     render_pass: &RenderPass,
     subpass: u32,
 ) -> GraphicsPipelineInfo {
     GraphicsPipelineInfo {
-        vertex_bindings: desc.vertex_bindings.clone(),
-        vertex_attributes: desc.vertex_attributes.clone(),
-        primitive_topology: desc.primitive_topology,
-        primitive_restart_enable: desc.primitive_restart_enable,
-        vertex_shader: desc.vertex_shader.clone(),
-        rasterizer: desc.rasterizer.clone(),
-        layout: desc.layout.clone(),
-        render_pass: render_pass.clone(),
-        subpass,
+        desc: desc.clone(),
+        rendering: GraphicsPipelineRenderingInfo::RenderPass {
+            render_pass: render_pass.clone(),
+            subpass,
+        },
+    }
+}
+
+fn desc_to_info_dynamic_rendering(
+    desc: &GraphicsPipelineDesc,
+    colors: &[Format],
+    depth: Option<Format>,
+    stencil: Option<Format>,
+) -> GraphicsPipelineInfo {
+    GraphicsPipelineInfo {
+        desc: desc.clone(),
+        rendering: GraphicsPipelineRenderingInfo::DynamicRendering {
+            colors: colors.to_vec(),
+            depth,
+            stencil,
+        },
     }
 }

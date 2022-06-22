@@ -23,7 +23,7 @@ use erupt::{
         khr_acceleration_structure as vkacc, khr_deferred_host_operations as vkdho,
         khr_ray_tracing_pipeline as vkrt, khr_swapchain as vksw,
     },
-    vk1_0, vk1_1, vk1_2, DeviceLoader, ExtendableFrom as _,
+    vk1_0, vk1_1, vk1_2, vk1_3, DeviceLoader, ExtendableFrom as _,
 };
 use gpu_alloc::{Dedicated, GpuAllocator, MemoryBlock};
 use gpu_alloc_erupt::EruptMemoryDevice;
@@ -75,7 +75,7 @@ use crate::{
     surface::{Surface, SurfaceError},
     swapchain::Swapchain,
     view::{ImageView, ImageViewInfo, ImageViewKind},
-    DeviceAddress, IndexType, MapError, OutOfMemory,
+    DeviceAddress, GraphicsPipelineRenderingInfo, IndexType, MapError, OutOfMemory,
 };
 
 use super::{
@@ -276,6 +276,10 @@ impl Device {
         &self.inner.properties
     }
 
+    pub(super) fn features(&self) -> &Features {
+        &self.inner.features
+    }
+
     pub(super) fn epochs(&self) -> &Epochs {
         &self.inner.epochs
     }
@@ -292,7 +296,7 @@ impl Device {
             inner: Arc::new(Inner {
                 allocator: Mutex::new(GpuAllocator::new(
                     gpu_alloc::Config::i_am_prototyping(),
-                    memory_device_properties(&logical, &properties, &features),
+                    memory_device_properties(&properties, &features),
                 )),
 
                 descriptor_allocator: Mutex::new(DescriptorAllocator::new(
@@ -947,10 +951,55 @@ impl Device {
         &self,
         info: GraphicsPipelineInfo,
     ) -> Result<GraphicsPipeline, OutOfMemory> {
-        assert_owner!(info.layout, self);
-        assert_owner!(info.render_pass, self);
-        assert_owner!(info.vertex_shader.module(), self);
-        if let Some(fragment_shader) = info
+        let desc = &info.desc;
+
+        let color_attachments;
+
+        let mut dynamic_rendering_info;
+        let colors_count;
+
+        let mut builder = vk1_0::GraphicsPipelineCreateInfoBuilder::new();
+
+        match info.rendering {
+            GraphicsPipelineRenderingInfo::DynamicRendering {
+                ref colors,
+                depth,
+                stencil,
+            } => {
+                color_attachments = colors
+                    .iter()
+                    .map(|c| c.to_erupt())
+                    .collect::<SmallVec<[_; 16]>>();
+
+                dynamic_rendering_info = vk1_3::PipelineRenderingCreateInfoBuilder::new()
+                    .color_attachment_formats(&color_attachments)
+                    .depth_attachment_format(
+                        depth.map_or(vk1_0::Format::UNDEFINED, |f| f.to_erupt()),
+                    )
+                    .stencil_attachment_format(
+                        stencil.map_or(vk1_0::Format::UNDEFINED, |f| f.to_erupt()),
+                    );
+
+                colors_count = colors.len();
+
+                builder = builder.extend_from(&mut dynamic_rendering_info);
+            }
+            GraphicsPipelineRenderingInfo::RenderPass {
+                ref render_pass,
+                subpass,
+            } => {
+                assert_owner!(render_pass, self);
+                colors_count = render_pass.info().subpasses[usize::try_from(subpass).unwrap()]
+                    .colors
+                    .len();
+
+                builder = builder.render_pass(render_pass.handle()).subpass(subpass);
+            }
+        }
+
+        assert_owner!(desc.layout, self);
+        assert_owner!(desc.vertex_shader.module(), self);
+        if let Some(fragment_shader) = desc
             .rasterizer
             .as_ref()
             .and_then(|r| r.fragment_shader.as_ref())
@@ -961,7 +1010,7 @@ impl Device {
         let mut shader_stages = Vec::with_capacity(2);
         let mut dynamic_states = Vec::with_capacity(7);
 
-        let vertex_binding_descriptions = info
+        let vertex_binding_descriptions = desc
             .vertex_bindings
             .iter()
             .enumerate()
@@ -973,7 +1022,7 @@ impl Device {
             })
             .collect::<SmallVec<[_; 16]>>();
 
-        let vertex_attribute_descriptions = info
+        let vertex_attribute_descriptions = desc
             .vertex_attributes
             .iter()
             .map(|attr| {
@@ -989,18 +1038,18 @@ impl Device {
             .vertex_binding_descriptions(&vertex_binding_descriptions)
             .vertex_attribute_descriptions(&vertex_attribute_descriptions);
 
-        let vertex_shader_entry = entry_name_to_cstr(info.vertex_shader.entry());
+        let vertex_shader_entry = entry_name_to_cstr(desc.vertex_shader.entry());
 
         shader_stages.push(
             vk1_0::PipelineShaderStageCreateInfoBuilder::new()
                 .stage(vk1_0::ShaderStageFlagBits::VERTEX)
-                .module(info.vertex_shader.module().handle())
+                .module(desc.vertex_shader.module().handle())
                 .name(&*vertex_shader_entry),
         );
 
         let input_assembly_state = vk1_0::PipelineInputAssemblyStateCreateInfoBuilder::new()
-            .topology(info.primitive_topology.to_erupt())
-            .primitive_restart_enable(info.primitive_restart_enable);
+            .topology(desc.primitive_topology.to_erupt())
+            .primitive_restart_enable(desc.primitive_restart_enable);
 
         let rasterization_state;
 
@@ -1020,7 +1069,7 @@ impl Device {
 
         let fragment_shader_entry;
 
-        let with_rasterizer = if let Some(rasterizer) = &info.rasterizer {
+        let with_rasterizer = if let Some(rasterizer) = &desc.rasterizer {
             let mut builder = vk1_0::PipelineViewportStateCreateInfoBuilder::new();
 
             match &rasterizer.viewport {
@@ -1171,10 +1220,7 @@ impl Device {
                     constants,
                 } => {
                     builder = builder.logic_op_enable(false).attachments({
-                        attachments = (0..info.render_pass.info().subpasses
-                            [usize::try_from(info.subpass).unwrap()]
-                        .colors
-                        .len())
+                        attachments = (0..colors_count)
                             .map(|_| {
                                 if let Some(blending) = blending {
                                     vk1_0::PipelineColorBlendAttachmentStateBuilder::new()
@@ -1226,14 +1272,12 @@ impl Device {
             false
         };
 
-        let mut builder = vk1_0::GraphicsPipelineCreateInfoBuilder::new()
+        builder = builder
             .vertex_input_state(&vertex_input_state)
             .input_assembly_state(&input_assembly_state)
             .rasterization_state(&rasterization_state)
             .stages(&shader_stages)
-            .layout(info.layout.handle())
-            .render_pass(info.render_pass.handle())
-            .subpass(info.subpass);
+            .layout(desc.layout.handle());
 
         let pipeline_dynamic_state;
 
@@ -1568,35 +1612,19 @@ impl Device {
                 caps |= naga::valid::Capabilities::CULL_DISTANCE;
             }
 
-            if self.graphics().instance.enabled().vk1_2 {
-                let v12 = &inner.properties.v12;
-                if v12.shader_sampled_image_array_non_uniform_indexing_native != 0
-                    && v12.shader_storage_buffer_array_non_uniform_indexing_native != 0
-                {
-                    caps |= naga::valid::Capabilities::SAMPLED_TEXTURE_AND_STORAGE_BUFFER_ARRAY_NON_UNIFORM_INDEXING;
-                    caps |= naga::valid::Capabilities::SAMPLER_NON_UNIFORM_INDEXING;
-                };
+            let v12 = &inner.properties.v12;
+            if v12.shader_sampled_image_array_non_uniform_indexing_native != 0
+                && v12.shader_storage_buffer_array_non_uniform_indexing_native != 0
+            {
+                caps |= naga::valid::Capabilities::SAMPLED_TEXTURE_AND_STORAGE_BUFFER_ARRAY_NON_UNIFORM_INDEXING;
+                caps |= naga::valid::Capabilities::SAMPLER_NON_UNIFORM_INDEXING;
+            };
 
-                if v12.shader_uniform_buffer_array_non_uniform_indexing_native != 0
-                    && v12.shader_storage_image_array_non_uniform_indexing_native != 0
-                {
-                    caps |= naga::valid::Capabilities::UNIFORM_BUFFER_AND_STORAGE_TEXTURE_ARRAY_NON_UNIFORM_INDEXING;
-                };
-            } else {
-                let edi = &inner.properties.edi;
-                if edi.shader_sampled_image_array_non_uniform_indexing_native != 0
-                    && edi.shader_storage_buffer_array_non_uniform_indexing_native != 0
-                {
-                    caps |= naga::valid::Capabilities::SAMPLED_TEXTURE_AND_STORAGE_BUFFER_ARRAY_NON_UNIFORM_INDEXING;
-                    caps |= naga::valid::Capabilities::SAMPLER_NON_UNIFORM_INDEXING;
-                };
-
-                if edi.shader_uniform_buffer_array_non_uniform_indexing_native != 0
-                    && edi.shader_storage_image_array_non_uniform_indexing_native != 0
-                {
-                    caps |= naga::valid::Capabilities::UNIFORM_BUFFER_AND_STORAGE_TEXTURE_ARRAY_NON_UNIFORM_INDEXING;
-                };
-            }
+            if v12.shader_uniform_buffer_array_non_uniform_indexing_native != 0
+                && v12.shader_storage_image_array_non_uniform_indexing_native != 0
+            {
+                caps |= naga::valid::Capabilities::UNIFORM_BUFFER_AND_STORAGE_TEXTURE_ARRAY_NON_UNIFORM_INDEXING;
+            };
 
             caps | naga::valid::Capabilities::all()
         };
@@ -3057,7 +3085,6 @@ pub(crate) fn create_render_pass_error_from_erupt(err: vk1_0::Result) -> CreateR
 }
 
 fn memory_device_properties(
-    device: &DeviceLoader,
     properties: &Properties,
     features: &Features,
 ) -> gpu_alloc::DeviceProperties<'static> {
@@ -3084,9 +3111,7 @@ fn memory_device_properties(
                 size: memory_heap.size,
             })
             .collect(),
-        buffer_device_address: features.v12.buffer_device_address != 0
-            || device.enabled().khr_buffer_device_address
-            || device.enabled().ext_buffer_device_address,
+        buffer_device_address: features.v12.buffer_device_address != 0,
     }
 }
 

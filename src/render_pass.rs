@@ -5,7 +5,7 @@ use crate::{
     framebuffer::FramebufferError,
     image::{Layout, Samples},
     stage::PipelineStageFlags,
-    Device, OutOfMemory,
+    Device, ImageView, OutOfMemory, Rect2d,
 };
 
 /// Defines render pass, its attachments and one implicit subpass.
@@ -261,4 +261,21 @@ pub trait Pass {
     type Instance: RenderPassInstance<Input = Self>;
 
     fn instance() -> Self::Instance;
+}
+
+#[derive(Clone, Debug)]
+pub struct RenderingInfo<'a> {
+    pub render_area: Rect2d,
+    pub colors: &'a [RenderingAttachmentInfo],
+    pub depth: Option<RenderingAttachmentInfo>,
+    pub stencil: Option<RenderingAttachmentInfo>,
+}
+
+#[derive(Clone, Debug)]
+pub struct RenderingAttachmentInfo {
+    pub image_view: ImageView,
+    pub image_layout: Layout,
+    pub load_op: LoadOp,
+    pub store_op: StoreOp,
+    pub clear_value: Option<ClearValue>,
 }
