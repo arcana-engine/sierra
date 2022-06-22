@@ -799,7 +799,11 @@ impl CommandBuffer {
                     builder = builder.stencil_attachment(&stencil_attachment_info);
                 }
 
-                unsafe { logical.cmd_begin_rendering(self.handle, &builder) }
+                if device.graphics().instance.enabled().vk1_3 {
+                    unsafe { logical.cmd_begin_rendering(self.handle, &builder) }
+                } else {
+                    unsafe { logical.cmd_begin_rendering_khr(self.handle, &builder) }
+                }
             }
 
             Command::EndRendering => {
@@ -809,7 +813,11 @@ impl CommandBuffer {
                     "DynamicRendering feature is not enabled"
                 );
 
-                unsafe { logical.cmd_end_rendering(self.handle) }
+                if device.graphics().instance.enabled().vk1_3 {
+                    unsafe { logical.cmd_end_rendering(self.handle) }
+                } else {
+                    unsafe { logical.cmd_end_rendering_khr(self.handle) }
+                }
             }
         }
     }

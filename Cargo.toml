@@ -39,7 +39,6 @@ gpu-descriptor = { version = "0.2", optional = true }
 gpu-alloc-erupt = { version = "0.7", optional = true }
 gpu-descriptor-erupt = { version = "0.3", optional = true }
 slab = "0.4"
-libloading = "0.7"
 scoped-arena = { version = "0.4", features = ["alloc"] }
 parking_lot = "0.12"
 once_cell = "1.5"

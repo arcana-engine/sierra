@@ -132,25 +132,25 @@ unsafe fn collect_properties_and_features(
         }
 
         if !graphics.instance.enabled().vk1_2
-            || has_extension(EXT_SCALAR_BLOCK_LAYOUT_EXTENSION_NAME)
+            && has_extension(EXT_SCALAR_BLOCK_LAYOUT_EXTENSION_NAME)
         {
             features2 = features2.extend_from(&mut features_sbl);
         }
 
         if !graphics.instance.enabled().vk1_2
-            || has_extension(EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME)
+            && has_extension(EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME)
         {
             features2 = features2.extend_from(&mut features_edi);
             properties2 = properties2.extend_from(&mut properties_edi);
         }
 
         if !graphics.instance.enabled().vk1_2
-            || has_extension(KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME)
+            && has_extension(KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME)
         {
             features2 = features2.extend_from(&mut features_bda);
         }
 
-        if !graphics.instance.enabled().vk1_3 || has_extension(KHR_DYNAMIC_RENDERING_EXTENSION_NAME)
+        if !graphics.instance.enabled().vk1_3 && has_extension(KHR_DYNAMIC_RENDERING_EXTENSION_NAME)
         {
             features2 = features2.extend_from(&mut features_dr);
         }
