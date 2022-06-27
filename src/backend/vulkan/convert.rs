@@ -2,12 +2,12 @@ use crate::{
     out_of_host_memory, AccelerationStructureBuildFlags, AccelerationStructureLevel, AccessFlags,
     AspectFlags, BlendFactor, BlendOp, BorderColor, BufferCopy, BufferImageCopy, BufferUsage,
     CompareOp, ComponentMapping, ComponentMask, CompositeAlphaFlags, Culling,
-    DescriptorBindingFlags, DescriptorSetLayoutFlags, DescriptorType, DeviceAddress, Extent2d,
-    Extent3d, Filter, Format, FrontFace, GeometryFlags, ImageBlit, ImageCopy, ImageExtent,
+    DescriptorBindingFlags, DescriptorSetLayoutFlags, DescriptorType, DeviceAddress, Extent2,
+    Extent3, Filter, Format, FrontFace, GeometryFlags, ImageBlit, ImageCopy, ImageExtent,
     ImageUsage, ImageViewKind, IndexType, Layout, LoadOp, LogicOp, MemoryUsage, MipmapMode,
-    Offset2d, Offset3d, OutOfMemory, PipelineStageFlags, PolygonMode, PresentMode,
-    PresentationTiming, PrimitiveTopology, QueueCapabilityFlags, Rect2d, SamplerAddressMode,
-    Samples, ShaderStage, ShaderStageFlags, StencilOp, StoreOp, Subresource, SubresourceLayers,
+    Offset2, Offset3, OutOfMemory, PipelineStageFlags, PolygonMode, PresentMode,
+    PresentationTiming, PrimitiveTopology, QueueCapabilityFlags, Rect, SamplerAddressMode, Samples,
+    ShaderStage, ShaderStageFlags, StencilOp, StoreOp, Subresource, SubresourceLayers,
     SubresourceRange, SurfaceTransformFlags, Swizzle, VertexInputRate, Viewport,
 };
 use erupt::{
@@ -253,16 +253,13 @@ impl ToErupt<vk1_0::Format> for Option<Format> {
     }
 }
 
-impl FromErupt<vk1_0::Extent2D> for Extent2d {
+impl FromErupt<vk1_0::Extent2D> for Extent2 {
     fn from_erupt(extent: vk1_0::Extent2D) -> Self {
-        Extent2d {
-            width: extent.width,
-            height: extent.height,
-        }
+        Extent2::new(extent.width, extent.height)
     }
 }
 
-impl ToErupt<vk1_0::Extent2D> for Extent2d {
+impl ToErupt<vk1_0::Extent2D> for Extent2 {
     fn to_erupt(self) -> vk1_0::Extent2D {
         vk1_0::Extent2D {
             width: self.width,
@@ -271,17 +268,13 @@ impl ToErupt<vk1_0::Extent2D> for Extent2d {
     }
 }
 
-impl FromErupt<vk1_0::Extent3D> for Extent3d {
+impl FromErupt<vk1_0::Extent3D> for Extent3 {
     fn from_erupt(extent: vk1_0::Extent3D) -> Self {
-        Extent3d {
-            width: extent.width,
-            height: extent.height,
-            depth: extent.depth,
-        }
+        Extent3::new(extent.width, extent.height, extent.depth)
     }
 }
 
-impl ToErupt<vk1_0::Extent3D> for Extent3d {
+impl ToErupt<vk1_0::Extent3D> for Extent3 {
     fn to_erupt(self) -> vk1_0::Extent3D {
         vk1_0::Extent3D {
             width: self.width,
@@ -291,16 +284,13 @@ impl ToErupt<vk1_0::Extent3D> for Extent3d {
     }
 }
 
-impl FromErupt<vk1_0::Offset2D> for Offset2d {
-    fn from_erupt(offset: vk1_0::Offset2D) -> Offset2d {
-        Offset2d {
-            x: offset.x,
-            y: offset.y,
-        }
+impl FromErupt<vk1_0::Offset2D> for Offset2 {
+    fn from_erupt(offset: vk1_0::Offset2D) -> Offset2 {
+        Offset2::new(offset.x, offset.y)
     }
 }
 
-impl ToErupt<vk1_0::Offset2D> for Offset2d {
+impl ToErupt<vk1_0::Offset2D> for Offset2 {
     fn to_erupt(self) -> vk1_0::Offset2D {
         vk1_0::Offset2D {
             x: self.x,
@@ -309,17 +299,13 @@ impl ToErupt<vk1_0::Offset2D> for Offset2d {
     }
 }
 
-impl FromErupt<vk1_0::Offset3D> for Offset3d {
-    fn from_erupt(offset: vk1_0::Offset3D) -> Offset3d {
-        Offset3d {
-            x: offset.x,
-            y: offset.y,
-            z: offset.z,
-        }
+impl FromErupt<vk1_0::Offset3D> for Offset3 {
+    fn from_erupt(offset: vk1_0::Offset3D) -> Offset3 {
+        Offset3::new(offset.x, offset.y, offset.z)
     }
 }
 
-impl ToErupt<vk1_0::Offset3D> for Offset3d {
+impl ToErupt<vk1_0::Offset3D> for Offset3 {
     fn to_erupt(self) -> vk1_0::Offset3D {
         vk1_0::Offset3D {
             x: self.x,
@@ -329,16 +315,16 @@ impl ToErupt<vk1_0::Offset3D> for Offset3d {
     }
 }
 
-impl FromErupt<vk1_0::Rect2D> for Rect2d {
-    fn from_erupt(rect: vk1_0::Rect2D) -> Rect2d {
-        Rect2d {
-            offset: Offset2d::from_erupt(rect.offset),
-            extent: Extent2d::from_erupt(rect.extent),
+impl FromErupt<vk1_0::Rect2D> for Rect {
+    fn from_erupt(rect: vk1_0::Rect2D) -> Rect {
+        Rect {
+            offset: Offset2::from_erupt(rect.offset),
+            extent: Extent2::from_erupt(rect.extent),
         }
     }
 }
 
-impl ToErupt<vk1_0::Rect2D> for Rect2d {
+impl ToErupt<vk1_0::Rect2D> for Rect {
     fn to_erupt(self) -> vk1_0::Rect2D {
         vk1_0::Rect2D {
             offset: self.offset.to_erupt(),
@@ -608,7 +594,7 @@ impl ToErupt<vk1_0::AttachmentLoadOp> for LoadOp {
     fn to_erupt(self) -> vk1_0::AttachmentLoadOp {
         match self {
             LoadOp::Load => vk1_0::AttachmentLoadOp::LOAD,
-            LoadOp::Clear => vk1_0::AttachmentLoadOp::CLEAR,
+            LoadOp::Clear(()) => vk1_0::AttachmentLoadOp::CLEAR,
             LoadOp::DontCare => vk1_0::AttachmentLoadOp::DONT_CARE,
         }
     }

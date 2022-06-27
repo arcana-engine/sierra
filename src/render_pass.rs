@@ -5,7 +5,7 @@ use crate::{
     framebuffer::FramebufferError,
     image::{Layout, Samples},
     stage::PipelineStageFlags,
-    Device, ImageView, OutOfMemory, Rect2d,
+    Device, ImageView, OutOfMemory, Rect,
 };
 
 /// Defines render pass, its attachments and one implicit subpass.
@@ -70,7 +70,7 @@ pub struct AttachmentInfo {
 /// Specifies how render pass treats attachment content at the beginning.
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
-pub enum LoadOp {
+pub enum LoadOp<T = ()> {
     /// Render pass will load this attachment content before first subpass that
     /// access this attachment starts.
     Load,
@@ -79,7 +79,7 @@ pub enum LoadOp {
     /// that access this attachment starts. Value to which attachment
     /// should be cleared must be provided in `Encoder::begin_render_pass`
     /// call.
-    Clear,
+    Clear(T),
 
     /// Render pass will not attempt to load attachment content or clear it -
     /// basically no-op. Attachment content visible to read operations
@@ -177,12 +177,14 @@ pub struct SubpassDependency {
 
 /// Value for attachment load clear operation.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub enum ClearValue {
     Color(f32, f32, f32, f32),
     DepthStencil(f32, u32),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct ClearColor(pub f32, pub f32, pub f32, pub f32);
 
 impl From<ClearColor> for ClearValue {
@@ -192,6 +194,7 @@ impl From<ClearColor> for ClearValue {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct ClearDepth(pub f32);
 
 impl From<ClearDepth> for ClearValue {
@@ -201,6 +204,7 @@ impl From<ClearDepth> for ClearValue {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct ClearStencil(pub u32);
 
 impl From<ClearStencil> for ClearValue {
@@ -263,19 +267,326 @@ pub trait Pass {
     fn instance() -> Self::Instance;
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct RenderingInfo<'a> {
-    pub render_area: Rect2d,
-    pub colors: &'a [RenderingAttachmentInfo],
-    pub depth: Option<RenderingAttachmentInfo>,
-    pub stencil: Option<RenderingAttachmentInfo>,
+    pub render_area: Option<Rect>,
+    pub colors: &'a [RenderingColorInfo],
+    pub depth_stencil: Option<RenderingDepthStencilAttachmentInfo>,
 }
 
-#[derive(Clone, Debug)]
-pub struct RenderingAttachmentInfo {
-    pub image_view: ImageView,
-    pub image_layout: Layout,
-    pub load_op: LoadOp,
-    pub store_op: StoreOp,
-    pub clear_value: Option<ClearValue>,
+impl<'a> RenderingInfo<'a> {
+    pub const fn new() -> Self {
+        RenderingInfo {
+            render_area: None,
+            colors: &[],
+            depth_stencil: None,
+        }
+    }
+
+    pub fn render_area(mut self, render_area: Rect) -> Self {
+        self.render_area = Some(render_area);
+        self
+    }
+
+    pub fn colors(mut self, colors: &'a [RenderingColorInfo]) -> Self {
+        self.colors = colors;
+        self
+    }
+
+    pub fn color(mut self, color: &'a RenderingColorInfo) -> Self {
+        self.colors = std::slice::from_ref(color);
+        self
+    }
+
+    pub fn depth(mut self, depth: RenderingDepthInfo) -> Self {
+        self.depth_stencil = Some(depth.into());
+        self
+    }
+
+    pub fn stencil(mut self, stencil: RenderingStencilInfo) -> Self {
+        self.depth_stencil = Some(stencil.into());
+        self
+    }
+
+    pub fn depth_stencil(mut self, depth_stencil: RenderingDepthStencilInfo) -> Self {
+        self.depth_stencil = Some(depth_stencil.into());
+        self
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct RenderingColorInfo {
+    pub color_view: ImageView,
+    pub color_layout: Layout,
+    pub color_load_op: LoadOp<ClearColor>,
+    pub color_store_op: StoreOp,
+}
+
+impl RenderingColorInfo {
+    pub fn new(color_view: ImageView) -> Self {
+        RenderingColorInfo {
+            color_view,
+            color_layout: Layout::ColorAttachmentOptimal,
+            color_load_op: LoadOp::Load,
+            color_store_op: StoreOp::Store,
+        }
+    }
+
+    pub fn load_op(mut self, load_op: LoadOp<ClearColor>) -> Self {
+        self.color_load_op = load_op;
+        self
+    }
+
+    pub fn store_op(mut self, store_op: StoreOp) -> Self {
+        self.color_store_op = store_op;
+        self
+    }
+
+    pub fn layout(mut self, layout: Layout) -> Self {
+        self.color_layout = layout;
+        self
+    }
+
+    pub fn load(self) -> Self {
+        self.load_op(LoadOp::Load)
+    }
+
+    pub fn clear(self, color: ClearColor) -> Self {
+        self.load_op(LoadOp::Clear(color))
+    }
+
+    pub fn store(self) -> Self {
+        self.store_op(StoreOp::Store)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct RenderingDepthInfo {
+    pub depth_view: ImageView,
+    pub depth_layout: Layout,
+    pub depth_load_op: LoadOp<ClearDepth>,
+    pub depth_store_op: StoreOp,
+}
+
+impl RenderingDepthInfo {
+    pub fn new(depth_view: ImageView) -> Self {
+        RenderingDepthInfo {
+            depth_view,
+            depth_layout: Layout::DepthStencilAttachmentOptimal,
+            depth_load_op: LoadOp::Load,
+            depth_store_op: StoreOp::Store,
+        }
+    }
+
+    pub fn load_op(mut self, load_op: LoadOp<ClearDepth>) -> Self {
+        self.depth_load_op = load_op;
+        self
+    }
+
+    pub fn store_op(mut self, store_op: StoreOp) -> Self {
+        self.depth_store_op = store_op;
+        self
+    }
+
+    pub fn layout(mut self, layout: Layout) -> Self {
+        self.depth_layout = layout;
+        self
+    }
+
+    pub fn load(self) -> Self {
+        self.load_op(LoadOp::Load)
+    }
+
+    pub fn clear(self, depth: ClearDepth) -> Self {
+        self.load_op(LoadOp::Clear(depth))
+    }
+
+    pub fn store(self) -> Self {
+        self.store_op(StoreOp::Store)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct RenderingStencilInfo {
+    pub stencil_view: ImageView,
+    pub stencil_layout: Layout,
+    pub stencil_load_op: LoadOp<ClearStencil>,
+    pub stencil_store_op: StoreOp,
+}
+
+impl RenderingStencilInfo {
+    pub fn new(stencil_view: ImageView) -> Self {
+        RenderingStencilInfo {
+            stencil_view,
+            stencil_layout: Layout::DepthStencilAttachmentOptimal,
+            stencil_load_op: LoadOp::Load,
+            stencil_store_op: StoreOp::Store,
+        }
+    }
+
+    pub fn load_op(mut self, load_op: LoadOp<ClearStencil>) -> Self {
+        self.stencil_load_op = load_op;
+        self
+    }
+
+    pub fn store_op(mut self, store_op: StoreOp) -> Self {
+        self.stencil_store_op = store_op;
+        self
+    }
+
+    pub fn layout(mut self, layout: Layout) -> Self {
+        self.stencil_layout = layout;
+        self
+    }
+
+    pub fn load(self) -> Self {
+        self.load_op(LoadOp::Load)
+    }
+
+    pub fn clear(self, stencil: ClearStencil) -> Self {
+        self.load_op(LoadOp::Clear(stencil))
+    }
+
+    pub fn store(self) -> Self {
+        self.store_op(StoreOp::Store)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct RenderingDepthStencilInfo {
+    pub depth_stencil_view: ImageView,
+    pub depth_layout: Layout,
+    pub depth_load_op: LoadOp<ClearDepth>,
+    pub depth_store_op: StoreOp,
+    pub stencil_layout: Layout,
+    pub stencil_load_op: LoadOp<ClearStencil>,
+    pub stencil_store_op: StoreOp,
+}
+
+impl RenderingDepthStencilInfo {
+    pub fn new(depth_stencil_view: ImageView) -> Self {
+        RenderingDepthStencilInfo {
+            depth_stencil_view,
+            depth_layout: Layout::DepthStencilAttachmentOptimal,
+            stencil_layout: Layout::DepthStencilAttachmentOptimal,
+            depth_load_op: LoadOp::Load,
+            depth_store_op: StoreOp::Store,
+            stencil_load_op: LoadOp::Load,
+            stencil_store_op: StoreOp::Store,
+        }
+    }
+
+    pub fn depth_load_op(mut self, depth_load_op: LoadOp<ClearDepth>) -> Self {
+        self.depth_load_op = depth_load_op;
+        self
+    }
+
+    pub fn depth_store_op(mut self, depth_store_op: StoreOp) -> Self {
+        self.depth_store_op = depth_store_op;
+        self
+    }
+
+    pub fn depth_layout(mut self, depth_layout: Layout) -> Self {
+        self.depth_layout = depth_layout;
+        self
+    }
+
+    pub fn depth_load(self) -> Self {
+        self.depth_load_op(LoadOp::Load)
+    }
+
+    pub fn depth_clear(self, depth: ClearDepth) -> Self {
+        self.depth_load_op(LoadOp::Clear(depth))
+    }
+
+    pub fn depth_store(self) -> Self {
+        self.depth_store_op(StoreOp::Store)
+    }
+
+    pub fn stencil_load_op(mut self, stencil_load_op: LoadOp<ClearStencil>) -> Self {
+        self.stencil_load_op = stencil_load_op;
+        self
+    }
+
+    pub fn stencil_store_op(mut self, stencil_store_op: StoreOp) -> Self {
+        self.stencil_store_op = stencil_store_op;
+        self
+    }
+
+    pub fn stencil_layout(mut self, stencil_layout: Layout) -> Self {
+        self.stencil_layout = stencil_layout;
+        self
+    }
+
+    pub fn stencil_load(self) -> Self {
+        self.stencil_load_op(LoadOp::Load)
+    }
+
+    pub fn stencil_clear(self, stencil: ClearStencil) -> Self {
+        self.stencil_load_op(LoadOp::Clear(stencil))
+    }
+
+    pub fn stencil_store(self) -> Self {
+        self.stencil_store_op(StoreOp::Store)
+    }
+
+    pub fn depth_stencil_layout(mut self, depth_stencil_layout: Layout) -> Self {
+        self.depth_layout = depth_stencil_layout;
+        self.stencil_layout = depth_stencil_layout;
+        self
+    }
+
+    pub fn depth_stencil_clear(mut self, depth_stencil: ClearDepthStencil) -> Self {
+        self.depth_load_op = LoadOp::Clear(ClearDepth(depth_stencil.0));
+        self.stencil_load_op = LoadOp::Clear(ClearStencil(depth_stencil.1));
+        self
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct RenderingDepthStencilAttachmentInfo {
+    pub depth_stencil_view: ImageView,
+    pub depth: Option<(LoadOp<ClearDepth>, StoreOp, Layout)>,
+    pub stencil: Option<(LoadOp<ClearStencil>, StoreOp, Layout)>,
+}
+
+impl From<RenderingDepthInfo> for RenderingDepthStencilAttachmentInfo {
+    #[inline]
+    fn from(info: RenderingDepthInfo) -> Self {
+        RenderingDepthStencilAttachmentInfo {
+            depth_stencil_view: info.depth_view,
+            depth: Some((info.depth_load_op, info.depth_store_op, info.depth_layout)),
+            stencil: None,
+        }
+    }
+}
+
+impl From<RenderingStencilInfo> for RenderingDepthStencilAttachmentInfo {
+    #[inline]
+    fn from(info: RenderingStencilInfo) -> Self {
+        RenderingDepthStencilAttachmentInfo {
+            depth_stencil_view: info.stencil_view,
+            depth: None,
+            stencil: Some((
+                info.stencil_load_op,
+                info.stencil_store_op,
+                info.stencil_layout,
+            )),
+        }
+    }
+}
+
+impl From<RenderingDepthStencilInfo> for RenderingDepthStencilAttachmentInfo {
+    #[inline]
+    fn from(info: RenderingDepthStencilInfo) -> Self {
+        RenderingDepthStencilAttachmentInfo {
+            depth_stencil_view: info.depth_stencil_view,
+            depth: Some((info.depth_load_op, info.depth_store_op, info.depth_layout)),
+            stencil: Some((
+                info.stencil_load_op,
+                info.stencil_store_op,
+                info.stencil_layout,
+            )),
+        }
+    }
 }

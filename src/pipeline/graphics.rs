@@ -1,20 +1,18 @@
 use std::hash::{Hash, Hasher};
 
-use {
-    super::PipelineLayout,
-    crate::{
-        format::Format,
-        render_pass::RenderPass,
-        sampler::CompareOp,
-        shader::{FragmentShader, VertexShader},
-        Device, Extent2d, Extent3d, Offset2d, OutOfMemory,
-    },
+use crate::{
+    backend::Device,
+    dimensions::{Extent2, Extent3, Offset2},
+    format::Format,
+    render_pass::RenderPass,
+    sampler::CompareOp,
+    shader::{FragmentShader, VertexShader},
+    OutOfMemory,
 };
 
-pub use {
-    self::State::{Dynamic, Static},
-    crate::backend::GraphicsPipeline,
-};
+pub use crate::backend::GraphicsPipeline;
+
+use super::PipelineLayout;
 
 /// Wrapper for pipeline states that can be either static or dynamic.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -88,11 +86,8 @@ pub enum GraphicsPipelineRenderingInfo {
         /// Defines the format of color attachments used in this pipeline.
         colors: Vec<Format>,
 
-        /// Defines the format of the depth attachment used in this pipeline.
-        depth: Option<Format>,
-
-        /// Defines the format of the stencil attachment used in this pipeline.
-        stencil: Option<Format>,
+        /// Defines the format of the depth-stencil attachment used in this pipeline.
+        depth_stencil: Option<Format>,
     },
 }
 
@@ -257,8 +252,8 @@ pub struct Viewport {
     pub z: Bounds,
 }
 
-impl From<Rect2d> for Viewport {
-    fn from(rect: Rect2d) -> Self {
+impl From<Rect> for Viewport {
+    fn from(rect: Rect) -> Self {
         Viewport {
             x: Bounds {
                 offset: rect.offset.x as f32,
@@ -276,8 +271,8 @@ impl From<Rect2d> for Viewport {
     }
 }
 
-impl From<Extent2d> for Viewport {
-    fn from(extent: Extent2d) -> Self {
+impl From<Extent2> for Viewport {
+    fn from(extent: Extent2) -> Self {
         Viewport {
             x: Bounds {
                 offset: 0.0,
@@ -295,8 +290,8 @@ impl From<Extent2d> for Viewport {
     }
 }
 
-impl From<Extent3d> for Viewport {
-    fn from(extent: Extent3d) -> Self {
+impl From<Extent3> for Viewport {
+    fn from(extent: Extent3) -> Self {
         Viewport {
             x: Bounds {
                 offset: 0.0,
@@ -314,16 +309,16 @@ impl From<Extent3d> for Viewport {
     }
 }
 
-impl From<Extent2d> for State<Viewport> {
-    fn from(extent: Extent2d) -> Self {
+impl From<Extent2> for State<Viewport> {
+    fn from(extent: Extent2) -> Self {
         State::Static {
             value: extent.into(),
         }
     }
 }
 
-impl From<Extent3d> for State<Viewport> {
-    fn from(extent: Extent3d) -> Self {
+impl From<Extent3> for State<Viewport> {
+    fn from(extent: Extent3) -> Self {
         State::Static {
             value: extent.into(),
         }
@@ -332,22 +327,22 @@ impl From<Extent3d> for State<Viewport> {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
-pub struct Rect2d {
-    pub offset: Offset2d,
-    pub extent: Extent2d,
+pub struct Rect {
+    pub offset: Offset2,
+    pub extent: Extent2,
 }
 
-impl From<Extent2d> for Rect2d {
-    fn from(extent: Extent2d) -> Self {
-        Rect2d {
-            offset: Offset2d::ZERO,
+impl From<Extent2> for Rect {
+    fn from(extent: Extent2) -> Self {
+        Rect {
+            offset: Offset2::zeros(),
             extent,
         }
     }
 }
 
-impl From<Extent2d> for State<Rect2d> {
-    fn from(extent: Extent2d) -> Self {
+impl From<Extent2> for State<Rect> {
+    fn from(extent: Extent2) -> Self {
         State::Static {
             value: extent.into(),
         }
@@ -364,7 +359,7 @@ pub struct Rasterizer {
     /// Scissors for the viewport.
     /// Determines bounds for scissor test.
     /// If the test fails for generated fragment that fragment is discared.
-    pub scissor: State<Rect2d>,
+    pub scissor: State<Rect>,
 
     /// Should fragments out of bounds on Z axis are clamped or discared.
     /// If `true` - fragments are clamped. This also disables primitive
@@ -411,8 +406,8 @@ impl Default for Rasterizer {
 impl Rasterizer {
     pub const fn new() -> Self {
         Rasterizer {
-            viewport: Dynamic,
-            scissor: Dynamic,
+            viewport: State::Dynamic,
+            scissor: State::Dynamic,
             depth_clamp: false,
             front_face: FrontFace::Clockwise,
             culling: None,
@@ -431,7 +426,7 @@ impl Rasterizer {
                     alpha_op: BlendOp::Add,
                 }),
                 write_mask: ComponentMask::RGBA,
-                constants: Static {
+                constants: State::Static {
                     value: [0.0, 0.0, 0.0, 0.0],
                 },
             },
@@ -733,7 +728,7 @@ impl Default for ColorBlend {
                 alpha_op: BlendOp::Add,
             }),
             write_mask: ComponentMask::RGBA,
-            constants: Static { value: [0.0; 4] },
+            constants: State::Static { value: [0.0; 4] },
         }
     }
 }
@@ -949,8 +944,7 @@ impl DynamicGraphicsPipeline {
     pub fn get_for_dynamic_rendering(
         &mut self,
         colors: &[Format],
-        depth: Option<Format>,
-        stencil: Option<Format>,
+        depth_stencil: Option<Format>,
         device: &Device,
     ) -> Result<&GraphicsPipeline, OutOfMemory> {
         if let Some(graphics_pipeline) = &mut self.graphics_pipeline {
@@ -959,13 +953,8 @@ impl DynamicGraphicsPipeline {
             let compatible = match info.rendering {
                 GraphicsPipelineRenderingInfo::DynamicRendering {
                     colors: ref current_colors,
-                    depth: current_depth,
-                    stencil: current_stencil,
-                } => {
-                    current_colors[..] != colors[..]
-                        || current_depth != depth
-                        || current_stencil != stencil
-                }
+                    depth_stencil: current_depth_stencil,
+                } => current_colors[..] != colors[..] || current_depth_stencil != depth_stencil,
                 _ => false,
             };
 
@@ -977,7 +966,13 @@ impl DynamicGraphicsPipeline {
         let graphics_pipeline = match &mut self.graphics_pipeline {
             Some(graphics_pipeline) => graphics_pipeline,
             graphics_pipeline => graphics_pipeline.get_or_insert(device.create_graphics_pipeline(
-                desc_to_info_dynamic_rendering(&self.desc, colors, depth, stencil),
+                GraphicsPipelineInfo {
+                    desc: self.desc.clone(),
+                    rendering: GraphicsPipelineRenderingInfo::DynamicRendering {
+                        colors: colors.to_vec(),
+                        depth_stencil,
+                    },
+                },
             )?),
         };
 
@@ -1009,40 +1004,16 @@ impl DynamicGraphicsPipeline {
         let graphics_pipeline = match &mut self.graphics_pipeline {
             Some(graphics_pipeline) => graphics_pipeline,
             graphics_pipeline => graphics_pipeline.get_or_insert(device.create_graphics_pipeline(
-                desc_to_info_render_pass(&self.desc, render_pass, subpass),
+                GraphicsPipelineInfo {
+                    desc: self.desc.clone(),
+                    rendering: GraphicsPipelineRenderingInfo::RenderPass {
+                        render_pass: render_pass.clone(),
+                        subpass,
+                    },
+                },
             )?),
         };
 
         Ok(graphics_pipeline)
-    }
-}
-
-fn desc_to_info_render_pass(
-    desc: &GraphicsPipelineDesc,
-    render_pass: &RenderPass,
-    subpass: u32,
-) -> GraphicsPipelineInfo {
-    GraphicsPipelineInfo {
-        desc: desc.clone(),
-        rendering: GraphicsPipelineRenderingInfo::RenderPass {
-            render_pass: render_pass.clone(),
-            subpass,
-        },
-    }
-}
-
-fn desc_to_info_dynamic_rendering(
-    desc: &GraphicsPipelineDesc,
-    colors: &[Format],
-    depth: Option<Format>,
-    stencil: Option<Format>,
-) -> GraphicsPipelineInfo {
-    GraphicsPipelineInfo {
-        desc: desc.clone(),
-        rendering: GraphicsPipelineRenderingInfo::DynamicRendering {
-            colors: colors.to_vec(),
-            depth,
-            stencil,
-        },
     }
 }

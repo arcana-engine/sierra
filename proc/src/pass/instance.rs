@@ -57,9 +57,9 @@ pub(super) fn generate(input: &Input) -> TokenStream {
 
             let member = &a.member;
             let load_op = match a.load_op {
-                Some(LoadOp::Clear(_)) => quote::format_ident!("Clear"),
-                Some(LoadOp::Load(_)) => quote::format_ident!("Load"),
-                None => quote::format_ident!("DontCare"),
+                Some(LoadOp::Clear(_)) => quote::quote!(Clear(())),
+                Some(LoadOp::Load(_)) => quote::quote!(Load),
+                None => quote::quote!(DontCare),
             };
 
             let initial_layout = initial_layout(&a.load_op);
@@ -202,7 +202,7 @@ pub(super) fn generate(input: &Input) -> TokenStream {
         .iter()
         .map(|a| {
             let member = &a.member;
-            quote::quote!(fb_extent = ::sierra::Extent2d::min(&fb_extent, &::sierra::Attachment::max_extent(&input.#member));)
+            quote::quote!(fb_min_extent.add(::sierra::Attachment::max_extent(&input.#member));)
         })
         .collect::<TokenStream>();
 
@@ -317,8 +317,9 @@ pub(super) fn generate(input: &Input) -> TokenStream {
                         None => {
                             ::sierra::debug!("Framebuffer with compatible attachments not found");
 
-                            let mut fb_extent = ::sierra::Extent2d { width: !0, height: !0 };
+                            let mut fb_min_extent = ::sierra::minimal_extent();
                             #find_fb_extent
+                            let fb_extent = fb_min_extent.get();
 
                             let mut attachments = ::std::vec::Vec::with_capacity(#attachment_count);
                             #push_framebuffer_attachments
@@ -353,8 +354,9 @@ pub(super) fn generate(input: &Input) -> TokenStream {
                         None => {
                             ::sierra::debug!("Framebuffer with compatible attachments not found");
 
-                            let mut fb_extent = ::sierra::Extent2d { width: !0, height: !0 };
+                            let mut fb_min_extent = ::sierra::minimal_extent();
                             #find_fb_extent
+                            let fb_extent = fb_min_extent.get();
 
                             let mut attachments = ::std::vec::Vec::with_capacity(#attachment_count);
                             #push_framebuffer_attachments

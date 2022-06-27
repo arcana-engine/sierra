@@ -16,8 +16,8 @@ pub fn graphics_pipeline_desc(tokens: proc_macro::TokenStream) -> TokenStream {
                         alpha_op: sierra::BlendOp::Add,
                     }),
                     write_mask: sierra::ComponentMask::RGBA,
-                    constants: sierra::Static {
-                        value: [0.0, 0.0, 0.0, 0.0],
+                    constants: sierra::State::Static {
+                        value: [0.0; 4],
                     },
                 }",
             )

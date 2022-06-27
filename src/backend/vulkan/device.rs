@@ -55,7 +55,7 @@ use crate::{
     },
     fence::Fence,
     framebuffer::{Framebuffer, FramebufferInfo},
-    host_memory_space_overlow,
+    host_memory_space_overflow,
     image::{Image, ImageInfo},
     memory::MemoryUsage,
     out_of_host_memory,
@@ -963,8 +963,7 @@ impl Device {
         match info.rendering {
             GraphicsPipelineRenderingInfo::DynamicRendering {
                 ref colors,
-                depth,
-                stencil,
+                depth_stencil,
             } => {
                 color_attachments = colors
                     .iter()
@@ -974,10 +973,10 @@ impl Device {
                 dynamic_rendering_info = vk1_3::PipelineRenderingCreateInfoBuilder::new()
                     .color_attachment_formats(&color_attachments)
                     .depth_attachment_format(
-                        depth.map_or(vk1_0::Format::UNDEFINED, |f| f.to_erupt()),
+                        depth_stencil.map_or(vk1_0::Format::UNDEFINED, |f| f.to_erupt()),
                     )
                     .stencil_attachment_format(
-                        stencil.map_or(vk1_0::Format::UNDEFINED, |f| f.to_erupt()),
+                        depth_stencil.map_or(vk1_0::Format::UNDEFINED, |f| f.to_erupt()),
                     );
 
                 colors_count = colors.len();
@@ -2281,7 +2280,7 @@ impl Device {
         #[allow(clippy::redundant_closure)]
         let total_size_usize = group_size_usize
             .checked_mul(info.groups.len())
-            .unwrap_or_else(|| host_memory_space_overlow());
+            .unwrap_or_else(|| host_memory_space_overflow());
 
         let group_count = u32::try_from(info.groups.len()).map_err(|_| OutOfMemory)?;
 

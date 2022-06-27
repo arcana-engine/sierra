@@ -4,7 +4,7 @@ use crate::{
     image::{Image, ImageInfo, ImageUsage, Samples, Samples1, SubresourceRange},
     render_pass::RenderPass,
     view::{ComponentMapping, ImageView, ImageViewInfo, ImageViewKind},
-    CreateRenderPassError, Device, Extent2d, OutOfMemory,
+    CreateRenderPassError, Device, Extent2, OutOfMemory,
 };
 
 /// Defines [`Framebuffer`] state.
@@ -18,7 +18,7 @@ pub struct FramebufferInfo {
     pub attachments: Vec<ImageView>,
 
     /// Specifies dimensions of the rendering operations over framebuffer.
-    pub extent: Extent2d,
+    pub extent: Extent2,
 }
 
 /// Trait for types that can be used for attachments in declarative render-pass.
@@ -42,69 +42,75 @@ pub trait Attachment {
     fn eq(&self, view: &ImageView) -> bool;
 
     /// Maximum extend of the image view that can be make for this attachment.
-    fn max_extent(&self) -> Extent2d;
+    fn max_extent(&self) -> Extent2;
 
     /// Returns image view with specified usage and extent for this attachment.
     fn get_view(
         &self,
         device: &Device,
         usage: ImageUsage,
-        extent: Extent2d,
+        extent: Extent2,
     ) -> Result<ImageView, OutOfMemory>;
 }
 
 impl Attachment for ImageView {
+    #[inline]
     fn samples(&self) -> Option<Samples> {
         Some(self.info().image.info().samples)
     }
 
+    #[inline]
     fn format(&self) -> Format {
         self.info().image.info().format
     }
 
+    #[inline]
     fn eq(&self, view: &ImageView) -> bool {
         *self == *view
     }
 
-    fn max_extent(&self) -> Extent2d {
+    #[inline]
+    fn max_extent(&self) -> Extent2 {
         let mut extent = self.info().image.info().extent.into_2d();
         extent.width >>= self.info().range.first_level;
         extent.height >>= self.info().range.first_level;
         extent
     }
 
+    #[inline]
     fn get_view(
         &self,
         _device: &Device,
         usage: ImageUsage,
-        mut extent: Extent2d,
+        extent: Extent2,
     ) -> Result<ImageView, OutOfMemory> {
         assert_eq!(self.info().range.layer_count, 1);
         assert_eq!(self.info().range.level_count, 1);
 
-        extent.width <<= self.info().range.first_level;
-        extent.height <<= self.info().range.first_level;
-
         assert!(self.info().image.info().usage.contains(usage));
-        assert!(self.info().image.info().extent.into_2d() >= extent);
+        assert!(self.max_extent() >= extent);
 
         Ok(self.clone())
     }
 }
 
 impl Attachment for Image {
+    #[inline]
     fn samples(&self) -> Option<Samples> {
         Some(self.info().samples)
     }
 
+    #[inline]
     fn format(&self) -> Format {
         self.info().format
     }
 
-    fn max_extent(&self) -> Extent2d {
+    #[inline]
+    fn max_extent(&self) -> Extent2 {
         self.info().extent.into_2d()
     }
 
+    #[inline]
     fn eq(&self, view: &ImageView) -> bool {
         *self == view.info().image
             && ImageViewKind::D2 == view.info().view_kind
@@ -117,11 +123,12 @@ impl Attachment for Image {
             } == view.info().range
     }
 
+    #[inline]
     fn get_view(
         &self,
         device: &Device,
         usage: ImageUsage,
-        extent: Extent2d,
+        extent: Extent2,
     ) -> Result<ImageView, OutOfMemory> {
         assert!(self.info().usage.contains(usage));
         assert!(self.info().extent.into_2d() >= extent);
@@ -144,30 +151,32 @@ impl Attachment for Image {
 }
 
 impl Attachment for Format {
+    #[inline]
     fn samples(&self) -> Option<Samples> {
         None
     }
 
+    #[inline]
     fn format(&self) -> Format {
         *self
     }
 
+    #[inline]
     fn eq(&self, view: &ImageView) -> bool {
         *self == view.info().image.info().format
     }
 
-    fn max_extent(&self) -> Extent2d {
-        Extent2d {
-            width: !0,
-            height: !0,
-        }
+    #[inline]
+    fn max_extent(&self) -> Extent2 {
+        Extent2::new(u32::MAX, u32::MAX)
     }
 
+    #[inline]
     fn get_view(
         &self,
         device: &Device,
         usage: ImageUsage,
-        extent: Extent2d,
+        extent: Extent2,
     ) -> Result<ImageView, OutOfMemory> {
         let image = device.create_image(ImageInfo {
             extent: extent.into(),
@@ -211,6 +220,7 @@ pub enum FramebufferError {
 }
 
 impl From<CreateRenderPassError> for FramebufferError {
+    #[inline]
     fn from(err: CreateRenderPassError) -> Self {
         match err {
             CreateRenderPassError::OutOfMemory { source } => {

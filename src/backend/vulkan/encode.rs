@@ -1,30 +1,30 @@
-use crate::{Format, RenderingAttachmentInfo};
+use std::{
+    convert::TryFrom as _,
+    fmt::{self, Debug},
+};
 
-use {
-    super::{
-        access::supported_access,
-        convert::{oom_error_from_erupt, ToErupt},
-        device::{Device, WeakDevice},
-        epochs::References,
-    },
-    crate::{
-        accel::{AccelerationStructureGeometry, AccelerationStructureLevel, IndexData},
-        buffer::{BufferRange, BufferUsage, StridedBufferRange},
-        encode::*,
-        format::{Channels, FormatDescription, Type},
-        queue::QueueId,
-        render_pass::{ClearValue, LoadOp},
-        IndexType, OutOfMemory,
-    },
-    erupt::{
-        extensions::{khr_acceleration_structure as vkacc, khr_ray_tracing_pipeline as vkrt},
-        vk1_0, vk1_3,
-    },
-    scoped_arena::Scope,
-    std::{
-        convert::TryFrom as _,
-        fmt::{self, Debug},
-    },
+use erupt::{
+    extensions::{khr_acceleration_structure as vkacc, khr_ray_tracing_pipeline as vkrt},
+    vk1_0, vk1_3,
+};
+use scoped_arena::Scope;
+
+use crate::{
+    accel::{AccelerationStructureGeometry, AccelerationStructureLevel, IndexData},
+    buffer::{BufferRange, BufferUsage, StridedBufferRange},
+    encode::*,
+    format::Format,
+    format::{Channels, FormatDescription, Type},
+    queue::QueueId,
+    render_pass::{ClearValue, LoadOp},
+    IndexType, OutOfMemory,
+};
+
+use super::{
+    access::supported_access,
+    convert::{oom_error_from_erupt, ToErupt},
+    device::{Device, WeakDevice},
+    epochs::References,
 };
 
 #[cfg(feature = "leak-detection")]
@@ -131,7 +131,7 @@ impl CommandBuffer {
                 let mut clears = clears.iter();
                 let clear_values =
                     scope.to_scope_from_iter(pass.info().attachments.iter().map(|attachment| {
-                        if attachment.load_op == LoadOp::Clear {
+                        if attachment.load_op == LoadOp::Clear(()) {
                             let clear = clears.next().expect("Not enough clear values");
                             clear.to_erupt(attachment.format)
                         } else {
@@ -762,41 +762,90 @@ impl CommandBuffer {
                     "DynamicRendering feature is not enabled"
                 );
 
-                let attachment_to_erupt = |attachment: &RenderingAttachmentInfo| {
-                    let clear_value = match attachment.load_op {
-                        LoadOp::Clear => match attachment.clear_value {
-                            None => vk1_0::ClearValue::default(),
-                            Some(clear_value) => clear_value
-                                .to_erupt(attachment.image_view.info().image.info().format),
-                        },
-                        _ => vk1_0::ClearValue::default(),
+                let mut builder = vk1_3::RenderingInfoBuilder::new()
+                    .render_area(info.render_area.unwrap().to_erupt());
+
+                let colors = scope.to_scope_from_iter(info.colors.iter().map(|a| {
+                    let (clear_value, load_op) = match a.color_load_op {
+                        LoadOp::Clear(clear_color) => (
+                            ClearValue::from(clear_color)
+                                .to_erupt(a.color_view.info().image.info().format),
+                            vk1_0::AttachmentLoadOp::CLEAR,
+                        ),
+                        LoadOp::Load => {
+                            (vk1_0::ClearValue::default(), vk1_0::AttachmentLoadOp::LOAD)
+                        }
+                        LoadOp::DontCare => (
+                            vk1_0::ClearValue::default(),
+                            vk1_0::AttachmentLoadOp::DONT_CARE,
+                        ),
                     };
-
                     vk1_3::RenderingAttachmentInfoBuilder::new()
-                        .image_view(attachment.image_view.handle())
-                        .image_layout(attachment.image_layout.to_erupt())
-                        .load_op(attachment.load_op.to_erupt())
-                        .store_op(attachment.store_op.to_erupt())
+                        .image_view(a.color_view.handle())
+                        .image_layout(a.color_layout.to_erupt())
+                        .load_op(load_op)
+                        .store_op(a.color_store_op.to_erupt())
                         .clear_value(clear_value)
-                };
-
-                let mut builder =
-                    vk1_3::RenderingInfoBuilder::new().render_area(info.render_area.to_erupt());
-
-                let colors = scope.to_scope_from_iter(info.colors.iter().map(attachment_to_erupt));
+                }));
 
                 builder = builder.color_attachments(&*colors);
 
                 let depth_attachment_info;
-                if let Some(depth) = &info.depth {
-                    depth_attachment_info = attachment_to_erupt(depth);
-                    builder = builder.depth_attachment(&depth_attachment_info);
-                }
-
                 let stencil_attachment_info;
-                if let Some(stencil) = &info.stencil {
-                    stencil_attachment_info = attachment_to_erupt(stencil);
-                    builder = builder.stencil_attachment(&stencil_attachment_info);
+
+                if let Some(a) = &info.depth_stencil {
+                    let depth_stencil_view = &a.depth_stencil_view;
+                    let format = depth_stencil_view.info().image.info().format;
+
+                    if let Some((load_op, store_op, layout)) = a.depth {
+                        let (clear_value, load_op) = match load_op {
+                            LoadOp::Clear(clear_depth) => (
+                                ClearValue::from(clear_depth).to_erupt(format),
+                                vk1_0::AttachmentLoadOp::CLEAR,
+                            ),
+                            LoadOp::Load => {
+                                (vk1_0::ClearValue::default(), vk1_0::AttachmentLoadOp::LOAD)
+                            }
+                            LoadOp::DontCare => (
+                                vk1_0::ClearValue::default(),
+                                vk1_0::AttachmentLoadOp::DONT_CARE,
+                            ),
+                        };
+
+                        depth_attachment_info = vk1_3::RenderingAttachmentInfoBuilder::new()
+                            .image_view(depth_stencil_view.handle())
+                            .image_layout(layout.to_erupt())
+                            .load_op(load_op)
+                            .store_op(store_op.to_erupt())
+                            .clear_value(clear_value);
+
+                        builder = builder.depth_attachment(&depth_attachment_info);
+                    }
+
+                    if let Some((load_op, store_op, layout)) = a.stencil {
+                        let (clear_value, load_op) = match load_op {
+                            LoadOp::Clear(clear_depth) => (
+                                ClearValue::from(clear_depth).to_erupt(format),
+                                vk1_0::AttachmentLoadOp::CLEAR,
+                            ),
+                            LoadOp::Load => {
+                                (vk1_0::ClearValue::default(), vk1_0::AttachmentLoadOp::LOAD)
+                            }
+                            LoadOp::DontCare => (
+                                vk1_0::ClearValue::default(),
+                                vk1_0::AttachmentLoadOp::DONT_CARE,
+                            ),
+                        };
+
+                        stencil_attachment_info = vk1_3::RenderingAttachmentInfoBuilder::new()
+                            .image_view(depth_stencil_view.handle())
+                            .image_layout(layout.to_erupt())
+                            .load_op(load_op)
+                            .store_op(store_op.to_erupt())
+                            .clear_value(clear_value);
+
+                        builder = builder.stencil_attachment(&stencil_attachment_info);
+                    }
                 }
 
                 if device.graphics().instance.enabled().vk1_3 {

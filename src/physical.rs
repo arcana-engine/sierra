@@ -74,6 +74,7 @@ pub enum Feature {
 
     DisplayTiming,
     DynamicRendering,
+    SeparateDepthStencilLayouts,
 }
 
 #[allow(dead_code)]

@@ -16,6 +16,7 @@ use crate::{
     framebuffer::{Framebuffer, FramebufferError},
     image::{Image, ImageBlit, ImageMemoryBarrier, Layout, SubresourceLayers},
     memory::MemoryBarrier,
+    minimal_extent,
     pipeline::{
         ComputePipeline, DynamicGraphicsPipeline, GraphicsPipeline, PipelineInputLayout,
         PipelineLayout, RayTracingPipeline, ShaderBindingTable, Viewport,
@@ -25,8 +26,9 @@ use crate::{
     sampler::Filter,
     shader::ShaderStageFlags,
     stage::PipelineStageFlags,
-    BufferInfo, BufferUsage, Device, Extent3d, Format, IndexType, Offset3d, OutOfMemory,
-    PipelinePushConstants, Rect2d, RenderingAttachmentInfo, RenderingInfo,
+    BufferInfo, BufferUsage, Device, Extent3, Format, IndexType, Offset3, OutOfMemory,
+    PipelinePushConstants, Rect, RenderingColorInfo, RenderingDepthStencilAttachmentInfo,
+    RenderingInfo,
 };
 
 pub use crate::backend::CommandBuffer;
@@ -43,10 +45,10 @@ pub struct BufferCopy {
 #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct ImageCopy {
     pub src_subresource: SubresourceLayers,
-    pub src_offset: Offset3d,
+    pub src_offset: Offset3,
     pub dst_subresource: SubresourceLayers,
-    pub dst_offset: Offset3d,
-    pub extent: Extent3d,
+    pub dst_offset: Offset3,
+    pub extent: Extent3,
 }
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
@@ -56,8 +58,8 @@ pub struct BufferImageCopy {
     pub buffer_row_length: u32,
     pub buffer_image_height: u32,
     pub image_subresource: SubresourceLayers,
-    pub image_offset: Offset3d,
-    pub image_extent: Extent3d,
+    pub image_offset: Offset3,
+    pub image_extent: Extent3,
 }
 
 #[derive(Debug)]
@@ -106,7 +108,7 @@ pub enum Command<'a> {
     },
 
     SetScissor {
-        scissor: Rect2d,
+        scissor: Rect,
     },
 
     Draw {
@@ -143,7 +145,7 @@ pub enum Command<'a> {
 
     TraceRays {
         shader_binding_table: &'a ShaderBindingTable,
-        extent: Extent3d,
+        extent: Extent3,
     },
 
     CopyBuffer {
@@ -226,7 +228,7 @@ impl<'a> EncoderCommon<'a> {
             .write(self.scope, Command::SetViewport { viewport });
     }
 
-    pub fn set_scissor(&mut self, scissor: Rect2d) {
+    pub fn set_scissor(&mut self, scissor: Rect) {
         assert!(self.capabilities.supports_graphics());
 
         self.command_buffer
@@ -513,20 +515,41 @@ impl<'a> Encoder<'a> {
     }
 
     /// Begins rendering
-    pub fn begin_rendering(&mut self, info: RenderingInfo<'_>) -> RenderingEncoder<'_, 'a> {
+    pub fn begin_rendering(&mut self, mut info: RenderingInfo<'_>) -> RenderingEncoder<'_, 'a> {
         assert!(self.inner.capabilities.supports_graphics());
 
-        let attachment_format =
-            |a: &RenderingAttachmentInfo| a.image_view.info().image.info().format;
+        let color_format = |a: &RenderingColorInfo| a.color_view.info().image.info().format;
+
+        let depth_stencil_format = |a: &RenderingDepthStencilAttachmentInfo| {
+            a.depth_stencil_view.info().image.info().format
+        };
 
         let colors = &*self
             .scope
-            .to_scope_from_iter(info.colors.iter().map(attachment_format));
+            .to_scope_from_iter(info.colors.iter().map(color_format));
 
-        let depth = info.depth.as_ref().map(attachment_format);
-        let stencil = info.stencil.as_ref().map(attachment_format);
+        let depth_stencil = info.depth_stencil.as_ref().map(depth_stencil_format);
 
-        let render_area = info.render_area;
+        let render_area = *info.render_area.get_or_insert_with(|| {
+            let mut me = minimal_extent();
+            for color in info.colors.iter() {
+                me.add(color.color_view.info().image.info().extent.into_2d());
+            }
+
+            if let Some(depth_stencil) = &info.depth_stencil {
+                me.add(
+                    depth_stencil
+                        .depth_stencil_view
+                        .info()
+                        .image
+                        .info()
+                        .extent
+                        .into_2d(),
+                );
+            }
+
+            Rect::from(me.get())
+        });
 
         self.inner
             .command_buffer
@@ -535,8 +558,7 @@ impl<'a> Encoder<'a> {
         RenderingEncoder {
             render_area,
             colors,
-            depth,
-            stencil,
+            depth_stencil,
             inner: &mut self.inner,
         }
     }
@@ -729,7 +751,7 @@ impl<'a> Encoder<'a> {
         )
     }
 
-    pub fn trace_rays(&mut self, shader_binding_table: &'a ShaderBindingTable, extent: Extent3d) {
+    pub fn trace_rays(&mut self, shader_binding_table: &'a ShaderBindingTable, extent: Extent3) {
         assert!(self.inner.capabilities.supports_compute());
 
         self.inner.command_buffer.write(
@@ -1012,10 +1034,9 @@ impl<'a, 'b> std::ops::DerefMut for RenderPassEncoder<'a, 'b> {
 
 /// Command encoder that can encode commands inside render pass.
 pub struct RenderingEncoder<'a, 'b> {
-    render_area: Rect2d,
+    render_area: Rect,
     colors: &'b [Format],
-    depth: Option<Format>,
-    stencil: Option<Format>,
+    depth_stencil: Option<Format>,
     inner: &'a mut EncoderCommon<'b>,
 }
 
@@ -1073,8 +1094,7 @@ impl<'a, 'b> RenderingEncoder<'a, 'b> {
             self.inner.set_viewport(self.render_area.into());
         }
 
-        let gp =
-            pipeline.get_for_dynamic_rendering(&self.colors, self.depth, self.stencil, device)?;
+        let gp = pipeline.get_for_dynamic_rendering(&self.colors, self.depth_stencil, device)?;
         self.inner.bind_graphics_pipeline(gp);
         Ok(())
     }

@@ -135,7 +135,6 @@ fn fs_main() -> @location(0) vec4<f32> {
                 }
 
                 let mut image = swapchain.acquire_image()?;
-                let extent = image.image().info().extent.into_2d();
 
                 let mut encoder = queue.create_encoder(&scope)?;
 
@@ -150,24 +149,14 @@ fn fs_main() -> @location(0) vec4<f32> {
                         )],
                     );
 
-                    let mut render_pass_encoder = encoder.begin_rendering(sierra::RenderingInfo {
-                        render_area: sierra::Rect2d {
-                            offset: sierra::Offset2d { x: 0, y: 0 },
-                            extent: sierra::Extent2d {
-                                width: extent.width,
-                                height: extent.height,
-                            },
-                        },
-                        colors: &[sierra::RenderingAttachmentInfo {
-                            image_view: view_cache.make_image(image.image(), &device)?.clone(),
-                            image_layout: sierra::Layout::ColorAttachmentOptimal,
-                            load_op: sierra::LoadOp::Clear,
-                            store_op: sierra::StoreOp::Store,
-                            clear_value: Some(sierra::ClearColor(0.3, 0.1, 0.8, 1.0).into()),
-                        }],
-                        depth: None,
-                        stencil: None,
-                    });
+                    let mut render_pass_encoder = encoder.begin_rendering(
+                        sierra::RenderingInfo::new().color(
+                            &sierra::RenderingColorInfo::new(
+                                view_cache.make_image(image.image(), &device)?.clone(),
+                            )
+                            .clear(sierra::ClearColor(0.3, 0.1, 0.8, 1.0)),
+                        ),
+                    );
 
                     render_pass_encoder
                         .bind_dynamic_graphics_pipeline(&mut graphics_pipeline, &device)?;

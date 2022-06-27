@@ -1,7 +1,7 @@
 pub use crate::backend::Surface;
 use crate::DisplayTimingUnavailable;
 use {
-    crate::{assert_error, format::Format, image::ImageUsage, Extent2d, OutOfMemory},
+    crate::{assert_error, format::Format, image::ImageUsage, Extent2, OutOfMemory},
     raw_window_handle::RawWindowHandle,
     std::{error::Error, fmt::Debug, num::NonZeroU32, sync::Arc},
 };
@@ -178,10 +178,10 @@ pub struct SurfaceCapabilities {
     pub supported_families: Arc<[bool]>,
     pub min_image_count: NonZeroU32,
     pub max_image_count: Option<NonZeroU32>,
-    pub current_extent: Extent2d,
+    pub current_extent: Extent2,
     pub current_transform: SurfaceTransformFlags,
-    pub min_image_extent: Extent2d,
-    pub max_image_extent: Extent2d,
+    pub min_image_extent: Extent2,
+    pub max_image_extent: Extent2,
     pub supported_usage: ImageUsage,
     pub present_modes: Vec<PresentMode>,
     pub formats: Vec<Format>,

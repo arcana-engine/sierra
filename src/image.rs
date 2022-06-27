@@ -13,7 +13,7 @@ pub use {
 use {
     crate::{
         format::{AspectFlags, Format},
-        Extent2d, Extent3d, ImageSize, Offset3d,
+        Extent2, Extent3, ImageSize, Offset3,
     },
     std::ops::Range,
 };
@@ -153,8 +153,8 @@ pub enum ImageExtent {
     },
 }
 
-impl From<Extent2d> for ImageExtent {
-    fn from(extent: Extent2d) -> Self {
+impl From<Extent2> for ImageExtent {
+    fn from(extent: Extent2) -> Self {
         ImageExtent::D2 {
             width: extent.width,
             height: extent.height,
@@ -162,8 +162,8 @@ impl From<Extent2d> for ImageExtent {
     }
 }
 
-impl From<Extent3d> for ImageExtent {
-    fn from(extent: Extent3d) -> Self {
+impl From<Extent3> for ImageExtent {
+    fn from(extent: Extent3) -> Self {
         ImageExtent::D3 {
             width: extent.width,
             height: extent.height,
@@ -175,44 +175,32 @@ impl From<Extent3d> for ImageExtent {
 impl ImageExtent {
     /// Convert image extent (1,2 or 3 dimensional) into 3 dimensional extent.
     /// If image doesn't have `height` or `depth`  they are set to 1.
-    pub fn into_3d(self) -> Extent3d {
+    pub fn into_3d(self) -> Extent3 {
         match self {
-            Self::D1 { width } => Extent3d {
-                width,
-                height: 1,
-                depth: 1,
-            },
-            Self::D2 { width, height } => Extent3d {
-                width,
-                height,
-                depth: 1,
-            },
+            Self::D1 { width } => Extent3::new(width, 1, 1),
+            Self::D2 { width, height } => Extent3::new(width, height, 1),
             Self::D3 {
                 width,
                 height,
                 depth,
-            } => Extent3d {
-                width,
-                height,
-                depth,
-            },
+            } => Extent3::new(width, height, depth),
         }
     }
 
     /// Convert image extent (1,2 or 3 dimensional) into 2 dimensional extent.
     /// If image doesn't have `height` it is set to 1.
     /// `depth` is ignored.
-    pub fn into_2d(self) -> Extent2d {
+    pub fn into_2d(self) -> Extent2 {
         match self {
-            Self::D1 { width } => Extent2d { width, height: 1 },
-            Self::D2 { width, height } => Extent2d { width, height },
-            Self::D3 { width, height, .. } => Extent2d { width, height },
+            Self::D1 { width } => Extent2::new(width, 1),
+            Self::D2 { width, height } => Extent2::new(width, height),
+            Self::D3 { width, height, .. } => Extent2::new(width, height),
         }
     }
 }
 
-impl PartialEq<Extent2d> for ImageExtent {
-    fn eq(&self, rhs: &Extent2d) -> bool {
+impl PartialEq<Extent2> for ImageExtent {
+    fn eq(&self, rhs: &Extent2) -> bool {
         match self {
             ImageExtent::D2 { width, height } => *width == rhs.width && *height == rhs.height,
             _ => false,
@@ -220,8 +208,8 @@ impl PartialEq<Extent2d> for ImageExtent {
     }
 }
 
-impl PartialEq<Extent3d> for ImageExtent {
-    fn eq(&self, rhs: &Extent3d) -> bool {
+impl PartialEq<Extent3> for ImageExtent {
+    fn eq(&self, rhs: &Extent3) -> bool {
         match self {
             ImageExtent::D3 {
                 width,
@@ -233,7 +221,7 @@ impl PartialEq<Extent3d> for ImageExtent {
     }
 }
 
-impl PartialEq<ImageExtent> for Extent2d {
+impl PartialEq<ImageExtent> for Extent2 {
     fn eq(&self, rhs: &ImageExtent) -> bool {
         match rhs {
             ImageExtent::D2 { width, height } => self.width == *width && self.height == *height,
@@ -242,7 +230,7 @@ impl PartialEq<ImageExtent> for Extent2d {
     }
 }
 
-impl PartialEq<ImageExtent> for Extent3d {
+impl PartialEq<ImageExtent> for Extent3 {
     fn eq(&self, rhs: &ImageExtent) -> bool {
         match rhs {
             ImageExtent::D3 {
@@ -509,9 +497,9 @@ impl From<Subresource> for SubresourceRange {
 #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct ImageBlit {
     pub src_subresource: SubresourceLayers,
-    pub src_offsets: [Offset3d; 2],
+    pub src_offsets: [Offset3; 2],
     pub dst_subresource: SubresourceLayers,
-    pub dst_offsets: [Offset3d; 2],
+    pub dst_offsets: [Offset3; 2],
 }
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
