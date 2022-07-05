@@ -3,11 +3,11 @@ use crate::sealed::Sealed;
 pub use {
     self::Samples::*,
     crate::{
-        access::AccessFlags,
+        access::Access,
         backend::Image,
         encode::Encoder,
         queue::{Ownership, QueueId},
-        stage::PipelineStageFlags,
+        stage::PipelineStages,
     },
 };
 use {
@@ -505,9 +505,9 @@ pub struct ImageBlit {
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub struct LayoutTransition<'a> {
     pub image: &'a Image,
-    pub old_access: AccessFlags,
+    pub old_access: Access,
     pub old_layout: Option<Layout>,
-    pub new_access: AccessFlags,
+    pub new_access: Access,
     pub new_layout: Layout,
     pub range: SubresourceRange,
 }
@@ -515,9 +515,9 @@ pub struct LayoutTransition<'a> {
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub struct ImageMemoryBarrier<'a> {
     pub image: &'a Image,
-    pub old_access: AccessFlags,
+    pub old_access: Access,
     pub old_layout: Option<Layout>,
-    pub new_access: AccessFlags,
+    pub new_access: Access,
     pub new_layout: Layout,
     pub family_transfer: Option<(u32, u32)>,
     pub range: SubresourceRange,
@@ -526,7 +526,7 @@ pub struct ImageMemoryBarrier<'a> {
 impl<'a> ImageMemoryBarrier<'a> {
     pub fn transition_whole(
         image: &'a Image,
-        access: Range<AccessFlags>,
+        access: Range<Access>,
         layout: Range<Layout>,
     ) -> Self {
         ImageMemoryBarrier {
@@ -540,11 +540,11 @@ impl<'a> ImageMemoryBarrier<'a> {
         }
     }
 
-    pub fn initialize_whole(image: &'a Image, access: AccessFlags, layout: Layout) -> Self {
+    pub fn initialize_whole(image: &'a Image, access: Access, layout: Layout) -> Self {
         ImageMemoryBarrier {
             range: SubresourceRange::whole(image.info()),
             image,
-            old_access: AccessFlags::empty(),
+            old_access: Access::empty(),
             old_layout: None,
             new_access: access,
             new_layout: layout,
@@ -583,8 +583,8 @@ pub struct ImageSubresourceRange {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ImageSubresourceState {
     pub subresource: ImageSubresourceRange,
-    pub access: AccessFlags,
-    pub stages: PipelineStageFlags,
+    pub access: Access,
+    pub stages: PipelineStages,
     pub layout: Option<Layout>,
     pub family: Ownership,
 }
@@ -593,8 +593,8 @@ impl ImageSubresourceState {
     ///
     pub fn access<'a>(
         &'a mut self,
-        access: AccessFlags,
-        stages: PipelineStageFlags,
+        access: Access,
+        stages: PipelineStages,
         layout: Layout,
         queue: QueueId,
         encoder: &mut Encoder<'a>,
@@ -660,8 +660,8 @@ impl ImageSubresourceState {
     ///
     pub fn overwrite<'a>(
         &'a mut self,
-        access: AccessFlags,
-        stages: PipelineStageFlags,
+        access: Access,
+        stages: PipelineStages,
         layout: Layout,
         queue: QueueId,
         encoder: &mut Encoder<'a>,
@@ -671,7 +671,7 @@ impl ImageSubresourceState {
             stages,
             encoder.scope().to_scope([ImageMemoryBarrier {
                 image: &self.subresource.image,
-                old_access: AccessFlags::empty(),
+                old_access: Access::empty(),
                 new_access: access,
                 old_layout: None,
                 new_layout: layout,

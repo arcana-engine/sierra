@@ -16,7 +16,7 @@ use crate::{
     out_of_host_memory,
     queue::*,
     semaphore::Semaphore,
-    stage::PipelineStageFlags,
+    stage::PipelineStages,
     OutOfMemory,
 };
 
@@ -122,7 +122,7 @@ impl Queue {
     #[cfg_attr(feature = "tracing", tracing::instrument(skip(cbufs)))]
     pub fn submit(
         &mut self,
-        wait: &mut [(PipelineStageFlags, &mut Semaphore)],
+        wait: &mut [(PipelineStages, &mut Semaphore)],
         cbufs: impl IntoIterator<Item = CommandBuffer>,
         signal: &mut [&mut Semaphore],
         mut fence: Option<&mut Fence>,

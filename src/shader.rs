@@ -25,7 +25,6 @@ bitflags::bitflags! {
         const INTERSECTION              = 0b1000000000000;
 
         const ALL_GRAPHICS              = 0b0000000011111;
-        const ALL                       = !0;
     }
 }
 
@@ -46,6 +45,7 @@ pub enum ShaderStage {
 }
 
 impl Display for ShaderStage {
+    #[inline]
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Vertex => fmt.write_str("Vertex"),
@@ -63,9 +63,10 @@ impl Display for ShaderStage {
     }
 }
 
-impl From<ShaderStage> for ShaderStageFlags {
-    fn from(stage: ShaderStage) -> Self {
-        match stage {
+impl ShaderStage {
+    #[inline]
+    pub fn flag(&self) -> ShaderStageFlags {
+        match self {
             ShaderStage::Vertex => ShaderStageFlags::VERTEX,
             ShaderStage::TessellationControl => ShaderStageFlags::TESSELLATION_CONTROL,
             ShaderStage::TessellationEvaluation => ShaderStageFlags::TESSELLATION_EVALUATION,
@@ -78,6 +79,13 @@ impl From<ShaderStage> for ShaderStageFlags {
             ShaderStage::Miss => ShaderStageFlags::MISS,
             ShaderStage::Intersection => ShaderStageFlags::INTERSECTION,
         }
+    }
+}
+
+impl From<ShaderStage> for ShaderStageFlags {
+    #[inline]
+    fn from(stage: ShaderStage) -> Self {
+        stage.flag()
     }
 }
 

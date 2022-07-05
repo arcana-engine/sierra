@@ -1,7 +1,7 @@
 bitflags::bitflags! {
     /// Flags to specify set of pipeline stages.
     #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
-    pub struct PipelineStageFlags: u32 {
+    pub struct PipelineStages: u32 {
         /// Pseudo-stage that precedes all other stages and doesn't execute any commands.
         /// Using it in first scope of dependency will
         /// not cause any waiting, because no operations should be waited upon.

@@ -1,10 +1,10 @@
 pub use crate::backend::{Buffer, BufferView, MappableBuffer};
 use crate::{
-    access::AccessFlags,
+    access::Access,
     align_up,
     encode::Encoder,
     queue::{Ownership, QueueId},
-    stage::PipelineStageFlags,
+    stage::PipelineStages,
     Format,
 };
 
@@ -136,23 +136,19 @@ pub struct BufferMemoryBarrier<'a> {
     pub buffer: &'a Buffer,
     pub offset: u64,
     pub size: u64,
-    pub old_access: AccessFlags,
-    pub new_access: AccessFlags,
+    pub old_access: Access,
+    pub new_access: Access,
     pub family_transfer: Option<(u32, u32)>,
 }
 
-/// Buffer range with access mask,
-/// specifying how it may be accessed "before".
-///
-/// Note that "before" is loosely defined,
-/// as whatever previous owners do.
-/// Which should be translated to "earlier GPU operations"
-/// but this crate doesn't attempt to enforce that.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+/// Buffer range handle that holds unsynchronized access.
+/// When used in operation, it is checked that no synchronization is required.
+/// Adding it to the synchronization command will synchronized access to it.
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct BufferRangeState {
     pub range: BufferRange,
-    pub access: AccessFlags,
-    pub stages: PipelineStageFlags,
+    pub access: Access,
+    pub stages: PipelineStages,
     pub family: Ownership,
 }
 
@@ -160,8 +156,8 @@ impl BufferRangeState {
     ///
     pub fn access<'a>(
         &'a mut self,
-        access: AccessFlags,
-        stages: PipelineStageFlags,
+        access: Access,
+        stages: PipelineStages,
         queue: QueueId,
         encoder: &mut Encoder<'a>,
     ) -> &'a BufferRange {
@@ -224,8 +220,8 @@ impl BufferRangeState {
 
     pub fn overwrite<'a>(
         &'a mut self,
-        access: AccessFlags,
-        stages: PipelineStageFlags,
+        access: Access,
+        stages: PipelineStages,
         queue: QueueId,
         encoder: &mut Encoder<'a>,
     ) -> &'a BufferRange {
@@ -234,7 +230,7 @@ impl BufferRangeState {
             stages,
             encoder.scope().to_scope([BufferMemoryBarrier {
                 buffer: &self.range.buffer,
-                old_access: AccessFlags::empty(),
+                old_access: Access::empty(),
                 new_access: access,
                 family_transfer: None,
                 offset: self.range.offset,

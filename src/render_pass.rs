@@ -4,7 +4,7 @@ use crate::{
     format::Format,
     framebuffer::FramebufferError,
     image::{Layout, Samples},
-    stage::PipelineStageFlags,
+    stage::PipelineStages,
     Device, ImageView, OutOfMemory, Rect,
 };
 
@@ -168,11 +168,11 @@ pub struct SubpassDependency {
 
     /// Stages of the first subpass that will be synchronized
     /// with stages for second subpass specified in `dst_stages`.
-    pub src_stages: PipelineStageFlags,
+    pub src_stages: PipelineStages,
 
     /// Stages of the second subpass that will be synchronized
     /// with stages for first subpass specified in `src_stages`.
-    pub dst_stages: PipelineStageFlags,
+    pub dst_stages: PipelineStages,
 }
 
 /// Value for attachment load clear operation.

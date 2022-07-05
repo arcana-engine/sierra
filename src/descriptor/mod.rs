@@ -7,7 +7,7 @@ pub use self::{binding::*, layout::*, sparse::*};
 pub use crate::{
     backend::{DescriptorSet, WritableDescriptorSet},
     queue::QueueId,
-    stage::PipelineStageFlags,
+    stage::PipelineStages,
 };
 
 use crate::{

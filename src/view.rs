@@ -1,12 +1,12 @@
 pub use crate::backend::ImageView;
 use crate::{
-    access::AccessFlags,
+    access::Access,
     backend::Device,
     encode::Encoder,
     image::{Image, ImageExtent, ImageMemoryBarrier, Layout, SubresourceRange},
     queue::{Ownership, QueueId},
     sealed::Sealed,
-    stage::PipelineStageFlags,
+    stage::PipelineStages,
     OutOfMemory,
 };
 
@@ -173,8 +173,8 @@ impl MakeImageView for Image {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ImageViewState {
     pub view: ImageView,
-    pub access: AccessFlags,
-    pub stages: PipelineStageFlags,
+    pub access: Access,
+    pub stages: PipelineStages,
     pub layout: Option<Layout>,
     pub family: Ownership,
 }
@@ -183,8 +183,8 @@ impl ImageViewState {
     ///
     pub fn access<'a>(
         &'a mut self,
-        access: AccessFlags,
-        stages: PipelineStageFlags,
+        access: Access,
+        stages: PipelineStages,
         layout: Layout,
         queue: QueueId,
         encoder: &mut Encoder<'a>,
@@ -253,8 +253,8 @@ impl ImageViewState {
     ///
     pub fn overwrite<'a>(
         &'a mut self,
-        access: AccessFlags,
-        stages: PipelineStageFlags,
+        access: Access,
+        stages: PipelineStages,
         layout: Layout,
         queue: QueueId,
         encoder: &mut Encoder<'a>,
@@ -264,7 +264,7 @@ impl ImageViewState {
             stages,
             encoder.scope().to_scope([ImageMemoryBarrier {
                 image: &self.view.info().image,
-                old_access: AccessFlags::empty(),
+                old_access: Access::empty(),
                 new_access: access,
                 old_layout: None,
                 new_layout: layout,

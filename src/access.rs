@@ -1,139 +1,74 @@
 bitflags::bitflags! {
-    /// Flags for access types.
-    pub struct AccessFlags: u32 {
-        /// Read access to indirect command data
-        /// read as part of an indirect build,
-        /// trace, drawing or dispatch command.
+    /// Specifies the access types for a resource.
+    pub struct Access: u64 {
+        /// Specifies read access to command data read from indirect buffers
+        /// as part of an indirect build, trace, drawing or dispatch command.
         const INDIRECT_COMMAND_READ = 0x00000001;
 
-        /// Read access to an index buffer as part of an indexed drawing command
+        /// Specifies read access to an index buffer as part of an indexed drawing command.
         const INDEX_READ = 0x00000002;
 
-        /// Read access to a vertex buffer as part of a drawing command
+        /// Specifies read access to a vertex buffer as part of a drawing command.
         const VERTEX_ATTRIBUTE_READ = 0x00000004;
 
-        /// Read access to a uniform buffer..
+        /// Specifies read access to a uniform buffer in any shader pipeline stage.
         const UNIFORM_READ = 0x00000008;
 
-        /// Read access to an input attachment
-        /// within a render pass during fragment shading.
-        const INPUT_ATTACHMENT_READ = 0x00000010;
+        /// Specifies read access to a uniform texel buffer or sampled image in any shader pipeline stage.
+        const SHADER_SAMPLED_READ = 0x00000010;
 
-        /// Read access to a storage buffer, physical storage buffer,
-        /// shader binding table, uniform texel buffer, storage texel buffer,
-        /// sampled image, or storage image.
-        const SHADER_READ = 0x00000020;
+        /// Specifies read access to a storage buffer, physical storage buffer, storage texel buffer, or storage image in any shader pipeline stage.
+        const SHADER_STORAGE_READ = 0x00000020;
 
-        /// Write access to a storage buffer, physical storage buffer,
-        /// storage texel buffer, or storage image.
-        const SHADER_WRITE = 0x00000040;
+        /// Specifies read access to a shader binding table in any shader pipeline stage.
+        const SHADER_BINDING_TABLE_READ = 0x00000040;
 
-        /// Read access to a color attachment,
-        /// such as via blending, logic operations,
-        /// or via certain subpass load operations.\
-        /// It does not include advanced blend operations.
-        const COLOR_ATTACHMENT_READ = 0x00000080;
+        /// Specifies read access to an input attachment
+        /// within a render pass during subpass shading or fragment shading.
+        const INPUT_ATTACHMENT_READ = 0x00000080;
 
-        /// Write access to a color, resolve,
-        /// or depth/stencil resolve attachment
-        /// during a render pass
-        /// or via certain subpass load and store operations.
-        const COLOR_ATTACHMENT_WRITE = 0x00000100;
+        /// Specifies read access to a color attachment, such as
+        /// via blending, logic operations, or via certain subpass load operations.
+        const COLOR_ATTACHMENT_READ = 0x00000100;
 
-        /// Read access to a depth/stencil attachment,
-        /// via depth or stencil operations
-        /// or via certain subpass load operations.
+        /// Specifies read access to a depth/stencil attachment,
+        /// via depth or stencil operations or via certain subpass load operations.
         const DEPTH_STENCIL_ATTACHMENT_READ = 0x00000200;
 
-        /// Write access to a depth/stencil attachment,
-        /// via depth or stencil operations
-        /// or via certain subpass load and store operations.
-        const DEPTH_STENCIL_ATTACHMENT_WRITE = 0x00000400;
-
-        /// Read access to an image or buffer in a copy operation.
-        const TRANSFER_READ = 0x00000800;
-
-        /// Write access to an image or buffer in a clear or copy operation.
-        const TRANSFER_WRITE = 0x00001000;
-
-        /// Read access by a host operation.
-        const HOST_READ = 0x00002000;
-
-        /// Write access by a host operation.
-        const HOST_WRITE = 0x00004000;
-
-        /// All read accesses.
-        const MEMORY_READ = 0x00008000;
-
-        /// All write accesses.
-        const MEMORY_WRITE = 0x00010000;
-
-        // /// Write access to a transform feedback buffer made
-        // /// when transform feedback is active.
-        // const TRANSFORM_FEEDBACK_WRITE = 0x00020000;
-
-        // /// Read access to a transform feedback counter buffer
-        // /// which is read when vkCmdBeginTransformFeedbackEXT executes.
-        // const TRANSFORM_FEEDBACK_COUNTER_READ = 0x00040000;
-
-        // /// Write access to a transform feedback counter buffer
-        // /// which is written when vkCmdEndTransformFeedbackEXT executes.
-        // const TRANSFORM_FEEDBACK_COUNTER_WRITE = 0x00080000;
-
-        /// Read access to a predicate as part of conditional rendering.
-        const CONDITIONAL_RENDERING_READ = 0x00100000;
-
-        /// Similar to [`COLOR_ATTACHMENT_READ`],
-        /// but also includes advanced blend operations.
-        const COLOR_ATTACHMENT_READ_NONCOHERENT = 0x00200000;
-
-        /// Read access to an acceleration structure
+        /// Specifies read access to an acceleration structure
         /// as part of a trace, build, or copy command,
-        /// or to an acceleration structure scratch buffer
-        // as part of a build command.
-        const ACCELERATION_STRUCTURE_READ = 0x00400000;
+        /// or to an acceleration structure scratch buffer as part of a build command.
+        const ACCELERATION_STRUCTURE_READ = 0x00001000;
 
-        /// Write access to an acceleration structure
-        /// or acceleration structure scratch buffer
-        /// as part of a build or copy command.
-        const ACCELERATION_STRUCTURE_WRITE = 0x00800000;
+        /// Specifies read access to an image or buffer in a copy operation.
+        const TRANSFER_READ = 0x00000400;
 
-        /// Read access to a fragment density map attachment
-        /// during dynamic fragment density map operations.
-        const FRAGMENT_DENSITY_MAP_READ = 0x01000000;
+        /// Specifies read access by a host operation.
+        /// Accesses of this type are not performed through a resource, but directly on memory.
+        const HOST_READ = 0x00000800;
 
-        /// Read access to a fragment shading rate attachment
-        /// or shading rate image during rasterization.
-        const FRAGMENT_SHADING_RATE_ATTACHMENT_READ = 0x02000000;
-    }
-}
+        /// Specifies write access to a storage buffer,
+        /// physical storage buffer, storage texel buffer,
+        /// or storage image in any shader pipeline stage.
+        const SHADER_STORAGE_WRITE = 0x00002000;
 
-impl AccessFlags {
-    pub fn is_read(self) -> bool {
-        self.intersects(
-            Self::SHADER_READ
-                | Self::COLOR_ATTACHMENT_READ
-                | Self::DEPTH_STENCIL_ATTACHMENT_READ
-                | Self::TRANSFER_READ
-                | Self::HOST_READ
-                | Self::MEMORY_READ
-                // | Self::TRANSFORM_FEEDBACK_READ
-                // | Self::TRANSFORM_FEEDBACK_COUNTER_READ
-                | Self::ACCELERATION_STRUCTURE_READ,
-        )
-    }
+        /// Specifies write access to a color, resolve, or depth/stencil resolve attachment
+        /// during a render pass or via certain subpass load and store operations.
+        const COLOR_ATTACHMENT_WRITE = 0x00004000;
 
-    pub fn is_write(self) -> bool {
-        self.intersects(
-            Self::SHADER_WRITE
-                | Self::COLOR_ATTACHMENT_WRITE
-                | Self::DEPTH_STENCIL_ATTACHMENT_WRITE
-                | Self::TRANSFER_WRITE
-                | Self::HOST_WRITE
-                | Self::MEMORY_WRITE
-                // | Self::TRANSFORM_FEEDBACK_WRITE
-                // | Self::TRANSFORM_FEEDBACK_COUNTER_WRITE
-                | Self::ACCELERATION_STRUCTURE_WRITE,
-        )
+        /// Specifies write access to a depth/stencil attachment,
+        /// via depth or stencil operations or via certain subpass load and store operations.
+        const DEPTH_STENCIL_ATTACHMENT_WRITE = 0x00008000;
+
+        /// Specifies write access to an acceleration structure or acceleration structure scratch buffer
+        /// as part of a build or copy command
+        const ACCELERATION_STRUCTURE_WRITE = 0x00010000;
+
+        /// Specifies write access to an image or buffer in a clear or copy operation
+        const TRANSFER_WRITE = 0x00020000;
+
+        /// Specifies write access by a host operation.
+        /// Accesses of this type are not performed through a resource, but directly on memory.
+        const HOST_WRITE = 0x00040000;
     }
 }

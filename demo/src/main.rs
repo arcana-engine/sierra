@@ -140,11 +140,11 @@ fn fs_main() -> @location(0) vec4<f32> {
 
                 if dynamic_rendering {
                     encoder.image_barriers(
-                        sierra::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
-                        sierra::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
+                        sierra::PipelineStages::COLOR_ATTACHMENT_OUTPUT,
+                        sierra::PipelineStages::COLOR_ATTACHMENT_OUTPUT,
                         &[sierra::ImageMemoryBarrier::initialize_whole(
                             image.image(),
-                            sierra::AccessFlags::COLOR_ATTACHMENT_WRITE,
+                            sierra::Access::COLOR_ATTACHMENT_WRITE,
                             sierra::Layout::ColorAttachmentOptimal,
                         )],
                     );
@@ -167,12 +167,11 @@ fn fs_main() -> @location(0) vec4<f32> {
                     drop(render_pass_encoder);
 
                     encoder.image_barriers(
-                        sierra::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
-                        sierra::PipelineStageFlags::TOP_OF_PIPE,
+                        sierra::PipelineStages::COLOR_ATTACHMENT_OUTPUT,
+                        sierra::PipelineStages::TOP_OF_PIPE,
                         &[sierra::ImageMemoryBarrier::transition_whole(
                             image.image(),
-                            sierra::AccessFlags::COLOR_ATTACHMENT_WRITE
-                                ..sierra::AccessFlags::empty(),
+                            sierra::Access::COLOR_ATTACHMENT_WRITE..sierra::Access::empty(),
                             sierra::Layout::ColorAttachmentOptimal..sierra::Layout::Present,
                         )],
                     );
@@ -204,7 +203,7 @@ fn fs_main() -> @location(0) vec4<f32> {
                 fence_index %= fences_len;
 
                 queue.submit(
-                    &mut [(sierra::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT, wait)],
+                    &mut [(sierra::PipelineStages::COLOR_ATTACHMENT_OUTPUT, wait)],
                     Some(encoder.finish()),
                     &mut [signal],
                     Some(fence),

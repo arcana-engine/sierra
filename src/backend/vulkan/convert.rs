@@ -1,14 +1,14 @@
 use crate::{
-    out_of_host_memory, AccelerationStructureBuildFlags, AccelerationStructureLevel, AccessFlags,
+    out_of_host_memory, AccelerationStructureBuildFlags, AccelerationStructureLevel, Access,
     AspectFlags, BlendFactor, BlendOp, BorderColor, BufferCopy, BufferImageCopy, BufferUsage,
     CompareOp, ComponentMapping, ComponentMask, CompositeAlphaFlags, Culling,
     DescriptorBindingFlags, DescriptorSetLayoutFlags, DescriptorType, DeviceAddress, Extent2,
     Extent3, Filter, Format, FrontFace, GeometryFlags, ImageBlit, ImageCopy, ImageExtent,
     ImageUsage, ImageViewKind, IndexType, Layout, LoadOp, LogicOp, MemoryUsage, MipmapMode,
-    Offset2, Offset3, OutOfMemory, PipelineStageFlags, PolygonMode, PresentMode,
-    PresentationTiming, PrimitiveTopology, QueueCapabilityFlags, Rect, SamplerAddressMode, Samples,
-    ShaderStage, ShaderStageFlags, StencilOp, StoreOp, Subresource, SubresourceLayers,
-    SubresourceRange, SurfaceTransformFlags, Swizzle, VertexInputRate, Viewport,
+    Offset2, Offset3, OutOfMemory, PipelineStages, PolygonMode, PresentMode, PresentationTiming,
+    PrimitiveTopology, QueueCapabilityFlags, Rect, SamplerAddressMode, Samples, ShaderStage,
+    ShaderStageFlags, StencilOp, StoreOp, Subresource, SubresourceLayers, SubresourceRange,
+    SurfaceTransformFlags, Swizzle, VertexInputRate, Viewport,
 };
 use erupt::{
     extensions::{
@@ -649,71 +649,71 @@ impl ToErupt<vk1_0::ImageAspectFlags> for AspectFlags {
     }
 }
 
-impl ToErupt<vk1_0::PipelineStageFlags> for PipelineStageFlags {
+impl ToErupt<vk1_0::PipelineStageFlags> for PipelineStages {
     fn to_erupt(self) -> vk1_0::PipelineStageFlags {
         let mut result = vk1_0::PipelineStageFlags::empty();
 
-        if self.contains(PipelineStageFlags::TOP_OF_PIPE) {
+        if self.contains(PipelineStages::TOP_OF_PIPE) {
             result |= vk1_0::PipelineStageFlags::TOP_OF_PIPE
         }
 
-        if self.contains(PipelineStageFlags::DRAW_INDIRECT) {
+        if self.contains(PipelineStages::DRAW_INDIRECT) {
             result |= vk1_0::PipelineStageFlags::DRAW_INDIRECT
         }
 
-        if self.contains(PipelineStageFlags::VERTEX_INPUT) {
+        if self.contains(PipelineStages::VERTEX_INPUT) {
             result |= vk1_0::PipelineStageFlags::VERTEX_INPUT
         }
 
-        if self.contains(PipelineStageFlags::VERTEX_SHADER) {
+        if self.contains(PipelineStages::VERTEX_SHADER) {
             result |= vk1_0::PipelineStageFlags::VERTEX_SHADER
         }
 
-        if self.contains(PipelineStageFlags::EARLY_FRAGMENT_TESTS) {
+        if self.contains(PipelineStages::EARLY_FRAGMENT_TESTS) {
             result |= vk1_0::PipelineStageFlags::EARLY_FRAGMENT_TESTS
         }
 
-        if self.contains(PipelineStageFlags::FRAGMENT_SHADER) {
+        if self.contains(PipelineStages::FRAGMENT_SHADER) {
             result |= vk1_0::PipelineStageFlags::FRAGMENT_SHADER
         }
 
-        if self.contains(PipelineStageFlags::LATE_FRAGMENT_TESTS) {
+        if self.contains(PipelineStages::LATE_FRAGMENT_TESTS) {
             result |= vk1_0::PipelineStageFlags::LATE_FRAGMENT_TESTS
         }
 
-        if self.contains(PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT) {
+        if self.contains(PipelineStages::COLOR_ATTACHMENT_OUTPUT) {
             result |= vk1_0::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT
         }
 
-        if self.contains(PipelineStageFlags::COMPUTE_SHADER) {
+        if self.contains(PipelineStages::COMPUTE_SHADER) {
             result |= vk1_0::PipelineStageFlags::COMPUTE_SHADER
         }
 
-        if self.contains(PipelineStageFlags::TRANSFER) {
+        if self.contains(PipelineStages::TRANSFER) {
             result |= vk1_0::PipelineStageFlags::TRANSFER
         }
 
-        if self.contains(PipelineStageFlags::BOTTOM_OF_PIPE) {
+        if self.contains(PipelineStages::BOTTOM_OF_PIPE) {
             result |= vk1_0::PipelineStageFlags::BOTTOM_OF_PIPE
         }
 
-        if self.contains(PipelineStageFlags::HOST) {
+        if self.contains(PipelineStages::HOST) {
             result |= vk1_0::PipelineStageFlags::HOST
         }
 
-        if self.contains(PipelineStageFlags::ALL_GRAPHICS) {
+        if self.contains(PipelineStages::ALL_GRAPHICS) {
             result |= vk1_0::PipelineStageFlags::ALL_GRAPHICS
         }
 
-        if self.contains(PipelineStageFlags::ALL_COMMANDS) {
+        if self.contains(PipelineStages::ALL_COMMANDS) {
             result |= vk1_0::PipelineStageFlags::ALL_COMMANDS
         }
 
-        if self.contains(PipelineStageFlags::RAY_TRACING_SHADER) {
+        if self.contains(PipelineStages::RAY_TRACING_SHADER) {
             result |= vk1_0::PipelineStageFlags::RAY_TRACING_SHADER_KHR
         }
 
-        if self.contains(PipelineStageFlags::ACCELERATION_STRUCTURE_BUILD) {
+        if self.contains(PipelineStages::ACCELERATION_STRUCTURE_BUILD) {
             result |= vk1_0::PipelineStageFlags::ACCELERATION_STRUCTURE_BUILD_KHR
         }
 
@@ -723,7 +723,7 @@ impl ToErupt<vk1_0::PipelineStageFlags> for PipelineStageFlags {
 
 impl ToErupt<vk1_0::ShaderStageFlags> for ShaderStageFlags {
     fn to_erupt(self) -> vk1_0::ShaderStageFlags {
-        if self == ShaderStageFlags::ALL {
+        if self == ShaderStageFlags::all() {
             return vk1_0::ShaderStageFlags::ALL;
         }
 
@@ -1321,7 +1321,7 @@ impl ToErupt<vk1_0::DescriptorSetLayoutCreateFlags> for DescriptorSetLayoutFlags
     }
 }
 
-impl ToErupt<vk1_0::AccessFlags> for AccessFlags {
+impl ToErupt<vk1_0::AccessFlags> for Access {
     fn to_erupt(self) -> vk1_0::AccessFlags {
         let mut result = vk1_0::AccessFlags::empty();
 
@@ -1337,71 +1337,50 @@ impl ToErupt<vk1_0::AccessFlags> for AccessFlags {
         if self.contains(Self::UNIFORM_READ) {
             result |= vk1_0::AccessFlags::UNIFORM_READ;
         }
-        if self.contains(Self::INPUT_ATTACHMENT_READ) {
-            result |= vk1_0::AccessFlags::INPUT_ATTACHMENT_READ;
-        }
-        if self.contains(Self::SHADER_READ) {
+        if self.contains(Self::SHADER_SAMPLED_READ) {
             result |= vk1_0::AccessFlags::SHADER_READ;
         }
-        if self.contains(Self::SHADER_WRITE) {
-            result |= vk1_0::AccessFlags::SHADER_WRITE;
+        if self.contains(Self::SHADER_STORAGE_READ) {
+            result |= vk1_0::AccessFlags::SHADER_READ;
+        }
+        if self.contains(Self::SHADER_BINDING_TABLE_READ) {
+            result |= vk1_0::AccessFlags::SHADER_READ;
+        }
+        if self.contains(Self::INPUT_ATTACHMENT_READ) {
+            result |= vk1_0::AccessFlags::INPUT_ATTACHMENT_READ;
         }
         if self.contains(Self::COLOR_ATTACHMENT_READ) {
             result |= vk1_0::AccessFlags::COLOR_ATTACHMENT_READ;
         }
-        if self.contains(Self::COLOR_ATTACHMENT_WRITE) {
-            result |= vk1_0::AccessFlags::COLOR_ATTACHMENT_WRITE;
-        }
         if self.contains(Self::DEPTH_STENCIL_ATTACHMENT_READ) {
             result |= vk1_0::AccessFlags::DEPTH_STENCIL_ATTACHMENT_READ;
-        }
-        if self.contains(Self::DEPTH_STENCIL_ATTACHMENT_WRITE) {
-            result |= vk1_0::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE;
         }
         if self.contains(Self::TRANSFER_READ) {
             result |= vk1_0::AccessFlags::TRANSFER_READ;
         }
-        if self.contains(Self::TRANSFER_WRITE) {
-            result |= vk1_0::AccessFlags::TRANSFER_WRITE;
-        }
         if self.contains(Self::HOST_READ) {
             result |= vk1_0::AccessFlags::HOST_READ;
-        }
-        if self.contains(Self::HOST_WRITE) {
-            result |= vk1_0::AccessFlags::HOST_WRITE;
-        }
-        if self.contains(Self::MEMORY_READ) {
-            result |= vk1_0::AccessFlags::MEMORY_READ;
-        }
-        if self.contains(Self::MEMORY_WRITE) {
-            result |= vk1_0::AccessFlags::MEMORY_WRITE;
-        }
-        // if self.contains(Self::TRANSFORM_FEEDBACK_WRITE) {
-        //     result |= vk1_0::AccessFlags::TRANSFORM_FEEDBACK_WRITE_EXT;
-        // }
-        // if self.contains(Self::TRANSFORM_FEEDBACK_COUNTER_READ) {
-        //     result |= vk1_0::AccessFlags::TRANSFORM_FEEDBACK_COUNTER_READ_EXT;
-        // }
-        // if self.contains(Self::TRANSFORM_FEEDBACK_COUNTER_WRITE) {
-        //     result |= vk1_0::AccessFlags::TRANSFORM_FEEDBACK_COUNTER_WRITE_EXT;
-        // }
-        if self.contains(Self::CONDITIONAL_RENDERING_READ) {
-            result |= vk1_0::AccessFlags::CONDITIONAL_RENDERING_READ_EXT;
-        }
-        if self.contains(Self::COLOR_ATTACHMENT_READ_NONCOHERENT) {
-            result |= vk1_0::AccessFlags::COLOR_ATTACHMENT_READ_NONCOHERENT_EXT;
         }
         if self.contains(Self::ACCELERATION_STRUCTURE_READ) {
             result |= vk1_0::AccessFlags::ACCELERATION_STRUCTURE_READ_KHR;
         }
+        if self.contains(Self::COLOR_ATTACHMENT_WRITE) {
+            result |= vk1_0::AccessFlags::COLOR_ATTACHMENT_WRITE;
+        }
+        if self.contains(Self::SHADER_STORAGE_WRITE) {
+            result |= vk1_0::AccessFlags::SHADER_WRITE;
+        }
+        if self.contains(Self::DEPTH_STENCIL_ATTACHMENT_WRITE) {
+            result |= vk1_0::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE;
+        }
         if self.contains(Self::ACCELERATION_STRUCTURE_WRITE) {
             result |= vk1_0::AccessFlags::ACCELERATION_STRUCTURE_WRITE_KHR;
         }
-        if self.contains(Self::FRAGMENT_DENSITY_MAP_READ) {
-            result |= vk1_0::AccessFlags::FRAGMENT_DENSITY_MAP_READ_EXT;
+        if self.contains(Self::TRANSFER_WRITE) {
+            result |= vk1_0::AccessFlags::TRANSFER_WRITE;
         }
-        if self.contains(Self::FRAGMENT_SHADING_RATE_ATTACHMENT_READ) {
-            result |= vk1_0::AccessFlags::FRAGMENT_SHADING_RATE_ATTACHMENT_READ_KHR;
+        if self.contains(Self::HOST_WRITE) {
+            result |= vk1_0::AccessFlags::HOST_WRITE;
         }
 
         result

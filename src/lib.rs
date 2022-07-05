@@ -165,7 +165,6 @@ pub use {arrayvec, bytemuck, scoped_arena, smallvec};
 #[error("Out of device memory")]
 pub struct OutOfMemory;
 
-
 /// Device address is `u64` value pointing into device resource.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(transparent)]

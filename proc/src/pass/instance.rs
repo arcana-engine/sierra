@@ -174,9 +174,9 @@ pub(super) fn generate(input: &Input) -> TokenStream {
             quote::quote!(
                 dependencies.push(::sierra::SubpassDependency {
                     src: #src,
-                    src_stages: ::sierra::PipelineStageFlags::from_bits_truncate(#src_stages),
+                    src_stages: ::sierra::PipelineStages::from_bits_truncate(#src_stages),
                     dst: #dst,
-                    dst_stages: ::sierra::PipelineStageFlags::from_bits_truncate(#dst_stages),
+                    dst_stages: ::sierra::PipelineStages::from_bits_truncate(#dst_stages),
                 });
             )
         })

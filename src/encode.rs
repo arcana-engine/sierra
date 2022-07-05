@@ -9,7 +9,7 @@ use scoped_arena::Scope;
 
 use crate::{
     accel::AccelerationStructureBuildGeometryInfo,
-    access::AccessFlags,
+    access::Access,
     arith_ge, arith_le,
     buffer::{Buffer, BufferMemoryBarrier},
     descriptor::{DescriptorSet, UpdatedPipelineDescriptors},
@@ -25,7 +25,7 @@ use crate::{
     render_pass::{ClearValue, RenderPass, RenderPassInstance},
     sampler::Filter,
     shader::ShaderStageFlags,
-    stage::PipelineStageFlags,
+    stage::PipelineStages,
     BufferInfo, BufferUsage, Device, Extent3, Format, IndexType, Offset3, OutOfMemory,
     PipelinePushConstants, Rect, RenderingColorInfo, RenderingDepthStencilAttachmentInfo,
     RenderingInfo,
@@ -179,8 +179,8 @@ pub enum Command<'a> {
     },
 
     PipelineBarrier {
-        src: PipelineStageFlags,
-        dst: PipelineStageFlags,
+        src: PipelineStages,
+        dst: PipelineStages,
         images: &'a [ImageMemoryBarrier<'a>],
         buffers: &'a [BufferMemoryBarrier<'a>],
         memory: Option<MemoryBarrier>,
@@ -859,10 +859,10 @@ impl<'a> Encoder<'a> {
 
     pub fn memory_barrier(
         &mut self,
-        src: PipelineStageFlags,
-        src_acc: AccessFlags,
-        dst: PipelineStageFlags,
-        dst_acc: AccessFlags,
+        src: PipelineStages,
+        src_acc: Access,
+        dst: PipelineStages,
+        dst_acc: Access,
     ) {
         self.inner.command_buffer.write(
             self.inner.scope,
@@ -881,8 +881,8 @@ impl<'a> Encoder<'a> {
 
     pub fn image_barriers(
         &mut self,
-        src: PipelineStageFlags,
-        dst: PipelineStageFlags,
+        src: PipelineStages,
+        dst: PipelineStages,
         images: &[ImageMemoryBarrier],
     ) {
         self.inner.command_buffer.write(
@@ -899,8 +899,8 @@ impl<'a> Encoder<'a> {
 
     pub fn buffer_barriers(
         &mut self,
-        src: PipelineStageFlags,
-        dst: PipelineStageFlags,
+        src: PipelineStages,
+        dst: PipelineStages,
         buffers: &[BufferMemoryBarrier],
     ) {
         self.inner.command_buffer.write(
