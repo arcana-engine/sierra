@@ -27,7 +27,7 @@ wgsl = ["naga/wgsl-in", "codespan-reporting"]
 sierra-proc = { version = "=0.6.0", path = "proc" }
 #bitsetium = { version = "0.0.2" }
 bitflags = "1.2"
-raw-window-handle = "0.4"
+raw-window-handle = "0.5"
 serde = { version = "1.0", optional = true, features = ["derive", "rc"] }
 serde_bytes = { version = "0.11", optional = true }
 smallvec = { version = "1.5", features = ["const_new"] }
@@ -52,7 +52,7 @@ hashbrown = "0.12"
 num-traits = "0.2"
 
 [target.'cfg(any(target_os="macos", target_os="ios"))'.dependencies]
-mtl = { package = "metal", version = "0.23.1", optional = true }
+mtl = { package = "metal", version = "0.24", optional = true }
 objc = { version = "0.2.5", optional = true }
 core-graphics-types = { version = "0.1", optional = true }
 moltenvk-sys = { version = "0.1", optional = true }
