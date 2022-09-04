@@ -1,34 +1,28 @@
-use {
-    super::{physical::PhysicalDevice, unexpected_result},
-    crate::{
-        out_of_host_memory,
-        physical::EnumerateDeviceError,
-        surface::{CreateSurfaceError, RawWindowHandleKind, Surface, SurfaceInfo},
-        OutOfMemory,
-    },
-    erupt::{
-        extensions::{
-            ext_debug_report::{
-                DebugReportCallbackCreateInfoEXTBuilder, DebugReportFlagsEXT,
-                DebugReportObjectTypeEXT, EXT_DEBUG_REPORT_EXTENSION_NAME,
-            },
-            ext_debug_utils::EXT_DEBUG_UTILS_EXTENSION_NAME,
-            khr_get_physical_device_properties2::KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,
-            khr_surface::KHR_SURFACE_EXTENSION_NAME,
-        },
-        utils::loading::{EntryLoader, EntryLoaderError},
-        vk1_0, InstanceLoader, LoaderError,
-    },
-    once_cell::sync::OnceCell,
-    raw_window_handle::{HasRawWindowHandle, RawWindowHandle},
-    smallvec::SmallVec,
-    std::{
-        ffi::{c_void, CStr},
-        fmt::{self, Debug},
-        os::raw::c_char,
-        sync::atomic::AtomicBool,
-    },
+use std::{
+    ffi::{c_void, CStr},
+    fmt::{self, Debug},
+    os::raw::c_char,
+    sync::atomic::AtomicBool,
 };
+
+use erupt::{
+    extensions::{
+        ext_debug_report::{
+            DebugReportCallbackCreateInfoEXTBuilder, DebugReportFlagsEXT, DebugReportObjectTypeEXT,
+            EXT_DEBUG_REPORT_EXTENSION_NAME,
+        },
+        ext_debug_utils::EXT_DEBUG_UTILS_EXTENSION_NAME,
+        khr_get_physical_device_properties2::KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,
+        khr_surface::KHR_SURFACE_EXTENSION_NAME,
+    },
+    utils::loading::{EntryLoader, EntryLoaderError},
+    vk1_0, InstanceLoader, LoaderError,
+};
+use once_cell::sync::OnceCell;
+use raw_window_handle::{
+    HasRawDisplayHandle, HasRawWindowHandle, RawDisplayHandle, RawWindowHandle,
+};
+use smallvec::SmallVec;
 
 #[cfg(any(
     target_os = "linux",
@@ -63,6 +57,15 @@ use erupt::{
     extensions::mvk_macos_surface::MVK_MACOS_SURFACE_EXTENSION_NAME,
     vk::MacOSSurfaceCreateInfoMVKBuilder,
 };
+
+use crate::{
+    out_of_host_memory,
+    physical::EnumerateDeviceError,
+    surface::{CreateSurfaceError, RawWindowHandleKind, Surface, SurfaceInfo},
+    OutOfMemory, RawDisplayHandleKind,
+};
+
+use super::{physical::PhysicalDevice, unexpected_result};
 
 /// Root object of the erupt graphics system.
 pub struct Graphics {
@@ -115,7 +118,7 @@ impl Graphics {
 
     #[cfg_attr(feature = "tracing", tracing::instrument)]
     fn new() -> Result<Self, InitError> {
-        trace!("Init erupt graphisc implementation");
+        trace!("Init erupt graphics implementation");
 
         let entry = EntryLoader::new()?;
 
@@ -326,16 +329,18 @@ impl Graphics {
             .collect())
     }
 
-    #[cfg_attr(feature = "tracing", tracing::instrument(skip(window), fields(?window = window.raw_window_handle())))]
+    #[cfg_attr(feature = "tracing", tracing::instrument(skip(window, display), fields(?window = window.raw_window_handle())))]
     pub fn create_surface(
         &self,
         window: &impl HasRawWindowHandle,
+        display: &impl HasRawDisplayHandle,
     ) -> Result<Surface, CreateSurfaceError> {
         let window = window.raw_window_handle();
+        let display = display.raw_display_handle();
 
-        let surface = match window {
+        let surface = match (window, display) {
             #[cfg(target_os = "android")]
-            RawWindowHandle::Android(handle) => {
+            (RawWindowHandle::Android(handle), RawDisplayHandle::Android(_)) => {
                 if !self.instance.enabled().khr_android_surface {
                     return Err(CreateSurfaceError::UnsupportedWindow {
                         window: RawWindowHandleKind::of(&window),
@@ -356,13 +361,29 @@ impl Graphics {
                 todo!()
             }
 
+            #[cfg(target_os = "android")]
+            (RawWindowHandle::Android(_), _) => {
+                return Err(CreateSurfaceError::WindowDisplayMismatch {
+                    window: RawWindowHandleKind::of(&window),
+                    display: RawDisplayHandleKind::of(&display),
+                });
+            }
+
             #[cfg(target_os = "ios")]
-            RawWindowHandle::UiKit(handle) => {
+            (RawWindowHandle::UiKit(_), RawDisplayHandle::UiKit(_)) => {
                 todo!()
             }
 
+            #[cfg(target_os = "ios")]
+            (RawWindowHandle::UiKit(_), _) => {
+                return Err(CreateSurfaceError::WindowDisplayMismatch {
+                    window: RawWindowHandleKind::of(&window),
+                    display: RawDisplayHandleKind::of(&display),
+                });
+            }
+
             #[cfg(target_os = "macos")]
-            RawWindowHandle::AppKit(handle) => {
+            (RawWindowHandle::AppKit(handle), RawDisplayHandle::AppKit(_)) => {
                 use core_graphics_types::{base::CGFloat, geometry::CGRect};
                 use objc::{
                     class, msg_send,
@@ -428,6 +449,14 @@ impl Graphics {
                 }
             }
 
+            #[cfg(target_os = "macos")]
+            (RawWindowHandle::AppKit(_), _) => {
+                return Err(CreateSurfaceError::WindowDisplayMismatch {
+                    window: RawWindowHandleKind::of(&window),
+                    display: RawDisplayHandleKind::of(&display),
+                });
+            }
+
             #[cfg(any(
                 target_os = "linux",
                 target_os = "dragonfly",
@@ -435,7 +464,7 @@ impl Graphics {
                 target_os = "netbsd",
                 target_os = "openbsd"
             ))]
-            RawWindowHandle::Wayland(handle) => {
+            (RawWindowHandle::Wayland(raw_window), RawDisplayHandle::Wayland(raw_display)) => {
                 if !self.instance.enabled().khr_wayland_surface {
                     return Err(CreateSurfaceError::UnsupportedWindow {
                         window: RawWindowHandleKind::of(&window),
@@ -449,8 +478,8 @@ impl Graphics {
                     self.instance.create_wayland_surface_khr(
                         &WaylandSurfaceCreateInfoKHR::default()
                             .into_builder()
-                            .surface(handle.surface)
-                            .display(handle.display),
+                            .surface(raw_window.surface)
+                            .display(raw_display.display),
                         None,
                     )
                 }
@@ -466,8 +495,22 @@ impl Graphics {
                 }
             }
 
+            #[cfg(any(
+                target_os = "linux",
+                target_os = "dragonfly",
+                target_os = "freebsd",
+                target_os = "netbsd",
+                target_os = "openbsd"
+            ))]
+            (RawWindowHandle::Wayland(_), _) => {
+                return Err(CreateSurfaceError::WindowDisplayMismatch {
+                    window: RawWindowHandleKind::of(&window),
+                    display: RawDisplayHandleKind::of(&display),
+                });
+            }
+
             #[cfg(target_os = "windows")]
-            RawWindowHandle::Win32(handle) => {
+            (RawWindowHandle::Win32(handle), RawDisplayHandle::Windows(_)) => {
                 if !self.instance.enabled().khr_win32_surface {
                     return Err(CreateSurfaceError::UnsupportedWindow {
                         window: RawWindowHandleKind::of(&window),
@@ -494,11 +537,27 @@ impl Graphics {
             }
 
             #[cfg(target_os = "windows")]
-            RawWindowHandle::WinRt(_) => {
+            (RawWindowHandle::Win32(_), _) => {
+                return Err(CreateSurfaceError::WindowDisplayMismatch {
+                    window: RawWindowHandleKind::of(&window),
+                    display: RawDisplayHandleKind::of(&display),
+                });
+            }
+
+            #[cfg(target_os = "windows")]
+            (RawWindowHandle::WinRt(_), RawDisplayHandle::Windows(_)) => {
                 return Err(CreateSurfaceError::UnsupportedWindow {
                     window: RawWindowHandleKind::of(&window),
                     source: Some(Box::from("WinRT is not supported")),
                 })
+            }
+
+            #[cfg(target_os = "windows")]
+            (RawWindowHandle::WinRt(_), _) => {
+                return Err(CreateSurfaceError::WindowDisplayMismatch {
+                    window: RawWindowHandleKind::of(&window),
+                    display: RawDisplayHandleKind::of(&display),
+                });
             }
 
             #[cfg(any(
@@ -508,7 +567,7 @@ impl Graphics {
                 target_os = "netbsd",
                 target_os = "openbsd"
             ))]
-            RawWindowHandle::Xcb(handle) => {
+            (RawWindowHandle::Xcb(raw_window), RawDisplayHandle::Xcb(raw_display)) => {
                 if !self.instance.enabled().khr_xcb_surface {
                     return Err(CreateSurfaceError::UnsupportedWindow {
                         window: RawWindowHandleKind::of(&window),
@@ -522,8 +581,8 @@ impl Graphics {
                     self.instance.create_xcb_surface_khr(
                         &XcbSurfaceCreateInfoKHR::default()
                             .into_builder()
-                            .window(handle.window)
-                            .connection(handle.connection),
+                            .window(raw_window.window)
+                            .connection(raw_display.connection),
                         None,
                     )
                 }
@@ -546,7 +605,21 @@ impl Graphics {
                 target_os = "netbsd",
                 target_os = "openbsd"
             ))]
-            RawWindowHandle::Xlib(handle) => {
+            (RawWindowHandle::Xcb(_), _) => {
+                return Err(CreateSurfaceError::WindowDisplayMismatch {
+                    window: RawWindowHandleKind::of(&window),
+                    display: RawDisplayHandleKind::of(&display),
+                });
+            }
+
+            #[cfg(any(
+                target_os = "linux",
+                target_os = "dragonfly",
+                target_os = "freebsd",
+                target_os = "netbsd",
+                target_os = "openbsd"
+            ))]
+            (RawWindowHandle::Xlib(raw_window), RawDisplayHandle::Xlib(raw_display)) => {
                 if !self.instance.enabled().khr_xlib_surface {
                     return Err(CreateSurfaceError::UnsupportedWindow {
                         window: RawWindowHandleKind::of(&window),
@@ -559,8 +632,8 @@ impl Graphics {
                 unsafe {
                     self.instance.create_xlib_surface_khr(
                         &XlibSurfaceCreateInfoKHR {
-                            window: handle.window,
-                            dpy: handle.display,
+                            window: raw_window.window,
+                            dpy: raw_display.display,
                             ..XlibSurfaceCreateInfoKHR::default()
                         },
                         None,
@@ -573,6 +646,21 @@ impl Graphics {
                     _ => unexpected_result(err),
                 })?
             }
+
+            #[cfg(any(
+                target_os = "linux",
+                target_os = "dragonfly",
+                target_os = "freebsd",
+                target_os = "netbsd",
+                target_os = "openbsd"
+            ))]
+            (RawWindowHandle::Xlib(_), _) => {
+                return Err(CreateSurfaceError::WindowDisplayMismatch {
+                    window: RawWindowHandleKind::of(&window),
+                    display: RawDisplayHandleKind::of(&display),
+                });
+            }
+
             _ => {
                 debug_assert_eq!(
                     RawWindowHandleKind::of(&window),

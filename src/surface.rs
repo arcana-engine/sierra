@@ -1,10 +1,12 @@
-pub use crate::backend::Surface;
-use crate::DisplayTimingUnavailable;
-use {
-    crate::{assert_error, format::Format, image::ImageUsage, Extent2, OutOfMemory},
-    raw_window_handle::RawWindowHandle,
-    std::{error::Error, fmt::Debug, num::NonZeroU32, sync::Arc},
+use std::{error::Error, fmt::Debug, num::NonZeroU32, sync::Arc};
+
+use raw_window_handle::{RawDisplayHandle, RawWindowHandle};
+
+use crate::{
+    assert_error, format::Format, image::ImageUsage, DisplayTimingUnavailable, Extent2, OutOfMemory,
 };
+
+pub use crate::backend::Surface;
 
 #[derive(Clone, Copy, Debug, thiserror::Error, PartialEq, Eq)]
 pub enum SurfaceError {
@@ -123,6 +125,69 @@ impl RawWindowHandleKind {
     }
 }
 
+/// Kind of raw window handles
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
+#[non_exhaustive]
+pub enum RawDisplayHandleKind {
+    UiKit,
+    AppKit,
+    Xlib,
+    Xcb,
+    Wayland,
+    Windows,
+    Web,
+    Android,
+    Unknown,
+}
+
+impl RawDisplayHandleKind {
+    /// Returns kind of the raw window handle.
+    pub fn of(window: &RawDisplayHandle) -> Self {
+        match window {
+            #[cfg(target_os = "android")]
+            RawDisplayHandle::Android(_) => RawDisplayHandleKind::Android,
+
+            #[cfg(target_os = "ios")]
+            RawDisplayHandle::UiKit(_) => RawDisplayHandleKind::IOS,
+
+            #[cfg(target_os = "macos")]
+            RawDisplayHandle::AppKit(_) => RawDisplayHandleKind::AppKit,
+
+            #[cfg(any(
+                target_os = "linux",
+                target_os = "dragonfly",
+                target_os = "freebsd",
+                target_os = "netbsd",
+                target_os = "openbsd"
+            ))]
+            RawDisplayHandle::Wayland(_) => RawDisplayHandleKind::Wayland,
+
+            #[cfg(target_os = "windows")]
+            RawDisplayHandle::Windows(_) => RawDisplayHandleKind::Windows,
+
+            #[cfg(any(
+                target_os = "linux",
+                target_os = "dragonfly",
+                target_os = "freebsd",
+                target_os = "netbsd",
+                target_os = "openbsd"
+            ))]
+            RawDisplayHandle::Xcb(_) => RawDisplayHandleKind::Xcb,
+
+            #[cfg(any(
+                target_os = "linux",
+                target_os = "dragonfly",
+                target_os = "freebsd",
+                target_os = "netbsd",
+                target_os = "openbsd"
+            ))]
+            RawDisplayHandle::Xlib(_) => RawDisplayHandleKind::Xlib,
+            _ => RawDisplayHandleKind::Unknown,
+        }
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum CreateSurfaceError {
     #[error(transparent)]
@@ -135,6 +200,11 @@ pub enum CreateSurfaceError {
         window: RawWindowHandleKind,
         #[source]
         source: Option<Box<dyn Error + Send + Sync>>,
+    },
+    #[error("Window handle of kind {{{window:?}}} does not match display of kind {{{display:?}}}")]
+    WindowDisplayMismatch {
+        window: RawWindowHandleKind,
+        display: RawDisplayHandleKind,
     },
 }
 

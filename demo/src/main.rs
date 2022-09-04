@@ -47,7 +47,7 @@ fn main() -> eyre::Result<()> {
     let window = winit::window::Window::new(&event_loop)?;
 
     let graphics = sierra::Graphics::get_or_init()?;
-    let mut surface = graphics.create_surface(&window)?;
+    let mut surface = graphics.create_surface(&window, &window)?;
 
     let physical = graphics
         .devices()?
