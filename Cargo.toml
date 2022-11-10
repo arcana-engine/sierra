@@ -48,7 +48,7 @@ codespan-reporting = { version = "0.11", optional = true }
 array-fu = "0.0.1-alpha"
 tracing = { version = "0.1", optional = true }
 bitsetium = "0.0.2"
-hashbrown = "0.12"
+hashbrown = "0.13"
 num-traits = "0.2"
 
 [target.'cfg(any(target_os="macos", target_os="ios"))'.dependencies]
