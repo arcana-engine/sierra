@@ -13,7 +13,7 @@ use erupt::{
         khr_surface as vks,
         khr_swapchain::{self as vksw, SwapchainKHR},
     },
-    vk1_0,
+    vk1_0, ObjectHandle,
 };
 use smallvec::SmallVec;
 

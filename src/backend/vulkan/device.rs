@@ -23,7 +23,7 @@ use erupt::{
         khr_acceleration_structure as vkacc, khr_deferred_host_operations as vkdho,
         khr_ray_tracing_pipeline as vkrt, khr_swapchain as vksw,
     },
-    vk1_0, vk1_1, vk1_2, vk1_3, DeviceLoader, ExtendableFrom as _,
+    vk1_0, vk1_1, vk1_2, vk1_3, DeviceLoader, ExtendableFrom, ObjectHandle,
 };
 use gpu_alloc::{Dedicated, GpuAllocator, MemoryBlock};
 use gpu_alloc_erupt::EruptMemoryDevice;
@@ -391,30 +391,27 @@ impl Device {
         .map_err(oom_error_from_erupt)?;
 
         let mut dedicated = vk1_1::MemoryDedicatedRequirementsBuilder::new();
-        let reqs = if self.graphics().instance.enabled().vk1_1 {
+        let mut reqs = vk1_1::MemoryRequirements2Builder::new().extend_from(&mut dedicated);
+        if self.graphics().instance.enabled().vk1_1 {
             unsafe {
                 self.inner.logical.get_buffer_memory_requirements2(
                     &vk1_1::BufferMemoryRequirementsInfo2Builder::new().buffer(handle),
-                    Some(
-                        vk1_1::MemoryRequirements2Builder::new()
-                            .extend_from(&mut dedicated)
-                            .build_dangling(),
-                    ),
+                    &mut reqs,
                 )
             }
-            .memory_requirements
         } else {
-            unsafe { self.inner.logical.get_buffer_memory_requirements(handle) }
+            reqs.memory_requirements =
+                unsafe { self.inner.logical.get_buffer_memory_requirements(handle) }
         };
 
-        debug_assert!(reqs.alignment.is_power_of_two());
+        debug_assert!(reqs.memory_requirements.alignment.is_power_of_two());
 
         let block = {
             let device = EruptMemoryDevice::wrap(&self.inner.logical);
             let request = gpu_alloc::Request {
-                size: reqs.size,
-                align_mask: (reqs.alignment - 1) | info.align,
-                memory_types: reqs.memory_type_bits,
+                size: reqs.memory_requirements.size,
+                align_mask: (reqs.memory_requirements.alignment - 1) | info.align,
+                memory_types: reqs.memory_requirements.memory_type_bits,
                 usage: buffer_memory_usage_to_gpu_alloc(info.usage, memory_usage),
             };
 
@@ -602,30 +599,27 @@ impl Device {
         .map_err(oom_error_from_erupt)?;
 
         let mut dedicated = vk1_1::MemoryDedicatedRequirementsBuilder::new();
-        let reqs = if self.graphics().instance.enabled().vk1_1 {
+        let mut reqs = vk1_1::MemoryRequirements2Builder::new().extend_from(&mut dedicated);
+        if self.graphics().instance.enabled().vk1_1 {
             unsafe {
                 self.inner.logical.get_image_memory_requirements2(
                     &vk1_1::ImageMemoryRequirementsInfo2Builder::new().image(handle),
-                    Some(
-                        vk1_1::MemoryRequirements2Builder::new()
-                            .extend_from(&mut dedicated)
-                            .build_dangling(),
-                    ),
+                    &mut reqs,
                 )
             }
-            .memory_requirements
         } else {
-            unsafe { self.inner.logical.get_image_memory_requirements(handle) }
+            reqs.memory_requirements =
+                unsafe { self.inner.logical.get_image_memory_requirements(handle) }
         };
 
-        debug_assert!(reqs.alignment.is_power_of_two());
+        debug_assert!(reqs.memory_requirements.alignment.is_power_of_two());
 
         let block = {
             let device = EruptMemoryDevice::wrap(&self.inner.logical);
             let request = gpu_alloc::Request {
-                size: reqs.size,
-                align_mask: reqs.alignment - 1,
-                memory_types: reqs.memory_type_bits,
+                size: reqs.memory_requirements.size,
+                align_mask: reqs.memory_requirements.alignment - 1,
+                memory_types: reqs.memory_requirements.memory_type_bits,
                 usage: gpu_alloc::UsageFlags::empty(),
             };
 

@@ -6,7 +6,7 @@ use erupt::{
         google_display_timing::{PresentTimeGOOGLEBuilder, PresentTimesInfoGOOGLEBuilder},
         khr_swapchain::PresentInfoKHRBuilder,
     },
-    vk1_0, ExtendableFrom,
+    vk1_0, ExtendableFrom, ObjectHandle,
 };
 use scoped_arena::Scope;
 

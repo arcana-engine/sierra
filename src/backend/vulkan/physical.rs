@@ -17,7 +17,7 @@ use erupt::{
         khr_surface as vks,
         khr_swapchain::KHR_SWAPCHAIN_EXTENSION_NAME,
     },
-    vk1_0, vk1_1, vk1_2, vk1_3, DeviceLoader, ExtendableFrom as _, LoaderError,
+    vk1_0, vk1_1, vk1_2, vk1_3, DeviceLoader, ExtendableFrom, LoaderError, ObjectHandle,
 };
 use hashbrown::HashMap;
 use smallvec::SmallVec;
@@ -165,13 +165,13 @@ unsafe fn collect_properties_and_features(
             features2 = features2.extend_from(&mut features_rt);
         }
 
-        *properties2 = graphics
+        graphics
             .instance
-            .get_physical_device_properties2(physical, Some(*properties2));
+            .get_physical_device_properties2(physical, &mut properties2);
 
-        *features2 = graphics
+        graphics
             .instance
-            .get_physical_device_features2(physical, Some(*features2));
+            .get_physical_device_features2(physical, &mut features2);
 
         properties10 = properties2.properties;
         features10 = features2.features;

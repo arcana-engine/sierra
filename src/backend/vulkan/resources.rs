@@ -8,7 +8,7 @@ use std::{
     sync::Arc,
 };
 
-use erupt::{extensions::khr_acceleration_structure as vkacc, vk1_0};
+use erupt::{extensions::khr_acceleration_structure as vkacc, vk1_0, ObjectHandle};
 use gpu_alloc::MemoryBlock;
 use gpu_descriptor::DescriptorTotalCount;
 
