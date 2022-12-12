@@ -1,5 +1,3 @@
-use crate::access::Access;
-
 bitflags::bitflags! {
     /// Memory usage type.
     /// Bits set define intended usage for requested memory.
@@ -21,10 +19,4 @@ bitflags::bitflags! {
         /// Hits allocator that memory will be released shortly.
         const TRANSIENT = 0x20;
     }
-}
-
-#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
-pub struct MemoryBarrier {
-    pub src: Access,
-    pub dst: Access,
 }
