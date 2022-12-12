@@ -52,7 +52,7 @@ pub struct SwapchainImage<'a> {
 impl SwapchainImage<'_> {
     #[inline]
     pub(super) fn supported_families(&self) -> &[bool] {
-        &*self.supported_families
+        &self.supported_families
     }
 
     /// Swapchain image.
@@ -532,22 +532,17 @@ impl Swapchain {
             )
         };
 
-        loop {
-            match result {
-                vk1_0::Result::INCOMPLETE => {
-                    timings.resize(count as usize, Default::default());
+        while let vk1_0::Result::INCOMPLETE = result {
+            timings.resize(count as usize, Default::default());
 
-                    result = unsafe {
-                        f(
-                            device.logical().handle,
-                            inner.handle,
-                            &mut count,
-                            timings.as_mut_ptr(),
-                        )
-                    };
-                }
-                _ => break,
-            }
+            result = unsafe {
+                f(
+                    device.logical().handle,
+                    inner.handle,
+                    &mut count,
+                    timings.as_mut_ptr(),
+                )
+            };
         }
 
         match result {

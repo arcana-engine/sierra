@@ -2360,7 +2360,7 @@ impl RayTracingPipeline {
 
     #[inline]
     pub(super) fn group_handlers(&self) -> &[u8] {
-        &*self.inner.group_handlers
+        &self.inner.group_handlers
     }
 }
 

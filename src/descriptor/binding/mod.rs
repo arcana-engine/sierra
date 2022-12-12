@@ -24,9 +24,9 @@ pub trait DescriptorBinding<K: DescriptorKind> {
         encoder: &mut Encoder,
         descriptor: &K::Descriptor,
     ) -> Result<(), OutOfMemory> {
-        drop(device);
-        drop(encoder);
-        drop(descriptor);
+        let _ = device;
+        let _ = encoder;
+        let _ = descriptor;
         Ok(())
     }
 
@@ -58,9 +58,9 @@ pub trait DescriptorBindingArray<K> {
         encoder: &mut Encoder,
         descriptors: &Self::DescriptorArray,
     ) -> Result<(), OutOfMemory> {
-        drop(device);
-        drop(encoder);
-        drop(descriptors);
+        let _ = device;
+        let _ = encoder;
+        let _ = descriptors;
         Ok(())
     }
 

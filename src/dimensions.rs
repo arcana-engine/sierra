@@ -652,9 +652,8 @@ impl<const D: usize, T> MinimalExtent<D, T> {
             None => self.values = Some(extent.values),
             Some(values) => {
                 for (value, other) in values.iter_mut().zip(extent.values) {
-                    match Ord::cmp(&*value, &other) {
-                        Ordering::Greater => *value = other,
-                        _ => {}
+                    if Ord::cmp(&*value, &other) == Ordering::Greater {
+                        *value = other
                     }
                 }
             }

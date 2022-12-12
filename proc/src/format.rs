@@ -9,7 +9,7 @@ pub fn format(tokens: proc_macro::TokenStream) -> TokenStream {
 
 fn try_format(tokens: proc_macro::TokenStream) -> Result<TokenStream, syn::Error> {
     let ident = tokens.to_string();
-    parse_format(&*ident)
+    parse_format(&ident)
 }
 
 pub fn parse_format(s: &str) -> Result<TokenStream, syn::Error> {

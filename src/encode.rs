@@ -707,7 +707,7 @@ impl<'a> Encoder<'a> {
             };
 
             self.copy_buffer(
-                &staging,
+                staging,
                 buffer,
                 &[BufferCopy {
                     src_offset: 0,
@@ -1103,7 +1103,7 @@ impl<'a, 'b> RenderingEncoder<'a, 'b> {
             self.inner.set_viewport(self.render_area.into());
         }
 
-        let gp = pipeline.get_for_dynamic_rendering(&self.colors, self.depth_stencil, device)?;
+        let gp = pipeline.get_for_dynamic_rendering(self.colors, self.depth_stencil, device)?;
         self.inner.bind_graphics_pipeline(gp);
         Ok(())
     }

@@ -81,7 +81,7 @@ impl<T> ResourceCache<T> {
     where
         F: Fn(&T) -> bool,
     {
-        self.resources.iter().find(|(r, _)| eq(r)).map(|(r, _)| &*r)
+        self.resources.iter().find(|(r, _)| eq(r)).map(|(r, _)| r)
     }
 
     /// Fetches resource from cache.

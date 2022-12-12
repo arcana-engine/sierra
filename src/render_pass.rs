@@ -203,7 +203,7 @@ impl From<ClearDepth> for ClearValue {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct ClearStencil(pub u32);
 
@@ -406,7 +406,7 @@ impl RenderingDepthInfo {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RenderingStencilInfo {
     pub stencil_view: ImageView,
     pub stencil_layout: Layout,

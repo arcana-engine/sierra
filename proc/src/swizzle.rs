@@ -18,10 +18,11 @@ fn try_swizzle(tokens: proc_macro::TokenStream) -> Result<TokenStream, syn::Erro
     }
 
     let ident_bytes = ident.as_bytes();
-    let r = ident_bytes.get(0).copied().unwrap_or(b'I');
-    let g = ident_bytes.get(1).copied().unwrap_or(b'I');
-    let b = ident_bytes.get(2).copied().unwrap_or(b'I');
-    let a = ident_bytes.get(3).copied().unwrap_or(b'I');
+    let mut i = 0..;
+    let r = ident_bytes.get(i.next().unwrap()).copied().unwrap_or(b'I');
+    let g = ident_bytes.get(i.next().unwrap()).copied().unwrap_or(b'I');
+    let b = ident_bytes.get(i.next().unwrap()).copied().unwrap_or(b'I');
+    let a = ident_bytes.get(i.next().unwrap()).copied().unwrap_or(b'I');
 
     let comp = |c: u8| match c {
         b'0' => Ok("Zero"),

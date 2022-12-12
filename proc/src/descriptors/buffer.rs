@@ -54,7 +54,7 @@ impl FormatValue {
             FormatValue::Dynamic(token) => {
                 Ok(quote::quote_spanned!(token.span() => ::sierra::DynamicFormat))
             }
-            FormatValue::Const(format) => parse_format(&*format.to_string()),
+            FormatValue::Const(format) => parse_format(&format.to_string()),
         }
     }
 }
