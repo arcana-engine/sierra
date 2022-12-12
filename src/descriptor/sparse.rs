@@ -164,7 +164,7 @@ where
                     }
                     let index = self.upper_bounds;
                     self.upper_bounds += 1;
-                    self.updates.push(descriptor.clone());
+                    self.updates.push(descriptor);
                     entry.insert(index);
                     index
                 }

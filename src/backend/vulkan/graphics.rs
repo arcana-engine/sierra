@@ -700,6 +700,7 @@ impl fmt::Display for RequiredExtensionIsNotAvailable {
 impl std::error::Error for RequiredExtensionIsNotAvailable {}
 
 #[allow(unused)]
+#[allow(clippy::if_same_then_else)]
 unsafe extern "system" fn debug_report_callback(
     flags: DebugReportFlagsEXT,
     object_type: DebugReportObjectTypeEXT,

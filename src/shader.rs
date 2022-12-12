@@ -348,7 +348,7 @@ impl Shader {
     }
 
     pub fn entry(&self) -> &str {
-        &*self.entry
+        &self.entry
     }
 
     pub fn stage(&self) -> ShaderStage {
@@ -455,7 +455,7 @@ impl VertexShader {
     }
 
     pub fn entry(&self) -> &str {
-        &*self.entry
+        &self.entry
     }
 }
 
@@ -513,7 +513,7 @@ impl TessellationControlShader {
     }
 
     pub fn entry(&self) -> &str {
-        &*self.entry
+        &self.entry
     }
 }
 
@@ -571,7 +571,7 @@ impl TessellationEvaluationShader {
     }
 
     pub fn entry(&self) -> &str {
-        &*self.entry
+        &self.entry
     }
 }
 
@@ -629,7 +629,7 @@ impl GeometryShader {
     }
 
     pub fn entry(&self) -> &str {
-        &*self.entry
+        &self.entry
     }
 }
 
@@ -687,7 +687,7 @@ impl FragmentShader {
     }
 
     pub fn entry(&self) -> &str {
-        &*self.entry
+        &self.entry
     }
 }
 
@@ -745,7 +745,7 @@ impl ComputeShader {
     }
 
     pub fn entry(&self) -> &str {
-        &*self.entry
+        &self.entry
     }
 }
 
@@ -803,7 +803,7 @@ impl RaygenShader {
     }
 
     pub fn entry(&self) -> &str {
-        &*self.entry
+        &self.entry
     }
 }
 
@@ -861,7 +861,7 @@ impl AnyHitShader {
     }
 
     pub fn entry(&self) -> &str {
-        &*self.entry
+        &self.entry
     }
 }
 
@@ -919,7 +919,7 @@ impl ClosestHitShader {
     }
 
     pub fn entry(&self) -> &str {
-        &*self.entry
+        &self.entry
     }
 }
 
@@ -977,7 +977,7 @@ impl MissShader {
     }
 
     pub fn entry(&self) -> &str {
-        &*self.entry
+        &self.entry
     }
 }
 
@@ -1035,7 +1035,7 @@ impl IntersectionShader {
     }
 
     pub fn entry(&self) -> &str {
-        &*self.entry
+        &self.entry
     }
 }
 

@@ -1037,7 +1037,7 @@ impl Device {
             vk1_0::PipelineShaderStageCreateInfoBuilder::new()
                 .stage(vk1_0::ShaderStageFlagBits::VERTEX)
                 .module(desc.vertex_shader.module().handle())
-                .name(&*vertex_shader_entry),
+                .name(&vertex_shader_entry),
         );
 
         let input_assembly_state = vk1_0::PipelineInputAssemblyStateCreateInfoBuilder::new()
@@ -1199,7 +1199,7 @@ impl Device {
                     vk1_0::PipelineShaderStageCreateInfoBuilder::new()
                         .stage(vk1_0::ShaderStageFlagBits::FRAGMENT)
                         .module(shader.module().handle())
-                        .name(&*fragment_shader_entry),
+                        .name(&fragment_shader_entry),
                 );
             }
 

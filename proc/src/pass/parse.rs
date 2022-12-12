@@ -257,7 +257,7 @@ impl SubpassDependencyArgument {
 
         let src_span = || self.value.src.subpass.span();
         let dst_span = || self.value.dst.subpass.span();
-        let src_dst_span = || src_span().join(dst_span()).unwrap_or(src_span());
+        let src_dst_span = || src_span().join(dst_span()).unwrap_or_else(src_span);
 
         match (src, dst) {
             (None, None) => {

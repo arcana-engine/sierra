@@ -63,31 +63,31 @@ macro_rules! error {
 #[cfg(not(feature = "tracing"))]
 #[macro_export]
 macro_rules! trace {
-    ($($e:expr),*) => {{ $(drop(&$e);)* }};
+    ($($e:expr),*) => {{ $(let _ = &$e;)* }};
 }
 
 #[cfg(not(feature = "tracing"))]
 #[macro_export]
 macro_rules! debug {
-    ($($e:expr),*) => {{ $(drop(&$e);)* }};
+    ($($e:expr),*) => {{ $( let _ = &$e;)* }};
 }
 
 #[cfg(not(feature = "tracing"))]
 #[macro_export]
 macro_rules! info {
-    ($($e:expr),*) => {{ $(drop(&$e);)* }};
+    ($($e:expr),*) => {{ $(let _ = &$e;)* }};
 }
 
 #[cfg(not(feature = "tracing"))]
 #[macro_export]
 macro_rules! warn {
-    ($($e:expr),*) => {{ $(drop(&$e);)* }};
+    ($($e:expr),*) => {{ $(let _ = &$e;)* }};
 }
 
 #[cfg(not(feature = "tracing"))]
 #[macro_export]
 macro_rules! error {
-    ($($e:expr),*) => {{ $(drop(&$e);)* }};
+    ($($e:expr),*) => {{ $(let _ = &$e;)* }};
 }
 
 pub mod backend;
