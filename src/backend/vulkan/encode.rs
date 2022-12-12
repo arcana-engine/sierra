@@ -108,7 +108,7 @@ impl CommandBuffer {
         self.queue
     }
 
-    pub fn write(&mut self, scope: &Scope, command: Command<'_>) {
+    pub(crate) fn write(&mut self, scope: &Scope, command: Command<'_>) {
         let device = match &self.owner {
             CommandBufferDevice::Strong(device) => device,
             CommandBufferDevice::Weak(_) => return,

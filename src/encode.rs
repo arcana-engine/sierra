@@ -15,7 +15,6 @@ use crate::{
     descriptor::{DescriptorSet, UpdatedPipelineDescriptors},
     framebuffer::{Framebuffer, FramebufferError},
     image::{Image, ImageBlit, ImageMemoryBarrier, Layout, SubresourceLayers},
-    memory::MemoryBarrier,
     minimal_extent,
     pipeline::{
         ComputePipeline, DynamicGraphicsPipeline, GraphicsPipeline, PipelineInputLayout,
@@ -32,6 +31,16 @@ use crate::{
 };
 
 pub use crate::backend::CommandBuffer;
+
+/// Configures pipeline barrier for memory access.
+#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
+pub(crate) struct MemoryBarrier {
+    /// Memory access in scope before barrier to be synchronized.
+    pub src: Access,
+
+    /// Memory access in scope after barrier to be synchronized.
+    pub dst: Access,
+}
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
@@ -63,7 +72,7 @@ pub struct BufferImageCopy {
 }
 
 #[derive(Debug)]
-pub enum Command<'a> {
+pub(crate) enum Command<'a> {
     BeginRenderPass {
         framebuffer: &'a Framebuffer,
         clears: &'a [ClearValue],
