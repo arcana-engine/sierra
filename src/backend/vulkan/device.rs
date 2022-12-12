@@ -402,7 +402,7 @@ impl Device {
         } else {
             reqs.memory_requirements =
                 unsafe { self.inner.logical.get_buffer_memory_requirements(handle) }
-        };
+        }
 
         debug_assert!(reqs.memory_requirements.alignment.is_power_of_two());
 
@@ -610,7 +610,7 @@ impl Device {
         } else {
             reqs.memory_requirements =
                 unsafe { self.inner.logical.get_image_memory_requirements(handle) }
-        };
+        }
 
         debug_assert!(reqs.memory_requirements.alignment.is_power_of_two());
 
