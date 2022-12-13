@@ -14,17 +14,10 @@ mod physical;
 mod queue;
 mod resources;
 mod surface;
-mod swapchain;
 
 pub use self::{
     device::*, encode::*, graphics::*, physical::*, queue::*, resources::*, surface::*,
-    swapchain::*,
 };
-
-#[track_caller]
-fn device_lost() -> ! {
-    panic!("Device lost")
-}
 
 #[track_caller]
 fn unexpected_result(result: erupt::vk1_0::Result) -> ! {

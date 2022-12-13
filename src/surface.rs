@@ -3,7 +3,7 @@ use std::{error::Error, fmt::Debug, num::NonZeroU32, sync::Arc};
 use raw_window_handle::{RawDisplayHandle, RawWindowHandle};
 
 use crate::{
-    assert_error, format::Format, image::ImageUsage, DisplayTimingUnavailable, Extent2, OutOfMemory,
+    assert_error, format::Format, image::ImageUsage, DeviceLost, Extent2, IteratorExt, OutOfMemory,
 };
 
 pub use crate::backend::Surface;
@@ -16,8 +16,11 @@ pub enum SurfaceError {
         source: OutOfMemory,
     },
 
-    #[error("Surface is not supported")]
-    NotSupported,
+    #[error(transparent)]
+    DeviceLost {
+        #[from]
+        source: DeviceLost,
+    },
 
     #[error("Image usage {{{usage:?}}} is not supported for surface images")]
     UsageNotSupported { usage: ImageUsage },
@@ -43,19 +46,41 @@ pub enum SurfaceError {
     #[error("Too many images acquired")]
     TooManyAcquired,
 
-    #[error("Swapchain not configured")]
+    #[error("Surface not configured")]
     NotConfigured,
+}
 
+#[derive(Debug, thiserror::Error)]
+pub enum CreateSurfaceError {
     #[error(transparent)]
-    DisplayTimingUnavailable {
+    SurfaceError {
         #[from]
-        source: DisplayTimingUnavailable,
+        source: SurfaceError,
+    },
+
+    #[error("Surface is not supported by device")]
+    NotSupported,
+
+    #[error("Window handle of kind {{{window:?}}} is not supported")]
+    UnsupportedWindow {
+        window: RawWindowHandleKind,
+        #[source]
+        source: Option<Box<dyn Error + Send + Sync>>,
+    },
+
+    #[error("Window handle of kind {{{window:?}}} does not match display of kind {{{display:?}}}")]
+    WindowDisplayMismatch {
+        window: RawWindowHandleKind,
+        display: RawDisplayHandleKind,
     },
 }
 
-#[allow(dead_code)]
-fn check_surface_error() {
-    assert_error::<SurfaceError>();
+impl From<OutOfMemory> for CreateSurfaceError {
+    fn from(source: OutOfMemory) -> Self {
+        CreateSurfaceError::SurfaceError {
+            source: SurfaceError::OutOfMemory { source },
+        }
+    }
 }
 
 /// Kind of raw window handles
@@ -188,26 +213,6 @@ impl RawDisplayHandleKind {
     }
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum CreateSurfaceError {
-    #[error(transparent)]
-    OutOfMemory {
-        #[from]
-        source: OutOfMemory,
-    },
-    #[error("Window handle of kind {{{window:?}}} is not supported")]
-    UnsupportedWindow {
-        window: RawWindowHandleKind,
-        #[source]
-        source: Option<Box<dyn Error + Send + Sync>>,
-    },
-    #[error("Window handle of kind {{{window:?}}} does not match display of kind {{{display:?}}}")]
-    WindowDisplayMismatch {
-        window: RawWindowHandleKind,
-        display: RawDisplayHandleKind,
-    },
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub enum PresentMode {
@@ -258,10 +263,68 @@ pub struct SurfaceCapabilities {
     pub supported_composite_alpha: CompositeAlphaFlags,
 }
 
+impl SurfaceCapabilities {
+    pub fn get_basic_rendering_format(&self) -> Option<Format> {
+        self.formats
+            .iter()
+            .filter_min_by_key(|f| match f {
+                Format::RGB8Srgb | Format::BGR8Srgb => Some(0),
+                Format::RGB8Unorm | Format::BGR8Unorm => Some(1),
+                Format::RGBA8Srgb | Format::BGRA8Srgb => Some(2),
+                Format::RGBA8Unorm | Format::BGRA8Unorm => Some(3),
+                _ => None,
+            })
+            .copied()
+    }
+
+    pub fn get_basic_present_mode(&self) -> Option<PresentMode> {
+        self.present_modes
+            .iter()
+            .min_by_key(|m| match m {
+                PresentMode::Mailbox => 0,
+                PresentMode::Fifo => 2,
+                PresentMode::FifoRelaxed => 2,
+                PresentMode::Immediate => 3,
+            })
+            .copied()
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct SurfaceInfo {
     pub window: RawWindowHandle,
+    pub display: RawDisplayHandle,
 }
 
 unsafe impl Send for SurfaceInfo {}
 unsafe impl Sync for SurfaceInfo {}
+
+#[allow(dead_code)]
+fn check_surface_error() {
+    assert_error::<SurfaceError>();
+    assert_error::<CreateSurfaceError>();
+}
+
+///
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct PresentationTiming {
+    /// An application-provided value that was given to a previous [`Queue::present_with_timing`]
+    ///
+    /// It can be used to uniquely identify a previous present with the [`Queue::present_with_timing`].
+    pub present_id: u32,
+
+    /// An application-provided value that was given to a previous [`Queue::present_with_timing`].
+    /// If non-zero, it was used by the application to indicate that an image not be presented any sooner than [`desired_present_time`].
+    pub desired_present_time: u64,
+
+    /// The time when the image of the surface was actually displayed.
+    pub actual_present_time: u64,
+
+    /// The time when the image of the surface could have been displayed.
+    /// This may differ from [`actual_present_time`] if the application requested that the image be presented no sooner than [`desired_present_time`]
+    pub earliest_present_time: u64,
+
+    /// An indication of how early the [`Queue::present_with_timing`] was processed
+    /// compared to how soon it needed to be processed, and still be presented at [`earliest_present_time`].
+    pub present_margin: u64,
+}

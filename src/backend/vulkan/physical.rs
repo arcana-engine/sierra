@@ -1,4 +1,4 @@
-use std::{convert::TryInto as _, ffi::CStr, num::NonZeroU32, sync::Arc};
+use std::{convert::TryInto as _, ffi::CStr};
 
 use erupt::{
     extensions::{
@@ -14,7 +14,6 @@ use erupt::{
         // khr_pipeline_library::KHR_PIPELINE_LIBRARY_EXTENSION_NAME,
         // khr_push_descriptor::KHR_PUSH_DESCRIPTOR_EXTENSION_NAME,
         khr_ray_tracing_pipeline::{self as rt, KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME},
-        khr_surface as vks,
         khr_swapchain::KHR_SWAPCHAIN_EXTENSION_NAME,
     },
     vk1_0, vk1_1, vk1_2, vk1_3, DeviceLoader, ExtendableFrom, LoaderError, ObjectHandle,
@@ -26,14 +25,10 @@ use crate::{
     arith_gt, assert_object, out_of_host_memory,
     physical::*,
     queue::{Family, FamilyInfo, Queue, QueueId, QueuesQuery},
-    surface::{Surface, SurfaceCapabilities, SurfaceError},
     CreateDeviceError, OutOfMemory,
 };
 
-use super::{
-    convert::from_erupt, device::Device, graphics::Graphics, surface::surface_error_from_erupt,
-    unexpected_result,
-};
+use super::{convert::from_erupt, device::Device, graphics::Graphics, unexpected_result};
 
 #[derive(Clone, Debug)]
 pub(super) struct Properties {
@@ -507,16 +502,6 @@ impl PhysicalDevice {
                 })
                 .collect(),
         }
-    }
-
-    /// Returns surface capabilities.
-    /// Returns `Ok(None)` if this device does not support surface.
-    pub fn surface_capabilities(
-        &self,
-        surface: &Surface,
-    ) -> Result<SurfaceCapabilities, SurfaceError> {
-        let instance = &self.graphics().instance;
-        surface_capabilities(instance, self.physical, surface.handle())
     }
 
     /// Create graphics API device.
@@ -1129,87 +1114,4 @@ impl RequestedFeatures {
 #[allow(dead_code)]
 fn check() {
     assert_object::<PhysicalDevice>();
-}
-
-pub fn surface_capabilities(
-    instance: &erupt::InstanceLoader,
-    physical: vk1_0::PhysicalDevice,
-    surface: vks::SurfaceKHR,
-) -> Result<SurfaceCapabilities, SurfaceError> {
-    assert!(
-        instance.enabled().khr_surface,
-        "Should be enabled given that there is a Surface"
-    );
-
-    let families = unsafe { instance.get_physical_device_queue_family_properties(physical, None) };
-
-    let supported_families = (0..families.len())
-        .map(|f| {
-            let supported = unsafe {
-                instance.get_physical_device_surface_support_khr(
-                    physical,
-                    f.try_into().unwrap(),
-                    surface,
-                )
-            }
-            .result()
-            .map_err(|err| match err {
-                vk1_0::Result::ERROR_OUT_OF_HOST_MEMORY => out_of_host_memory(),
-                vk1_0::Result::ERROR_OUT_OF_DEVICE_MEMORY => SurfaceError::OutOfMemory {
-                    source: OutOfMemory,
-                },
-                vk1_0::Result::ERROR_SURFACE_LOST_KHR => SurfaceError::SurfaceLost,
-                _ => unreachable!(),
-            })?;
-            Ok(supported)
-        })
-        .collect::<Result<Arc<[_]>, SurfaceError>>()?;
-
-    let present_modes =
-        unsafe { instance.get_physical_device_surface_present_modes_khr(physical, surface, None) }
-            .result()
-            .map_err(surface_error_from_erupt)?;
-
-    let present_modes = present_modes
-        .into_iter()
-        .filter_map(from_erupt)
-        .collect::<Vec<_>>();
-
-    let caps = unsafe { instance.get_physical_device_surface_capabilities_khr(physical, surface) }
-        .result()
-        .map_err(surface_error_from_erupt)?;
-
-    let formats =
-        unsafe { instance.get_physical_device_surface_formats_khr(physical, surface, None) }
-            .result()
-            .map_err(surface_error_from_erupt)?;
-
-    let formats = formats
-        .iter()
-        .filter_map(|sf| from_erupt(sf.format))
-        .collect::<Vec<_>>();
-
-    assert_ne!(
-        caps.min_image_count, 0,
-        "VkSurfaceCapabilitiesKHR.minImageCount must not be 0"
-    );
-
-    assert!(
-        (caps.max_image_count == 0) || (caps.max_image_count >= caps.min_image_count),
-        "VkSurfaceCapabilitiesKHR.maxImageCount must be 0 or not less than minImageCount"
-    );
-
-    Ok(SurfaceCapabilities {
-        supported_families,
-        min_image_count: NonZeroU32::new(caps.min_image_count).unwrap(),
-        max_image_count: NonZeroU32::new(caps.max_image_count),
-        current_extent: from_erupt(caps.current_extent),
-        current_transform: from_erupt(caps.current_transform.bitmask()),
-        min_image_extent: from_erupt(caps.min_image_extent),
-        max_image_extent: from_erupt(caps.max_image_extent),
-        supported_usage: from_erupt(caps.supported_usage_flags),
-        supported_composite_alpha: from_erupt(caps.supported_composite_alpha),
-        present_modes,
-        formats,
-    })
 }

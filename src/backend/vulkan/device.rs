@@ -34,6 +34,7 @@ use gpu_descriptor_erupt::EruptDescriptorDevice;
 use naga::WithSpan;
 
 use parking_lot::Mutex;
+use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
 use slab::Slab;
 use smallvec::SmallVec;
 
@@ -72,16 +73,15 @@ use crate::{
         CreateShaderModuleError, InvalidShader, ShaderLanguage, ShaderModule, ShaderModuleInfo,
         ShaderStage,
     },
-    surface::{Surface, SurfaceError},
-    swapchain::Swapchain,
+    surface::Surface,
     view::{ImageView, ImageViewInfo, ImageViewKind},
-    DeviceAddress, GraphicsPipelineRenderingInfo, IndexType, MapError, OutOfMemory,
+    CreateSurfaceError, DeviceAddress, DeviceLost, GraphicsPipelineRenderingInfo, IndexType,
+    MapError, OutOfMemory, SurfaceInfo,
 };
 
 use super::{
     access::supported_access,
     convert::{buffer_memory_usage_to_gpu_alloc, from_erupt, oom_error_from_erupt, ToErupt as _},
-    device_lost,
     epochs::Epochs,
     graphics::Graphics,
     physical::{Features, Properties},
@@ -133,7 +133,7 @@ pub(crate) struct Inner {
 }
 
 impl Inner {
-    fn wait_idle(&self) {
+    fn wait_idle(&self) -> Result<(), DeviceLost> {
         let epochs = self.epochs.next_epoch_all_queues();
         let result = unsafe { self.logical.device_wait_idle() }.result();
 
@@ -142,8 +142,9 @@ impl Inner {
                 for (queue, epoch) in epochs {
                     self.epochs.close_epoch(queue, epoch);
                 }
+                Ok(())
             }
-            Err(vk1_0::Result::ERROR_DEVICE_LOST) => device_lost(),
+            Err(vk1_0::Result::ERROR_DEVICE_LOST) => Err(DeviceLost),
             Err(result) => unexpected_result(result),
         }
     }
@@ -164,7 +165,8 @@ impl Debug for Inner {
 
 impl Drop for Inner {
     fn drop(&mut self) {
-        self.wait_idle();
+        // Ignore device lost error here
+        let _ = self.wait_idle();
 
         unsafe {
             self.allocator
@@ -1787,11 +1789,18 @@ impl Device {
         self.inner.logical.destroy_shader_module(handle, None);
     }
 
-    /// Creates swapchain for specified surface.
-    /// Only one swapchain may be associated with one surface.
-    #[cfg_attr(feature = "tracing", tracing::instrument)]
-    pub fn create_swapchain(&self, surface: &mut Surface) -> Result<Swapchain, SurfaceError> {
-        Swapchain::new(surface, self)
+    /// Creates surface for specified window.
+    #[cfg_attr(feature = "tracing", tracing::instrument(skip(window, display), fields(?window = window.raw_window_handle())))]
+    pub fn create_surface(
+        &self,
+        window: &impl HasRawWindowHandle,
+        display: &impl HasRawDisplayHandle,
+    ) -> Result<Surface, CreateSurfaceError> {
+        let window = window.raw_window_handle();
+        let display = display.raw_display_handle();
+
+        let surface = self.graphics().create_surface(window, display)?;
+        Surface::new(surface, SurfaceInfo { window, display }, self)
     }
 
     pub(super) fn insert_swapchain(&self, swapchain: vksw::SwapchainKHR) -> usize {
@@ -1807,39 +1816,41 @@ impl Device {
     /// All specified fences must be in signalled state.
     /// Fences are moved into unsignalled state.
     #[cfg_attr(feature = "tracing", tracing::instrument)]
-    pub fn reset_fences(&self, fences: &mut [&mut Fence]) {
+    pub fn reset_fences(&self, fences: &mut [&mut Fence]) -> Result<(), DeviceLost> {
         for fence in fences.iter_mut() {
             assert_owner!(fence, self);
         }
 
-        let handles = fences
-            .iter_mut()
-            .map(|fence| {
-                if let FenceState::Armed { .. } = fence.state() {
-                    // Could be come signalled already.
-                    // User may be sure because they called device or queue wait idle method.
-                    if !self.is_fence_signalled(fence) {
-                        panic!("Fence must not be reset while associated submission is pending")
+        let handles =
+            fences
+                .iter_mut()
+                .try_fold(SmallVec::<[_; 16]>::new(), |mut handles, fence| {
+                    if let FenceState::Armed { .. } = fence.state() {
+                        // Could be come signalled already.
+                        // User may be sure because they called device or queue wait idle method.
+                        if !self.is_fence_signalled(fence)? {
+                            panic!("Fence must not be reset while associated submission is pending")
+                        }
                     }
-                }
-                fence.handle()
-            })
-            .collect::<SmallVec<[_; 16]>>();
+                    handles.push(fence.handle());
+                    Ok::<_, DeviceLost>(handles)
+                })?;
 
         match unsafe { self.inner.logical.reset_fences(&handles) }.result() {
             Ok(()) => {
                 for fence in fences {
-                    fence.reset(self);
+                    fence.was_reset();
                 }
+                Ok(())
             }
-            Err(vk1_0::Result::ERROR_DEVICE_LOST) => device_lost(),
+            Err(vk1_0::Result::ERROR_DEVICE_LOST) => Err(DeviceLost),
             Err(result) => unexpected_result(result),
         }
     }
 
     /// Checks if fence is in signalled state.
     #[cfg_attr(feature = "tracing", tracing::instrument)]
-    pub fn is_fence_signalled(&self, fence: &mut Fence) -> bool {
+    pub fn is_fence_signalled(&self, fence: &mut Fence) -> Result<bool, DeviceLost> {
         assert_owner!(fence, *self);
 
         match unsafe { self.inner.logical.get_fence_status(fence.handle()) }.raw {
@@ -1847,10 +1858,10 @@ impl Device {
                 if let Some((queue, epoch)) = fence.signalled() {
                     self.inner.epochs.close_epoch(queue, epoch);
                 }
-                true
+                Ok(true)
             }
-            vk1_0::Result::NOT_READY => true,
-            vk1_0::Result::ERROR_DEVICE_LOST => device_lost(),
+            vk1_0::Result::NOT_READY => Ok(false),
+            vk1_0::Result::ERROR_DEVICE_LOST => Err(DeviceLost),
             err => unexpected_result(err),
         }
     }
@@ -1862,8 +1873,14 @@ impl Device {
     /// one is signaled if `all == false`). Fences are signaled by `Queue`s.
     /// See `Queue::submit`.
     #[cfg_attr(feature = "tracing", tracing::instrument)]
-    pub fn wait_fences(&self, fences: &mut [&mut Fence], all: bool) {
-        assert!(!fences.is_empty());
+    pub fn wait_fences(&self, fences: &mut [&mut Fence], all: bool) -> Result<(), DeviceLost> {
+        if fences.is_empty() {
+            assert!(
+                all,
+                "Cannot use empty fences array in `Device::wait_fences` with `all == false` as it would wait forever."
+            );
+            return Ok(());
+        }
 
         for fence in fences.iter_mut() {
             assert_owner!(fence, self);
@@ -1880,36 +1897,45 @@ impl Device {
             })
             .collect::<SmallVec<[_; 16]>>();
 
+        if handles.is_empty() {
+            // All fences are already signalled.
+            // No epoch can be closed.
+            return Ok(());
+        }
+
         match unsafe { self.inner.logical.wait_for_fences(&handles, all, !0) }.result() {
             Ok(()) => {
-                if all || fences.len() == 1 {
-                    let mut epochs = SmallVec::<[_; 16]>::new();
+                let all_signalled = all || handles.len() == 1;
 
-                    for fence in fences {
+                let mut epochs = SmallVec::<[_; 16]>::new();
+
+                for fence in fences {
+                    if all_signalled || self.is_fence_signalled(fence)? {
                         if let Some((queue, epoch)) = fence.signalled() {
                             epochs.push((queue, epoch));
                         }
                     }
+                }
 
-                    if !epochs.is_empty() {
-                        // Dedup. Keep largest epoch per queue.
-                        epochs.sort_unstable_by_key(|(q, e)| (*q, !*e));
-                        let mut last_queue = None;
-                        epochs.retain(|(q, _)| {
-                            if Some(*q) == last_queue {
-                                false
-                            } else {
-                                last_queue = Some(*q);
-                                true
-                            }
-                        });
-                        for (queue, epoch) in epochs {
-                            self.inner.epochs.close_epoch(queue, epoch)
+                if !epochs.is_empty() {
+                    // Dedup. Keep largest epoch per queue.
+                    epochs.sort_unstable_by_key(|(q, e)| (*q, !*e));
+                    let mut last_queue = None;
+                    epochs.retain(|(q, _)| {
+                        if Some(*q) == last_queue {
+                            false
+                        } else {
+                            last_queue = Some(*q);
+                            true
                         }
+                    });
+                    for (queue, epoch) in epochs {
+                        self.inner.epochs.close_epoch(queue, epoch)
                     }
                 }
+                Ok(())
             }
-            Err(vk1_0::Result::ERROR_DEVICE_LOST) => device_lost(),
+            Err(vk1_0::Result::ERROR_DEVICE_LOST) => Err(DeviceLost),
             Err(result) => unexpected_result(result),
         }
     }
@@ -1919,7 +1945,7 @@ impl Device {
     /// `Queue::wait_idle` for all queues. Typically used only before device
     /// destruction.
     #[cfg_attr(feature = "tracing", tracing::instrument)]
-    pub fn wait_idle(&self) {
+    pub fn wait_idle(&self) -> Result<(), DeviceLost> {
         self.inner.wait_idle()
     }
 

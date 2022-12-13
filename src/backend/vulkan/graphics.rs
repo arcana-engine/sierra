@@ -2,7 +2,6 @@ use std::{
     ffi::{c_void, CStr},
     fmt::{self, Debug},
     os::raw::c_char,
-    sync::atomic::AtomicBool,
 };
 
 use erupt::{
@@ -16,12 +15,11 @@ use erupt::{
         khr_surface::KHR_SURFACE_EXTENSION_NAME,
     },
     utils::loading::{EntryLoader, EntryLoaderError},
+    vk::SurfaceKHR,
     vk1_0, InstanceLoader, LoaderError,
 };
 use once_cell::sync::OnceCell;
-use raw_window_handle::{
-    HasRawDisplayHandle, HasRawWindowHandle, RawDisplayHandle, RawWindowHandle,
-};
+use raw_window_handle::{RawDisplayHandle, RawWindowHandle};
 use smallvec::SmallVec;
 
 #[cfg(any(
@@ -61,7 +59,7 @@ use erupt::{
 use crate::{
     out_of_host_memory,
     physical::EnumerateDeviceError,
-    surface::{CreateSurfaceError, RawWindowHandleKind, Surface, SurfaceInfo},
+    surface::{CreateSurfaceError, RawWindowHandleKind},
     OutOfMemory, RawDisplayHandleKind,
 };
 
@@ -329,15 +327,11 @@ impl Graphics {
             .collect())
     }
 
-    #[cfg_attr(feature = "tracing", tracing::instrument(skip(window, display), fields(?window = window.raw_window_handle())))]
-    pub fn create_surface(
+    pub(super) fn create_surface(
         &self,
-        window: &impl HasRawWindowHandle,
-        display: &impl HasRawDisplayHandle,
-    ) -> Result<Surface, CreateSurfaceError> {
-        let window = window.raw_window_handle();
-        let display = display.raw_display_handle();
-
+        window: RawWindowHandle,
+        display: RawDisplayHandle,
+    ) -> Result<SurfaceKHR, CreateSurfaceError> {
         let surface = match (window, display) {
             #[cfg(target_os = "android")]
             (RawWindowHandle::Android(handle), RawDisplayHandle::Android(_)) => {
@@ -674,11 +668,7 @@ impl Graphics {
             }
         };
 
-        Ok(Surface::make(
-            surface,
-            AtomicBool::new(false),
-            SurfaceInfo { window },
-        ))
+        Ok(surface)
     }
 }
 
@@ -714,6 +704,8 @@ unsafe extern "system" fn debug_report_callback(
     let layer_prefix = CStr::from_ptr(p_layer_prefix);
 
     let message = CStr::from_ptr(p_message);
+
+    // println!("{:?}", message);
 
     if flags.contains(DebugReportFlagsEXT::ERROR_EXT) {
         error!("{:?}: {:?} | {:?}", layer_prefix, object_type, message);

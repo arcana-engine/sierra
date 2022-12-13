@@ -114,7 +114,6 @@ mod semaphore;
 mod shader;
 mod stage;
 mod surface;
-mod swapchain;
 mod view;
 
 pub use self::{
@@ -141,7 +140,6 @@ pub use self::{
     shader::*,
     stage::*,
     surface::*,
-    swapchain::*,
     view::*,
 };
 
@@ -163,6 +161,22 @@ pub use {arrayvec, bytemuck, scoped_arena, smallvec};
 #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 #[error("Out of device memory")]
 pub struct OutOfMemory;
+
+/// Error that may occur during execution on the device
+/// and then signalled on command submission or waiting operations.
+///
+/// This error is unrecoverable lost `Device` state cannot be changed to not-lost.
+/// It must be recreated.
+///
+/// Any mapped memory allocated from lost device is still valid for access, but its content is undefined.
+///
+/// If this error is returned by `PhysicalDevice::create_device` function
+/// then physical device is lost and cannot be used.
+/// This may indicate that device was physically disconnected or developed a fault.
+#[derive(Clone, Copy, Debug, thiserror::Error, PartialEq, Eq)]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
+#[error("Device lost")]
+pub struct DeviceLost;
 
 /// Device address is `u64` value pointing into device resource.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -433,10 +447,26 @@ mod sealed {
     pub trait Sealed {}
 }
 
-/// Errors that may occur if display timing functionality is used
-/// but was not enabled.
-///
-/// See [`Feature::DisplayTiming`].
-#[derive(Clone, Copy, Debug, thiserror::Error, PartialEq, Eq)]
-#[error("DisplayTiming feature is not active")]
-pub struct DisplayTimingUnavailable;
+trait IteratorExt: Iterator {
+    fn filter_min_by_key<B, F>(self, f: F) -> Option<Self::Item>
+    where
+        Self: Sized,
+        B: Ord,
+        F: FnMut(&Self::Item) -> Option<B>,
+    {
+        #[inline]
+        fn key<T, B>(mut f: impl FnMut(&T) -> Option<B>) -> impl FnMut(T) -> Option<(B, T)> {
+            move |x| Some((f(&x)?, x))
+        }
+
+        #[inline]
+        fn compare<T, B: Ord>((x_p, _): &(B, T), (y_p, _): &(B, T)) -> Ordering {
+            x_p.cmp(y_p)
+        }
+
+        let (_, x) = self.filter_map(key(f)).min_by(compare)?;
+        Some(x)
+    }
+}
+
+impl<T> IteratorExt for T where T: Iterator {}
