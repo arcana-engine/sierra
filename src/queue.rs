@@ -1,4 +1,5 @@
 pub use crate::backend::Queue;
+use crate::DeviceLost;
 use {
     crate::OutOfMemory,
     std::{error::Error, fmt::Debug},
@@ -25,6 +26,7 @@ bitflags::bitflags! {
 
 impl QueueCapabilityFlags {
     /// Check if queue with those flags supports specified capability.
+    #[inline]
     pub fn supports(&self, other: Capability) -> bool {
         match other {
             Capability::Transfer => self.contains(Self::TRANSFER),
@@ -34,11 +36,13 @@ impl QueueCapabilityFlags {
     }
 
     /// Check if queue with those flags supports specified capability.
+    #[inline]
     pub fn supports_graphics(&self) -> bool {
         self.contains(Self::GRAPHICS)
     }
 
     /// Check if queue with those flags supports specified capability.
+    #[inline]
     pub fn supports_compute(&self) -> bool {
         self.contains(Self::COMPUTE)
     }
@@ -64,10 +68,12 @@ pub struct Family {
 }
 
 impl Family {
+    #[inline]
     pub fn supports(&self, capability: Capability) -> bool {
         self.capabilities.supports(capability)
     }
 
+    #[inline]
     pub fn take(&mut self, count: usize) -> impl Iterator<Item = Queue> + '_ {
         std::iter::from_fn(move || self.queues.pop()).take(count)
     }
@@ -99,10 +105,12 @@ where
     type Query = Vec<(usize, usize)>;
     type Queues = Vec<Family>;
 
+    #[inline]
     fn query(self, families: &[FamilyInfo]) -> Result<(Self::Query, Self::Collector), E> {
         Ok(((self.0)(families)?.into_iter().collect(), ()))
     }
 
+    #[inline]
     fn collect(_collector: (), families: Vec<Family>) -> Self::Queues {
         families
     }
@@ -126,6 +134,7 @@ impl SingleQueueQuery {
 pub struct QueueNotFound(QueueCapabilityFlags);
 
 impl std::fmt::Display for QueueNotFound {
+    #[inline]
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             fmt,
@@ -143,6 +152,7 @@ impl QueuesQuery for SingleQueueQuery {
     type Query = [(usize, usize); 1];
     type Queues = Queue;
 
+    #[inline]
     fn query(self, families: &[FamilyInfo]) -> Result<([(usize, usize); 1], ()), QueueNotFound> {
         for (index, family) in families.iter().enumerate() {
             if family.count > 0 && family.capabilities.contains(self.0) {
@@ -153,6 +163,7 @@ impl QueuesQuery for SingleQueueQuery {
         Err(QueueNotFound(self.0))
     }
 
+    #[inline]
     fn collect(_collector: (), mut families: Vec<Family>) -> Queue {
         assert_eq!(families.len(), 1);
         assert_eq!(families[0].queues.len(), 1);
@@ -168,12 +179,28 @@ pub struct QueueId {
 }
 
 #[derive(Clone, Copy, Debug, thiserror::Error, PartialEq, Eq)]
-pub enum PresentError {
+pub enum QueueError {
     #[error(transparent)]
     OutOfMemory {
         #[from]
         source: OutOfMemory,
     },
+
+    #[error(transparent)]
+    DeviceLost {
+        #[from]
+        source: DeviceLost,
+    },
+}
+
+#[derive(Clone, Copy, Debug, thiserror::Error, PartialEq, Eq)]
+pub enum PresentError {
+    #[error(transparent)]
+    QueueError {
+        #[from]
+        source: QueueError,
+    },
+
     #[error("Surface is out of date")]
     OutOfDate,
 
@@ -181,12 +208,24 @@ pub enum PresentError {
     SurfaceLost,
 }
 
+impl From<OutOfMemory> for PresentError {
+    #[inline]
+    fn from(source: OutOfMemory) -> Self {
+        QueueError::from(source).into()
+    }
+}
+
+impl From<DeviceLost> for PresentError {
+    #[inline]
+    fn from(source: DeviceLost) -> Self {
+        QueueError::from(source).into()
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PresentOk {
     Success,
     Suboptimal,
-    OutOfDate,
-    SurfaceLost,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

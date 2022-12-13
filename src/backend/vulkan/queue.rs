@@ -17,14 +17,13 @@ use crate::{
     queue::*,
     semaphore::Semaphore,
     stage::PipelineStages,
-    OutOfMemory,
+    DeviceLost, OutOfMemory,
 };
 
 use super::{
     convert::{oom_error_from_erupt, ToErupt as _},
     device::Device,
-    device_lost,
-    swapchain::SwapchainImage,
+    surface::SurfaceImage,
     unexpected_result,
 };
 
@@ -69,9 +68,7 @@ impl Queue {
             cbufs: Vec::new(),
         }
     }
-}
 
-impl Queue {
     pub fn id(&self) -> QueueId {
         self.id
     }
@@ -127,7 +124,7 @@ impl Queue {
         signal: &mut [&mut Semaphore],
         mut fence: Option<&mut Fence>,
         scope: &Scope<'_>,
-    ) {
+    ) -> Result<(), QueueError> {
         let array = scope.to_scope_with(ArrayVec::<_, 64>::new);
 
         let handles = scope.to_scope_from_iter(cbufs.into_iter().map(|cbuf| {
@@ -149,7 +146,7 @@ impl Queue {
         if let Some(fence) = fence.as_mut() {
             assert_owner!(fence, self.device);
             let epoch = self.device.epochs().next_epoch(self.id);
-            fence.arm(self.id, epoch, &self.device);
+            fence.arm(self.id, epoch, &self.device)?;
         }
 
         // FIXME: Check semaphore states.
@@ -157,60 +154,64 @@ impl Queue {
         let wait_semaphores = scope.to_scope_from_iter(wait.iter().map(|(_, sem)| sem.handle()));
         let signal_semaphores = scope.to_scope_from_iter(signal.iter().map(|sem| sem.handle()));
 
-        unsafe {
-            self.device
-                .logical()
-                .queue_submit(
-                    self.handle,
-                    &[vk1_0::SubmitInfoBuilder::new()
-                        .wait_semaphores(&*wait_semaphores)
-                        .wait_dst_stage_mask(&*wait_stages)
-                        .signal_semaphores(&*signal_semaphores)
-                        .command_buffers(&*handles)],
-                    fence.map_or(vk1_0::Fence::null(), |f| f.handle()),
-                )
-                .expect("TODO: Handle queue submit error")
-        };
+        let result = unsafe {
+            self.device.logical().queue_submit(
+                self.handle,
+                &[vk1_0::SubmitInfoBuilder::new()
+                    .wait_semaphores(&*wait_semaphores)
+                    .wait_dst_stage_mask(&*wait_stages)
+                    .signal_semaphores(&*signal_semaphores)
+                    .command_buffers(&*handles)],
+                fence.map_or(vk1_0::Fence::null(), |f| f.handle()),
+            )
+        }
+        .result();
 
         self.device.epochs().submit(self.id, array.drain(..));
+
+        result.map_err(queue_error_from_erupt)
     }
 
     #[cfg_attr(feature = "tracing", tracing::instrument)]
-    pub fn submit_one(&mut self, cbuf: CommandBuffer, fence: Option<&Fence>) {
+    pub fn submit_one(
+        &mut self,
+        cbuf: CommandBuffer,
+        fence: Option<&Fence>,
+    ) -> Result<(), QueueError> {
         assert_owner!(cbuf, self.device);
         assert_eq!(self.id, cbuf.queue());
         let handle = cbuf.handle();
 
-        unsafe {
-            self.device
-                .logical()
-                .queue_submit(
-                    self.handle,
-                    &[vk1_0::SubmitInfoBuilder::new()
-                        .wait_semaphores(&[])
-                        .wait_dst_stage_mask(&[])
-                        .signal_semaphores(&[])
-                        .command_buffers(std::slice::from_ref(&handle))],
-                    fence.map_or(vk1_0::Fence::null(), |f| f.handle()),
-                )
-                .expect("TODO: Handle queue submit error")
-        };
+        let result = unsafe {
+            self.device.logical().queue_submit(
+                self.handle,
+                &[vk1_0::SubmitInfoBuilder::new()
+                    .wait_semaphores(&[])
+                    .wait_dst_stage_mask(&[])
+                    .signal_semaphores(&[])
+                    .command_buffers(std::slice::from_ref(&handle))],
+                fence.map_or(vk1_0::Fence::null(), |f| f.handle()),
+            )
+        }
+        .result();
 
         self.device.epochs().submit(self.id, std::iter::once(cbuf));
+
+        result.map_err(queue_error_from_erupt)
     }
 
     #[cfg_attr(feature = "tracing", tracing::instrument)]
-    pub fn present(&mut self, image: SwapchainImage<'_>) -> Result<PresentOk, OutOfMemory> {
+    pub fn present(&mut self, image: SurfaceImage<'_>) -> Result<PresentOk, PresentError> {
         self.present_impl(image, None)
     }
 
     #[cfg_attr(feature = "tracing", tracing::instrument)]
     pub fn present_with_timing(
         &mut self,
-        image: SwapchainImage<'_>,
+        image: SurfaceImage<'_>,
         present_id: u32,
         desired_present_time: u64,
-    ) -> Result<PresentOk, OutOfMemory> {
+    ) -> Result<PresentOk, PresentError> {
         assert!(
             self.device.logical().enabled().google_display_timing,
             "`DisplayTiming` feature is not enabled"
@@ -220,20 +221,23 @@ impl Queue {
 
     pub fn present_impl(
         &mut self,
-        mut image: SwapchainImage<'_>,
+        mut image: SurfaceImage<'_>,
         timing: Option<(u32, u64)>,
-    ) -> Result<PresentOk, OutOfMemory> {
+    ) -> Result<PresentOk, PresentError> {
         assert_owner!(image, self.device);
 
-        // FIXME: Check semaphore states.
-        assert!(
+        if !self.device.logical().enabled().google_display_timing {
+            assert!(timing.is_none(), "`DisplayTiming` feature is not enabled");
+        }
+
+        debug_assert!(
             self.device.logical().enabled().khr_swapchain,
-            "Should be enabled given that there is a Swapchain"
+            "Should be enabled given that there is a Surface"
         );
 
         assert!(
             image.supported_families()[self.id.family as usize],
-            "Family `{}` does not support presentation to swapchain `{:?}`",
+            "Family `{}` does not support presentation to surface `{:?}`",
             self.id.family,
             image
         );
@@ -272,21 +276,21 @@ impl Queue {
         match result.raw {
             vk1_0::Result::SUCCESS => Ok(PresentOk::Success),
             vk1_0::Result::SUBOPTIMAL_KHR => Ok(PresentOk::Suboptimal),
-            vk1_0::Result::ERROR_OUT_OF_DATE_KHR => Ok(PresentOk::OutOfDate),
-            vk1_0::Result::ERROR_SURFACE_LOST_KHR => Ok(PresentOk::SurfaceLost),
+            vk1_0::Result::ERROR_OUT_OF_DATE_KHR => Err(PresentError::OutOfDate),
+            vk1_0::Result::ERROR_SURFACE_LOST_KHR => Err(PresentError::SurfaceLost),
             // vk1_0::Result::ERROR_FULL_SCREEN_EXCLUSIVE_MODE_LOST_EXT => {}
-            result => Err(queue_error(result)),
+            result => Err(queue_error_from_erupt(result).into()),
         }
     }
 
     #[cfg_attr(feature = "tracing", tracing::instrument)]
-    pub fn wait_idle(&self) -> Result<(), OutOfMemory> {
+    pub fn wait_idle(&self) -> Result<(), QueueError> {
         unsafe { self.device.logical().queue_wait_idle(self.handle) }
             .result()
-            .map_err(queue_error)
+            .map_err(queue_error_from_erupt)
     }
 
-    fn drain_ready_cbufs(&mut self) -> Result<(), OutOfMemory> {
+    fn drain_ready_cbufs(&mut self) -> Result<(), QueueError> {
         let offset = self.cbufs.len();
         self.device.epochs().drain_cbuf(self.id, &mut self.cbufs);
         for cbuf in &self.cbufs[offset..] {
@@ -297,7 +301,7 @@ impl Queue {
                 )
             }
             .result()
-            .map_err(queue_error)?;
+            .map_err(queue_error_from_erupt)?;
         }
 
         #[cfg(feature = "leak-detection")]
@@ -309,11 +313,11 @@ impl Queue {
     }
 }
 
-fn queue_error(result: vk1_0::Result) -> OutOfMemory {
+fn queue_error_from_erupt(result: vk1_0::Result) -> QueueError {
     match result {
         vk1_0::Result::ERROR_OUT_OF_HOST_MEMORY => out_of_host_memory(),
-        vk1_0::Result::ERROR_OUT_OF_DEVICE_MEMORY => OutOfMemory,
-        vk1_0::Result::ERROR_DEVICE_LOST => device_lost(),
+        vk1_0::Result::ERROR_OUT_OF_DEVICE_MEMORY => OutOfMemory.into(),
+        vk1_0::Result::ERROR_DEVICE_LOST => DeviceLost.into(),
         result => unexpected_result(result),
     }
 }

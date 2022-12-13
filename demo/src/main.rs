@@ -42,12 +42,21 @@ pub struct Main {
 }
 
 fn main() -> eyre::Result<()> {
+    use tracing_subscriber::layer::SubscriberExt as _;
+    if let Err(err) = tracing::subscriber::set_global_default(
+        tracing_subscriber::fmt()
+            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+            .finish()
+            .with(tracing_error::ErrorLayer::default()),
+    ) {
+        panic!("Failed to install tracing subscriber: {}", err);
+    }
+
     let mut scope = scoped_arena::Scope::new();
     let event_loop = winit::event_loop::EventLoop::new();
     let window = winit::window::Window::new(&event_loop)?;
 
     let graphics = sierra::Graphics::get_or_init()?;
-    let mut surface = graphics.create_surface(&window, &window)?;
 
     let physical = graphics
         .devices()?
@@ -87,8 +96,8 @@ fn fs_main() -> @location(0) vec4<f32> {
         language: sierra::ShaderLanguage::WGSL,
     })?;
 
-    let mut swapchain = device.create_swapchain(&mut surface)?;
-    swapchain.configure(
+    let mut surface = device.create_surface(&window, &window)?;
+    surface.configure(
         sierra::ImageUsage::COLOR_ATTACHMENT,
         sierra::Format::BGRA8Srgb,
         sierra::PresentMode::Fifo,
@@ -120,7 +129,7 @@ fn fs_main() -> @location(0) vec4<f32> {
                 event: winit::event::WindowEvent::CloseRequested,
                 ..
             } => {
-                device.wait_idle();
+                device.wait_idle().unwrap();
                 *flow = winit::event_loop::ControlFlow::Exit;
             }
 
@@ -130,11 +139,11 @@ fn fs_main() -> @location(0) vec4<f32> {
 
             winit::event::Event::RedrawRequested(_) => (|| -> eyre::Result<()> {
                 if let Some(fence) = &mut fences[fence_index] {
-                    device.wait_fences(&mut [fence], true);
-                    device.reset_fences(&mut [fence]);
+                    device.wait_fences(&mut [fence], true).unwrap();
+                    device.reset_fences(&mut [fence]).unwrap();
                 }
 
-                let mut image = swapchain.acquire_image()?;
+                let mut image = surface.acquire_image()?;
 
                 let mut encoder = queue.create_encoder(&scope)?;
 
@@ -202,13 +211,15 @@ fn fs_main() -> @location(0) vec4<f32> {
                 fence_index += 1;
                 fence_index %= fences_len;
 
-                queue.submit(
-                    &mut [(sierra::PipelineStages::COLOR_ATTACHMENT_OUTPUT, wait)],
-                    Some(encoder.finish()),
-                    &mut [signal],
-                    Some(fence),
-                    &scope,
-                );
+                queue
+                    .submit(
+                        &mut [(sierra::PipelineStages::COLOR_ATTACHMENT_OUTPUT, wait)],
+                        Some(encoder.finish()),
+                        &mut [signal],
+                        Some(fence),
+                        &scope,
+                    )
+                    .unwrap();
 
                 if !image.is_optimal() {
                     non_optimal_count += 1;
@@ -217,7 +228,7 @@ fn fs_main() -> @location(0) vec4<f32> {
                 queue.present(image)?;
 
                 if non_optimal_count >= non_optimal_limit {
-                    swapchain.update()?;
+                    surface.update()?;
                     non_optimal_count = 0;
                 }
 

@@ -31,7 +31,7 @@ use crate::{
     shader::ShaderModuleInfo,
     view::ImageViewInfo,
     BufferRange, BufferViewInfo, CombinedImageSampler, DescriptorSlice, DescriptorType,
-    DeviceAddress,
+    DeviceAddress, DeviceLost,
 };
 
 use self::resource_counting::{resource_allocated, resource_freed};
@@ -438,7 +438,7 @@ enum ImageFlavor {
         memory_block: ManuallyDrop<MemoryBlock<vk1_0::DeviceMemory>>,
         index: usize,
     },
-    SwapchainImage {
+    SurfaceImage {
         uid: NonZeroU64,
     },
 }
@@ -447,7 +447,7 @@ impl ImageFlavor {
     #[inline]
     fn uid(&self) -> u64 {
         match *self {
-            ImageFlavor::SwapchainImage { uid } => uid.get(),
+            ImageFlavor::SurfaceImage { uid } => uid.get(),
             _ => 0,
         }
     }
@@ -562,7 +562,7 @@ impl Image {
     }
 
     #[inline]
-    pub(super) fn new_swapchain(
+    pub(super) fn new_surface(
         info: ImageInfo,
         owner: WeakDevice,
         handle: vk1_0::Image,
@@ -573,7 +573,7 @@ impl Image {
             handle,
             inner: Arc::new(ImageInner {
                 owner,
-                flavor: ImageFlavor::SwapchainImage { uid },
+                flavor: ImageFlavor::SurfaceImage { uid },
             }),
         }
     }
@@ -594,7 +594,7 @@ impl Image {
     pub(super) fn try_dispose(mut self) -> Result<(), Self> {
         assert!(matches!(
             self.inner.flavor,
-            ImageFlavor::SwapchainImage { .. }
+            ImageFlavor::SurfaceImage { .. }
         ));
         match Arc::try_unwrap(self.inner) {
             Ok(_) => Ok(()),
@@ -728,7 +728,8 @@ impl Drop for Fence {
 
         if let Some(device) = self.owner.upgrade() {
             if let FenceState::Armed { .. } = self.state {
-                device.wait_fences(&mut [self], true);
+                // Ignore device lost error here.
+                let _ = device.wait_fences(&mut [self], true);
             }
             unsafe { device.destroy_fence(self.index) }
         }
@@ -816,7 +817,12 @@ impl Fence {
 
     /// Called when submitted to a queue for signal.
     #[inline]
-    pub(super) fn arm(&mut self, queue: QueueId, epoch: u64, device: &Device) {
+    pub(super) fn arm(
+        &mut self,
+        queue: QueueId,
+        epoch: u64,
+        device: &Device,
+    ) -> Result<(), DeviceLost> {
         debug_assert!(self.is_owned_by(device));
         match &self.state {
             FenceState::UnSignalled => {
@@ -825,7 +831,7 @@ impl Fence {
             FenceState::Armed { .. } => {
                 // Could be come signalled already.
                 // User may be sure because they called device or queue wait idle method.
-                if device.is_fence_signalled(self) {
+                if device.is_fence_signalled(self)? {
                     self.state = FenceState::Armed { queue, epoch };
                 } else {
                     panic!("Fence must not be resubmitted while associated submission is pending")
@@ -835,6 +841,7 @@ impl Fence {
                 panic!("Fence must not be resubmitted before resetting")
             }
         }
+        Ok(())
     }
 
     /// Called when device knows fence is signalled.
@@ -847,26 +854,20 @@ impl Fence {
                 Some((queue, epoch))
             }
             FenceState::UnSignalled => {
-                panic!("Fence cannot become signalled before being submitted")
+                unreachable!("Fence cannot become signalled before being submitted")
             }
         }
     }
 
     /// Called when device resets the fence.
     #[inline]
-    pub(super) fn reset(&mut self, device: &Device) {
+    pub(super) fn was_reset(&mut self) {
         match &self.state {
             FenceState::Signalled | FenceState::UnSignalled => {
                 self.state = FenceState::UnSignalled;
             }
             FenceState::Armed { .. } => {
-                // Could be come signalled already.
-                // User may be sure because they called device or queue wait idle method.
-                if device.is_fence_signalled(self) {
-                    self.state = FenceState::UnSignalled;
-                } else {
-                    panic!("Fence must not be reset while associated submission is pending")
-                }
+                unreachable!("Fence cannot be reset while associated submission is pending")
             }
         }
     }
