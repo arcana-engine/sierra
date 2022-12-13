@@ -763,7 +763,8 @@ impl CommandBuffer {
                 );
 
                 let mut builder = vk1_3::RenderingInfoBuilder::new()
-                    .render_area(info.render_area.unwrap().to_erupt());
+                    .render_area(info.render_area.unwrap().to_erupt())
+                    .layer_count(1);
 
                 let colors = scope.to_scope_from_iter(info.colors.iter().map(|a| {
                     let (clear_value, load_op) = match a.color_load_op {
