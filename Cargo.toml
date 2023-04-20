@@ -41,7 +41,7 @@ slab = "0.4"
 scoped-arena = { version = "0.4", features = ["alloc"] }
 parking_lot = "0.12"
 once_cell = "1.5"
-naga = { version = "0.10", optional = true, features = ["spv-out"] }
+naga = { version = "0.12", optional = true, features = ["spv-out"] }
 arrayvec = "0.7"
 codespan-reporting = { version = "0.11", optional = true }
 array-fu = "0.0.1-alpha"
