@@ -6,7 +6,6 @@
 [![MIT/Apache](https://img.shields.io/badge/license-MIT%2FApache-blue.svg?style=for-the-badge)](COPYING)
 ![loc](https://img.shields.io/tokei/lines/github/zakarumych/sierra?style=for-the-badge)
 
-
 Sierra is Vulkan-lite API, focused on ease of use
 while maintaining high level of control.
 
@@ -16,6 +15,10 @@ Additionally sierra tracks resources usage to free them once no references left.
 
 Sierra provides rich proc-macro system for declarative descriptor sets and render passes.
 
+# This crate is no longer maintained
+
+Consider using [MEV](https://github.com/zakarumych/mev).
+MEV is easier to use and supports Vulkan and Metal.
 
 ## License
 
